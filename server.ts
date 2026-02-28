@@ -546,16 +546,17 @@ export async function createApp() {
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch) return res.status(401).json({ error: "账号或密码错误" });
 
-      // 3. Find the associated family member record to get familyId
+      // 3. Find the associated family member record accurately by memberId link
       const { data: member, error: mError } = await supabase
         .from("family_members")
         .select("*")
-        .eq("name", user.name)
-        .is("is_registered", true)
-        .limit(1)
+        .eq("id", user.member_id)
         .single();
 
-      if (mError || !member) return res.status(401).json({ error: "关联成员信息查询失败" });
+      if (mError || !member) {
+        console.error("[LOGIN] Linked member record not found for user:", user.id);
+        return res.status(401).json({ error: "关联档案丢失，请联系管理员" });
+      }
 
       // 4. Return user info without password
       const safeUser = {
