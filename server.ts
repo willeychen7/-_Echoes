@@ -16,11 +16,11 @@ dotenv.config({ path: ".env.local" });
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL!;
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY!;
-const resendApiKey = process.env.RESEND_API_KEY!;
+const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || "";
+const resendApiKey = process.env.RESEND_API_KEY || "";
 
-const resend = new Resend(resendApiKey);
+const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
 if (!supabaseUrl || !supabaseKey) {
   console.error("Missing Supabase URL or Key in .env.local");
@@ -726,7 +726,7 @@ export async function createApp() {
 
     try {
       // Send real email via Resend
-      if (resendApiKey) {
+      if (resend) {
         await resend.emails.send({
           from: "岁月留声 <onboarding@resend.dev>", // Note: For production use your own verified domain like no-reply@yourdomain.com
           to: email,
@@ -803,7 +803,10 @@ export async function createApp() {
       .eq("email", email)
       .single();
 
-    if (otpError || !otpData) return res.status(400).json({ error: "验证码已失效或未发送" });
+    if (otpError || !otpData) {
+      console.error("[VERIFY-CODE] No code found for:", email);
+      return res.status(400).json({ error: "验证码已失效或未发送" });
+    }
 
     if (otpData.code !== code) {
       return res.status(400).json({ error: "验证码不正确" });
