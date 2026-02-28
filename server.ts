@@ -704,6 +704,21 @@ export async function createApp() {
     if (error) return res.status(500).json({ error: error.message });
     res.json({ id: data.id });
   });
+  app.post("/api/messages/:id/like", async (req, res) => {
+    const { id } = req.params;
+    const { data: current } = await supabase.from("messages").select("likes").eq("id", id).single();
+    const newLikes = (current?.likes || 0) + 1;
+
+    const { data, error } = await supabase
+      .from("messages")
+      .update({ likes: newLikes })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true, likes: data.likes });
+  });
 
   // OTP Verification Logic
   app.post("/api/send-code", async (req, res) => {

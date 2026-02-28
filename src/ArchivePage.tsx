@@ -26,6 +26,7 @@ export const ArchivePage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [member, setMember] = useState<FamilyMember | null>(null);
+  const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [tab, setTab] = useState<"say" | "questions">("say");
   const [inputMode, setInputMode] = useState<"voice" | "text" | "photo" | "video">("voice");
@@ -42,7 +43,10 @@ export const ArchivePage: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    const saved = localStorage.getItem("currentUser");
+    return saved ? JSON.parse(saved) : null;
+  });
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
 
   const audioChunksRef = React.useRef<Blob[]>([]);
@@ -55,7 +59,12 @@ export const ArchivePage: React.FC = () => {
       const savedUser = localStorage.getItem("currentUser");
       if (savedUser) setCurrentUser(JSON.parse(savedUser));
     };
-    loadUser();
+    window.addEventListener('storage', loadUser);
+    window.addEventListener('sync-user', loadUser);
+    return () => {
+      window.removeEventListener('storage', loadUser);
+      window.removeEventListener('sync-user', loadUser);
+    };
   }, []);
 
   useEffect(() => {
@@ -69,24 +78,37 @@ export const ArchivePage: React.FC = () => {
 
   useEffect(() => {
     if (id) {
+      setLoading(true);
       const savedUser = localStorage.getItem("currentUser");
       const parsed = savedUser ? JSON.parse(savedUser) : null;
 
-      if (isDemoMode(parsed)) {
-        // NOTE: Demo 模式从本地数据加载成员
-        const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
-        const found = [...DEMO_MEMBERS, ...customMembers].find(m => m.id === Number(id));
-        if (found) setMember(found);
-      } else {
-        fetch(`/api/family-members/${id}`).then(res => res.json()).then(setMember);
-      }
-      fetch(`/api/messages/${id}`).then(res => res.json()).then(data => {
-        if (Array.isArray(data)) {
-          setMessages(data);
-        } else {
-          setMessages([]);
+      const fetchMemberData = async () => {
+        try {
+          if (isDemoMode(parsed)) {
+            const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
+            const found = [...DEMO_MEMBERS, ...customMembers].find(m => m.id === Number(id));
+            if (found) setMember(found);
+          } else {
+            const res = await fetch(`/api/family-members/${id}`);
+            if (res.ok) {
+              const data = await res.json();
+              setMember(data);
+            }
+          }
+
+          const msgRes = await fetch(`/api/messages/${id}`);
+          if (msgRes.ok) {
+            const data = await msgRes.json();
+            setMessages(Array.isArray(data) ? data : []);
+          }
+        } catch (err) {
+          console.error("Archive load error:", err);
+        } finally {
+          setLoading(false);
         }
-      }).catch(() => setMessages([]));
+      };
+
+      fetchMemberData();
       shuffleQuestions();
     }
   }, [id]);
@@ -95,7 +117,7 @@ export const ArchivePage: React.FC = () => {
     fetch("/api/question-bank?limit=2").then(res => res.json()).then(setQuestions);
   };
 
-  const handleWarmResponse = () => {
+  const handleWarmResponse = async () => {
     if (!transcription && inputMode === "text" && !selectedImage && !selectedVideo) return;
     confetti({
       particleCount: 150,
@@ -103,15 +125,11 @@ export const ArchivePage: React.FC = () => {
       origin: { y: 0.6 }
     });
 
-    const savedUserStr = localStorage.getItem("currentUser");
-    const authorUser = savedUserStr ? JSON.parse(savedUserStr) : currentUser;
-
-    const newMessage: Message = {
-      id: Date.now(),
+    const msgData = {
       familyMemberId: Number(id),
-      authorName: authorUser?.name || "匿名家人",
-      authorRole: authorUser?.relationship || "家人",
-      authorAvatar: authorUser?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${Date.now()}`,
+      authorName: currentUser?.name || "家人",
+      authorRole: currentUser?.relationship || "家人",
+      authorAvatar: currentUser?.avatar,
       content: transcription || (inputMode === "photo" ? "分享了照片" : inputMode === "video" ? "分享了视频" : "留下了足迹"),
       type: inputMode === "voice" ? MessageType.AUDIO :
         inputMode === "photo" ? MessageType.IMAGE :
@@ -120,9 +138,37 @@ export const ArchivePage: React.FC = () => {
         inputMode === "video" ? selectedVideo || undefined :
           inputMode === "voice" ? recordedAudioUrl || undefined : undefined,
       duration: recordingTime,
-      createdAt: new Date().toISOString()
+      eventId: null // Archive profile generic message doesn't need eventId
     };
-    setMessages(prev => [newMessage, ...prev]);
+
+    try {
+      if (!isDemoMode(currentUser)) {
+        const res = await fetch("/api/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(msgData)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const newMessage: Message = {
+            ...msgData,
+            id: data.id,
+            createdAt: new Date().toISOString()
+          };
+          setMessages(prev => [newMessage, ...prev]);
+        }
+      } else {
+        const newMessage: Message = {
+          ...msgData,
+          id: Date.now(),
+          createdAt: new Date().toISOString()
+        };
+        setMessages(prev => [newMessage, ...prev]);
+      }
+    } catch (error) {
+      console.error("Post message error:", error);
+    }
+
     setTranscription("");
     setIsRecording(false);
     setRecordingTime(0);
@@ -212,8 +258,17 @@ export const ArchivePage: React.FC = () => {
     }
   };
 
-  const handleLike = (mid: string) => {
+  const handleLike = async (mid: string) => {
+    // 乐观更新
     setMessages(prev => prev.map(m => m.id.toString() === mid ? { ...m, likes: (m.likes || 0) + (m.isLiked ? -1 : 1), isLiked: !m.isLiked } : m));
+
+    if (!isDemoMode(currentUser)) {
+      try {
+        await fetch(`/api/messages/${mid}/like`, { method: "POST" });
+      } catch (e) {
+        console.error("Like error:", e);
+      }
+    }
   };
 
   const handleDeleteMember = async () => {
@@ -250,6 +305,21 @@ export const ArchivePage: React.FC = () => {
       else setSelectedVideo(url);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#fdfbfd]">
+        <div className="flex flex-col items-center gap-4">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+            className="size-12 border-4 border-[#eab308]/20 border-t-[#eab308] rounded-full"
+          />
+          <p className="text-slate-400 font-bold">寻觅岁月记忆中...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!member) {
     return (
