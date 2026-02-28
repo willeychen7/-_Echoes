@@ -80,8 +80,15 @@ export const RegisterPage: React.FC = () => {
           });
         }, 1000);
       } else {
-        const data = await res.json();
-        alert(data.error || "发送失败");
+        const status = res.status;
+        let errorMsg = "发送失败";
+        try {
+          const data = await res.json();
+          errorMsg = data.error || errorMsg;
+        } catch (e) {
+          errorMsg = `服务器错误 (HTTP ${status})`;
+        }
+        alert(errorMsg);
       }
     } catch (error) {
       console.error("Send code error:", error);

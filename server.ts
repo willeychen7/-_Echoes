@@ -16,20 +16,26 @@ dotenv.config({ path: ".env.local" });
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || "";
-const resendApiKey = process.env.RESEND_API_KEY || "";
-
-const resend = resendApiKey ? new Resend(resendApiKey) : null;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error("【警告】缺失 Supabase URL 或 Key。请在环境变量或 .env.local 中配置。");
-  // 不在顶层退出，允许应用启动以显示错误日志，或者在非 Vercel 环境下通过后续逻辑处理
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+let supabase: any;
+let resend: any;
 
 export async function createApp() {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
+  const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || "";
+  const resendApiKey = process.env.RESEND_API_KEY || "";
+
+  if (!supabaseUrl || !supabaseKey) {
+    console.error("【警告】缺失 Supabase URL 或 Key。如果是在 Vercel 运行，请添加环境变量。");
+  }
+
+  // Initialize clients inside createApp to ensure they catch environment variables correctly
+  if (!supabase && supabaseUrl && supabaseKey) {
+    supabase = createClient(supabaseUrl, supabaseKey);
+  }
+  if (!resend && resendApiKey) {
+    resend = new Resend(resendApiKey);
+  }
+
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
@@ -713,6 +719,10 @@ export async function createApp() {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 5 * 60000).toISOString(); // 5 minutes expiry
 
+    if (!supabase) {
+      return res.status(500).json({ error: "数据库服务未配置，请检查环境变量" });
+    }
+
     const { error } = await supabase
       .from("otp_codes")
       .upsert({
@@ -840,7 +850,7 @@ if (!process.env.VERCEL) {
   createApp().then(app => {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on http://localhost:${PORT}`);
-      console.log(`Supabase integrated: ${supabaseUrl}`);
+      console.log(`Supabase integrated.`);
     });
   }).catch(err => {
     console.error("Failed to start server locally:", err);
