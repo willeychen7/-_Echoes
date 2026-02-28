@@ -22,22 +22,22 @@ export const ProfilePage: React.FC = () => {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  const [user, setUser] = useState({
-    id: null as number | null,
-    name: "陈建国",
-    role: "本人",
-    avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCwusjFRipiiPuQPnlu8lyXqpESaqMYI6iBbwhGJSByETLCJin8fxLFhx7yFrgNeTWxNRtJhFvUv-QBWwbIDe9NLVWYMMmK0ykgD39DQ6Im6Fk0zsKWn7prx2EIM__QjICrYLFWoCn6sYCrGgJ0SCCKFDFbrFjQu3IQKzsQ-dTR4tL8GPT25YU3k5ptELq8GvkLOFJQxqZx9IGQa0VEF8olYdHwYHJxmLi4809HoLMucZNjXNwQFYofjtn4dvk6wJiX6mgddchqj_Y",
-    joinDate: "2024-01-15",
-    familyId: 1,
-    bio: "热爱生活，记录美好。",
-    birthday: "1965-05-12",
-    gender: "男",
-    stats: {
-      memories: 12,
-      likes: 48,
-      days: 365
-    },
-    isRegistered: false
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem("currentUser");
+    const parsed = saved ? JSON.parse(saved) : null;
+    return {
+      id: parsed?.memberId || null,
+      name: parsed?.name || "陈建国",
+      role: parsed?.relationship || "本人",
+      avatar: parsed?.avatar || "https://lh3.googleusercontent.com/aida-public/AB6AXuCwusjFRipiiPuQPnlu8lyXqpESaqMYI6iBbwhGJSByETLCJin8fxLFhx7yFrgNeTWxNRtJhFvUv-QBWwbIDe9NLVWYMMmK0ykgD39DQ6Im6Fk0zsKWn7prx2EIM__QjICrYLFWoCn6sYCrGgJ0SCCKFDFbrFjQu3IQKzsQ-dTR4tL8GPT25YU3k5ptELq8GvkLOFJQxqZx9IGQa0VEF8olYdHwYHJxmLi4809HoLMucZNjXNwQFYofjtn4dvk6wJiX6mgddchqj_Y",
+      joinDate: "2024-01-15",
+      familyId: parsed?.familyId || 1,
+      bio: parsed?.bio || "热爱生活，记录美好。",
+      birthday: parsed?.birthday || "1965-05-12",
+      gender: parsed?.gender || "男",
+      stats: { memories: 0, likes: 0, days: 1 },
+      isRegistered: !!parsed?.isRegistered
+    };
   });
 
   const [editForm, setEditForm] = useState({
