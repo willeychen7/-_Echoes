@@ -31,6 +31,10 @@ export const AddEventPage: React.FC = () => {
   const [isRecurring, setIsRecurring] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    const saved = localStorage.getItem("currentUser");
+    return saved ? JSON.parse(saved) : null;
+  });
 
   useEffect(() => {
     const scrollContainer = document.querySelector('.scroll-container');
@@ -211,7 +215,12 @@ export const AddEventPage: React.FC = () => {
                 )}
               >
                 <div className="size-10 rounded-full overflow-hidden border border-slate-100">
-                  <img src={member.avatarUrl || `https://picsum.photos/seed/${member.id}/100/100`} alt={member.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <img
+                    src={(currentUser && member.id === currentUser.memberId) ? currentUser.avatar : (member.avatarUrl || `https://picsum.photos/seed/${member.id}/100/100`)}
+                    alt={member.name}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
                 <span className="text-xs font-bold text-slate-700">{member.name}</span>
               </button>
