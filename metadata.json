@@ -1,0 +1,7 @@
+{
+  "name": "岁月留声",
+  "description": "一个致力于留存家族记忆、连接几代人情感的数字化档案与互动平台。",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

@@ -1,0 +1,98 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Newsreader", "Noto Serif SC", serif;
+  --color-primary: #eebd2b;
+  --color-primary-dark: #d9a306;
+  --color-background-light: #fffdfa;
+  --color-background-dark: #221d10;
+  --color-accent-orange: #f97316;
+
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  /* 彻底禁用浏览器全局滚动 */
+  background-color: #f5f5f7;
+}
+
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  width: 100%;
+  max-width: 414px;
+  height: 94vh;
+  /* 手机预览高度 */
+  background-color: var(--color-background-light);
+  position: relative;
+  overflow: hidden;
+  border-radius: 3.5rem;
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.15);
+  border: 10px solid #ffffff;
+  display: flex;
+  flex-direction: column;
+  /* 纵向三段式布局 */
+}
+
+/* 独立的内容滚动区 */
+.scroll-container {
+  flex: 1;
+  /* 占据屏幕所有剩余空间 */
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 40px;
+  /* 内容底部留白 */
+}
+
+.scroll-container::-webkit-scrollbar {
+  display: none;
+}
+
+.glass-morphism {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+button:active {
+  transform: scale(0.95);
+  transition: transform 0.1s ease;
+}
+
+/* 优化字号比例 */
+h1 {
+  @apply text-2xl font-bold;
+}
+
+h2 {
+  @apply text-xl font-bold;
+}
+
+h3 {
+  @apply text-lg font-bold;
+}
+
+p {
+  @apply text-sm leading-relaxed text-slate-600;
+}
