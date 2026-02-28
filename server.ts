@@ -30,9 +30,9 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function startServer() {
+export async function createApp() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
 
@@ -835,6 +835,15 @@ async function startServer() {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Supabase integrated: ${supabaseUrl}`);
   });
+
+  return app;
 }
 
-startServer();
+// Support for local running
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  createApp().catch(err => {
+    console.error("Failed to start server:", err);
+  });
+}
+
+export default createApp;

@@ -85,6 +85,7 @@ export const RegisterPage: React.FC = () => {
       }
     } catch (error) {
       console.error("Send code error:", error);
+      alert("网络错误或服务器异常，请重试");
     }
   };
 
