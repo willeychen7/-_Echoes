@@ -23,9 +23,8 @@ const resendApiKey = process.env.RESEND_API_KEY || "";
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error("Missing Supabase URL or Key in .env.local");
-  // Exit or throw error if essential environment variables are missing
-  process.exit(1);
+  console.error("【警告】缺失 Supabase URL 或 Key。请在环境变量或 .env.local 中配置。");
+  // 不在顶层退出，允许应用启动以显示错误日志，或者在非 Vercel 环境下通过后续逻辑处理
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -728,7 +727,7 @@ export async function createApp() {
       // Send real email via Resend
       if (resend) {
         await resend.emails.send({
-          from: "岁月留声 <onboarding@resend.dev>", // Note: For production use your own verified domain like no-reply@yourdomain.com
+          from: "岁月留声 <onboarding@resend.dev>", // Note: For production use your own verified domain
           to: email,
           subject: "【岁月留声】您的家族验证码",
           html: `
@@ -742,8 +741,8 @@ export async function createApp() {
         });
         console.log(`[AUTH] Resend email sent to ${email}`);
       } else {
-        // Fallback or dev warning
         console.warn(`[AUTH] RESEND_API_KEY not found. Verification code for ${email}: ${code}`);
+        return res.status(500).json({ error: "服务器未配置邮件服务，请联系管理员" });
       }
 
       res.json({ success: true, message: "验证码已发送至您的邮箱，请查收。" });
@@ -833,19 +832,18 @@ export async function createApp() {
       res.sendFile(path.join(__dirname, "dist", "index.html"));
     });
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-    console.log(`Supabase integrated: ${supabaseUrl}`);
-  });
-
   return app;
 }
 
-// Support for local running
-if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
-  createApp().catch(err => {
-    console.error("Failed to start server:", err);
+if (!process.env.VERCEL) {
+  const PORT = Number(process.env.PORT) || 3000;
+  createApp().then(app => {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+      console.log(`Supabase integrated: ${supabaseUrl}`);
+    });
+  }).catch(err => {
+    console.error("Failed to start server locally:", err);
   });
 }
 
