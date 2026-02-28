@@ -515,7 +515,9 @@ export async function createApp() {
         phone_or_email: phone,
         password: hashedPassword,
         name,
-        relationship: "创建者"
+        relationship: "创建者",
+        member_id: member.id, // 👈 关键修复：关联到档案
+        family_id: family.id
       });
 
       if (uError) console.error("User info storage error (non-blocking):", uError.message);
@@ -641,52 +643,44 @@ export async function createApp() {
   });
 
   app.get("/api/messages/:memberId", async (req, res) => {
+    // 关键修复：通过 JOIN 获取最新的头像和信息，而不是使用静态存储的数据
     const { data, error } = await supabase
       .from("messages")
-      .select("*")
+      .select("*, family_members(name, relationship, avatar_url)")
       .eq("family_member_id", req.params.memberId)
       .order("created_at", { ascending: false });
 
     if (error) return res.status(500).json({ error: error.message });
 
-    const messages = (data || []).map(m => ({
+    // 格式化输出以匹配前端期望的结构
+    const formatted = (data || []).map((m: any) => ({
       ...m,
-      familyMemberId: m.family_member_id,
-      authorName: m.author_name,
-      authorRole: m.author_role,
-      authorAvatar: m.author_avatar,
-      mediaUrl: m.media_url,
-      eventId: m.event_id,
-      createdAt: m.created_at
+      authorName: m.family_members?.name || m.authorName,
+      authorRole: m.family_members?.relationship || m.authorRole,
+      authorAvatar: m.family_members?.avatar_url || m.authorAvatar
     }));
-    res.json(messages);
+
+    res.json(formatted);
   });
 
   app.get("/api/messages", async (req, res) => {
-    const { eventId } = req.query;
-    if (!eventId) {
-      return res.status(400).json({ error: "Missing eventId. Data isolation is strictly enforced." });
-    }
-
+    // 获取所有留言且同步头像
     const { data, error } = await supabase
       .from("messages")
-      .select("*")
-      .eq("event_id", eventId)
-      .order("created_at", { ascending: false });
+      .select("*, family_members(name, relationship, avatar_url)")
+      .order("created_at", { ascending: false })
+      .limit(50); // 防过度加载
 
     if (error) return res.status(500).json({ error: error.message });
 
-    const messages = (data || []).map(m => ({
+    const formatted = (data || []).map((m: any) => ({
       ...m,
-      familyMemberId: m.family_member_id,
-      authorName: m.author_name,
-      authorRole: m.author_role,
-      authorAvatar: m.author_avatar,
-      mediaUrl: m.media_url,
-      eventId: m.event_id,
-      createdAt: m.created_at
+      authorName: m.family_members?.name || m.authorName,
+      authorRole: m.family_members?.relationship || m.authorRole,
+      authorAvatar: m.family_members?.avatar_url || m.authorAvatar
     }));
-    res.json(messages);
+
+    res.json(formatted);
   });
 
   app.post("/api/messages", async (req, res) => {
@@ -734,10 +728,9 @@ export async function createApp() {
     if (error) return res.status(500).json({ error: error.message });
 
     try {
-      // Send real email via Resend
       if (resend) {
         await resend.emails.send({
-          from: "岁月留声 <onboarding@resend.dev>", // Note: For production use your own verified domain
+          from: "岁月留声 <onboarding@resend.dev>",
           to: email,
           subject: "【岁月留声】您的家族验证码",
           html: `
@@ -769,7 +762,6 @@ export async function createApp() {
         return res.status(400).json({ error: "邮箱、验证码和新密码均为必填" });
       }
 
-      // 1. 验证 OTP
       const { data: otpData, error: otpError } = await supabase
         .from("otp_codes")
         .select("*")
@@ -780,18 +772,14 @@ export async function createApp() {
       if (otpData.code !== code) return res.status(400).json({ error: "验证码错误" });
       if (new Date(otpData.expires_at) < new Date()) return res.status(400).json({ error: "验证码已过期" });
 
-      // 2. 哈希新密码
       const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
 
-      // 3. 更新用户密码
       const { error: uError } = await supabase
         .from("users")
         .update({ password: hashedPassword })
         .eq("phone_or_email", email);
 
       if (uError) throw new Error(`密码更新失败: ${uError.message}`);
-
-      // 4. 清理验证码
       await supabase.from("otp_codes").delete().eq("email", email);
 
       res.json({ success: true, message: "密码重置成功，请重新登录" });
@@ -805,26 +793,15 @@ export async function createApp() {
     const { email, code } = req.body;
     if (!email || !code) return res.status(400).json({ error: "Email and code are required" });
 
-    // First, verify the OTP code
     const { data: otpData, error: otpError } = await supabase
       .from("otp_codes")
       .select("*")
       .eq("email", email)
       .single();
 
-    if (otpError || !otpData) {
-      console.error("[VERIFY-CODE] No code found for:", email);
-      return res.status(400).json({ error: "验证码已失效或未发送" });
-    }
-
-    if (otpData.code !== code) {
-      return res.status(400).json({ error: "验证码不正确" });
-    }
-
-    const isExpired = new Date(otpData.expires_at) < new Date();
-    if (isExpired) {
-      return res.status(400).json({ error: "验证码已过期" });
-    }
+    if (otpError || !otpData) return res.status(400).json({ error: "验证码已失效或未发送" });
+    if (otpData.code !== code) return res.status(400).json({ error: "验证码不正确" });
+    if (new Date(otpData.expires_at) < new Date()) return res.status(400).json({ error: "验证码已过期" });
 
     res.json({ success: true });
   });
@@ -843,6 +820,7 @@ export async function createApp() {
       res.sendFile(path.join(__dirname, "dist", "index.html"));
     });
   }
+
   return app;
 }
 
