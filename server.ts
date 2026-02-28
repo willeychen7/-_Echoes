@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
+import { Resend } from "resend";
 
 // NOTE: 密码哈希的 salt 轮数，12 是生产级别的安全默认值
 const BCRYPT_SALT_ROUNDS = 12;
@@ -17,6 +18,9 @@ const __dirname = path.dirname(__filename);
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL!;
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY!;
+const resendApiKey = process.env.RESEND_API_KEY!;
+
+const resend = new Resend(resendApiKey);
 
 if (!supabaseUrl || !supabaseKey) {
   console.error("Missing Supabase URL or Key in .env.local");
@@ -720,11 +724,33 @@ async function startServer() {
 
     if (error) return res.status(500).json({ error: error.message });
 
-    // Mock sending email
-    console.log(`[AUTH] Verification code for ${email}: ${code}`);
+    try {
+      // Send real email via Resend
+      if (resendApiKey) {
+        await resend.emails.send({
+          from: "岁月留声 <onboarding@resend.dev>", // Note: For production use your own verified domain like no-reply@yourdomain.com
+          to: email,
+          subject: "【岁月留声】您的家族验证码",
+          html: `
+            <div style="font-family: sans-serif; padding: 20px;">
+              <h2>您好！</h2>
+              <p>您正在尝试操作<strong>岁月留声</strong>家族档案系统的账号安全服务。</p>
+              <p>您的验证码是：<strong style="font-size: 24px; color: #eab308; background: #fffbeb; padding: 5px 10px; border-radius: 8px;">${code}</strong></p>
+              <p>该验证码将在 5 分钟后失效，请勿泄露给他人。</p>
+            </div>
+          `
+        });
+        console.log(`[AUTH] Resend email sent to ${email}`);
+      } else {
+        // Fallback or dev warning
+        console.warn(`[AUTH] RESEND_API_KEY not found. Verification code for ${email}: ${code}`);
+      }
 
-    // NOTE: In production, use Resend/SendGrid/Nodemailer here
-    res.json({ success: true, message: "验证码已发送（请查看服务器日志）" });
+      res.json({ success: true, message: "验证码已发送至您的邮箱，请查收。" });
+    } catch (emailError: any) {
+      console.error("[AUTH] Error sending email via Resend:", emailError);
+      res.status(500).json({ error: "发送验证码邮件失败，请稍后重试" });
+    }
   });
 
   app.post("/api/reset-password", async (req, res) => {
