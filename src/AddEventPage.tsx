@@ -7,6 +7,7 @@ import { FamilyMember } from "./types";
 import { motion } from "motion/react";
 import { BottomNav } from "./components/BottomNav";
 import { DEMO_MEMBERS, isDemoMode } from "./demo-data";
+import { supabase } from "./lib/supabase";
 
 export const AddEventPage: React.FC = () => {
   const navigate = useNavigate();
@@ -109,6 +110,21 @@ export const AddEventPage: React.FC = () => {
         .then(res => res.json())
         .then(setMembers)
         .catch(console.error);
+
+      // 实时订阅成员变动
+      const channel = supabase
+        .channel(`family-${familyId}-add-event-sync`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'family_members', filter: `family_id=eq.${familyId}` },
+          (payload) => {
+            const updated = payload.new as any;
+            setMembers(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated, avatarUrl: updated.avatar_url } : m));
+          }
+        )
+        .subscribe();
+
+      return () => { supabase.removeChannel(channel); };
     }
   }, []);
 

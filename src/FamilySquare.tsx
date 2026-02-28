@@ -9,6 +9,7 @@ import { getRigorousRelationship } from "./lib/relationships";
 import confetti from "canvas-confetti";
 import { GoogleGenAI } from "@google/genai";
 import { DEMO_MEMBERS, DEMO_EVENTS, DEMO_DEFAULT_USER, isDemoMode } from "./demo-data";
+import { supabase } from "./lib/supabase";
 
 // NOTE: 内嵌祝福面板，点击事件卡片上的"祝福"按钮后就地展开，无需跳页
 const InlineBlessingPanel: React.FC<{
@@ -540,7 +541,49 @@ export const FamilySquare: React.FC = () => {
     const h = () => loadUser();
     window.addEventListener('storage', h);
     window.addEventListener('sync-user', h);
-    return () => { window.removeEventListener('storage', h); window.removeEventListener('sync-user', h); };
+
+    // 核心修复：开启 Supabase Realtime 订阅，监听整个家族的成员变动
+    let channel: any = null;
+    const savedUser = localStorage.getItem("currentUser");
+    const parsed = savedUser ? JSON.parse(savedUser) : null;
+
+    if (parsed && parsed.familyId && !isDemoMode(parsed)) {
+      channel = supabase
+        .channel(`family-${parsed.familyId}-sync`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'family_members',
+            filter: `family_id=eq.${parsed.familyId}`
+          },
+          (payload) => {
+            console.log('[REALTIME] Family member updated:', payload);
+            const updated = payload.new as any;
+            // 实时更新本地成员列表
+            setMembers(prev => prev.map(m =>
+              m.id === updated.id
+                ? { ...m, ...updated, avatarUrl: updated.avatar_url, name: updated.name, relationship: updated.relationship }
+                : m
+            ));
+            // 如果更新的是我自己，同步我的个人资料
+            if (updated.id === parsed.memberId) {
+              const freshUser = { ...parsed, avatar: updated.avatar_url, name: updated.name };
+              localStorage.setItem("currentUser", JSON.stringify(freshUser));
+              setCurrentUser(freshUser);
+              setUserAvatar(updated.avatar_url);
+            }
+          }
+        )
+        .subscribe();
+    }
+
+    return () => {
+      window.removeEventListener('storage', h);
+      window.removeEventListener('sync-user', h);
+      if (channel) supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
