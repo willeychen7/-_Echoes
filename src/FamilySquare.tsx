@@ -7,7 +7,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { cn, getRelativeTime } from "./lib/utils";
 import { getRigorousRelationship } from "./lib/relationships";
 import confetti from "canvas-confetti";
-import { GoogleGenAI } from "@google/genai";
 import { DEMO_MEMBERS, DEMO_EVENTS, DEMO_DEFAULT_USER, isDemoMode } from "./demo-data";
 import { supabase } from "./lib/supabase";
 import { DEFAULT_AVATAR } from "./constants";
@@ -231,31 +230,21 @@ export const FamilySquare: React.FC = () => {
     }
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem("GOOGLE_API_KEY") || "";
-      if (!apiKey) {
-        setEventsSummary("未检测到 AI 密钥。请确保已在设置或环境变量中配置密钥。");
-        setSummaryLoading(false);
-        return;
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      const prompt = `
-        你是一个温暖的家庭小秘书。请根据以下家族大事记列表，生成一个精准、简炼的总结。
-        时间跨度：${eventRange === "week" ? "本周" : eventRange === "month" ? "本月" : "本年"}大事记总结
-        事件列表：${filteredEvents.map(e => `- ${e.title} (${e.date}, ${e.type}): ${e.description || ""} ${e.notes || ""}`).join("\n")}
-        要求：
-        1. 语气亲切，用词精准。
-        2. 不要啰嗦，去掉所有客套话，直接开门见山总结重点。
-        3. 80字以内。
-        4. 你的开头必须是：“本${eventRange === "week" ? "周" : eventRange === "month" ? "月" : "年"}家族记忆总结：”
-      `;
-
-      const result = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts: [{ text: prompt }] }]
+      const res = await fetch("/api/ai-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "family-secretary",
+          eventRange,
+          events: filteredEvents
+        })
       });
-
-      setEventsSummary(result.text);
+      const data = await res.json();
+      if (data.text) {
+        setEventsSummary(data.text);
+      } else {
+        setEventsSummary(data.error || "生成失败");
+      }
     } catch (e: any) {
       console.error("[AI Summary Error]:", e);
       setEventsSummary(`AI 生成失败: ${e.message || "未知错误"}`);

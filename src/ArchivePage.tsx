@@ -7,7 +7,6 @@ import { Button } from "./components/Button";
 import { Card } from "./components/Card";
 import { getRelativeTime, cn } from "./lib/utils";
 import { getRelativeRelationship } from "./lib/relationships";
-import { GoogleGenAI } from "@google/genai";
 import confetti from "canvas-confetti";
 import { DEMO_MEMBERS, isDemoMode } from "./demo-data";
 import { supabase } from "./lib/supabase";
@@ -386,28 +385,33 @@ export const ArchivePage: React.FC = () => {
     if (!member) return;
     setIsGenerating(true);
     try {
-      const apiKey = localStorage.getItem("GOOGLE_API_KEY") || "";
-      const ai = new GoogleGenAI({ apiKey });
-      const messageContext = messages.map(msg => `${msg.authorName} (${msg.authorRole}): ${msg.content}`).join("\n");
-      const prompt = `你是家族记忆整理师。以下是关于${member.name}的故事素材：\n${messageContext}\n\n请整理成深刻的传记。要求语言温暖、细腻。字数300字左右。`;
-
-      const result = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts: [{ text: prompt }] }]
+      const res = await fetch("/api/ai-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "biography",
+          messages,
+          memberName: member.name
+        })
       });
-
-      setArchiveData({
-        title: `${member.name}的流金岁月`,
-        subtitle: "家族记忆博物馆收藏",
-        dateLine: "2026年 整理归档",
-        tags: ["坚韧", "和善", "智慧"],
-        oneLineHook: "岁月从不败美人，爱是唯一的永恒。",
-        storyParagraphs: result.text.split("\n\n"),
-        familyNotes: [],
-        audioScript: ""
-      });
+      const data = await res.json();
+      if (data.text) {
+        setArchiveData({
+          title: `${member.name}的流金岁月`,
+          subtitle: "家族记忆博物馆收藏",
+          dateLine: "2026年 整理归档",
+          tags: ["坚韧", "和善", "智慧"],
+          oneLineHook: "岁月从不败美人，爱是唯一的永恒。",
+          storyParagraphs: data.text.split("\n\n"),
+          familyNotes: [],
+          audioScript: ""
+        });
+      } else {
+        alert(data.error || "生成失败");
+      }
     } catch (e) {
       console.error(e);
+      alert("AI生成失败，网络错误");
     } finally {
       setIsGenerating(false);
     }

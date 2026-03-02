@@ -10,7 +10,6 @@ import { getRelativeTime } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 import { isDemoMode } from "../demo-data";
 import confetti from "canvas-confetti";
-import { GoogleGenAI } from "@google/genai";
 
 /**
  * 语音消息条组件：支持播放/暂停及进度显示
@@ -526,21 +525,25 @@ export const InlineBlessingPanel: React.FC<{
         }
         setIsGeneratingAI(true);
         try {
-            const apiKey = localStorage.getItem("GOOGLE_API_KEY") || "";
-            const ai = new GoogleGenAI({ apiKey });
-            const messageContext = messages.map(m => `${m.authorName} (${m.authorRole}): ${m.content}`).join("\n");
-            const prompt = `你是家族记忆整理师。请根据以下家人在${event.title}时的祝福：\n${messageContext}\n\n写一段温馨的家族总结。要求语言温暖、细腻。字数200字左右。`;
-
-            const result = await ai.models.generateContent({
-                model: "gemini-1.5-flash",
-                contents: [{ role: "user", parts: [{ text: prompt }] }]
+            const res = await fetch("/api/ai-generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    type: "summary",
+                    messages,
+                    eventTitle: event.title
+                })
             });
-
-            setAiSummary(result.text);
-            setShowWall(true);
+            const data = await res.json();
+            if (data.text) {
+                setAiSummary(data.text);
+                setShowWall(true);
+            } else {
+                alert(data.error || "生成失败");
+            }
         } catch (e) {
             console.error(e);
-            alert("AI 生成失败，请检查 API Key 是否配置正确");
+            alert("AI 生成失败，网络错误");
         } finally {
             setIsGeneratingAI(false);
         }

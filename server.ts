@@ -108,6 +108,46 @@ export async function createApp() {
       }
     });
 
+    app.post("/api/ai-generate", async (req, res) => {
+      try {
+        const { type, messages, memberName, eventTitle, eventRange, events } = req.body;
+        const apiKey = process.env.VITE_GEMINI_API_KEY;
+        if (!apiKey) return res.status(500).json({ error: "Missing API Key" });
+
+        const ai = new GoogleGenerativeAI(apiKey);
+        const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        let prompt = "";
+        const messageContext = (messages || []).map((m: any) => `${m.authorName} (${m.authorRole}): ${m.content}`).join("\n");
+
+        if (type === "biography") {
+          prompt = `你是家族记忆整理师。以下是关于${memberName}的故事素材：\n${messageContext}\n\n请整理成深刻的传记。要求语言温暖、细腻。字数300字左右。`;
+        } else if (type === "summary") {
+          prompt = `你是家族记忆整理师。请根据以下家人在${eventTitle}时的祝福：\n${messageContext}\n\n写一段温馨的家族总结。要求语言温暖、细腻。字数200字左右。`;
+        } else if (type === "family-secretary") {
+          prompt = `
+          你是一个温暖的家庭小秘书。请根据以下家族大事记列表，生成一个精准、简炼的总结。
+          时间跨度：${eventRange === "week" ? "本周" : eventRange === "month" ? "本月" : "本年"}大事记总结
+          事件列表：${(events || []).map((e: any) => `- ${e.title} (${e.date}, ${e.type}): ${e.description || ""} ${e.notes || ""}`).join("\n")}
+          要求：
+          1. 语气亲切，用词精准。
+          2. 不要啰嗦，去掉所有客套话，直接开门见山总结重点。
+          3. 80字以内。
+          4. 你的开头必须是：“本${eventRange === "week" ? "周" : eventRange === "month" ? "月" : "年"}家族记忆总结：”
+        `;
+        } else {
+          return res.status(400).json({ error: "Unsupported AI generation type" });
+        }
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        res.json({ text: response.text() });
+      } catch (err: any) {
+        console.error("[AI-GEN] Error:", err.message);
+        res.status(500).json({ error: "AI生成失败: " + err.message });
+      }
+    });
+
     app.get("/api/family-members", async (req, res) => {
       const { familyId } = req.query;
       if (!familyId) {
