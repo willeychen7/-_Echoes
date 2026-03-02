@@ -6,6 +6,7 @@ import { FamilyMember, Message, MessageType } from "./types";
 import { Button } from "./components/Button";
 import { Card } from "./components/Card";
 import { getRelativeTime, cn } from "./lib/utils";
+import { useAvatarCache, resolveAvatar } from "./lib/useAvatarCache";
 import { getRelativeRelationship } from "./lib/relationships";
 import confetti from "canvas-confetti";
 import { DEMO_MEMBERS, isDemoMode } from "./demo-data";
@@ -51,6 +52,8 @@ export const ArchivePage: React.FC = () => {
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
   const [creatorName, setCreatorName] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<number | null>(null);
+  // NOTE: 全局头像缓存，用户改头像后全局同步
+  const avatarCache = useAvatarCache();
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const audioChunksRef = React.useRef<Blob[]>([]);
@@ -862,7 +865,11 @@ export const ArchivePage: React.FC = () => {
                 >
                   <div className="flex flex-col items-center gap-3 shrink-0">
                     <div className="size-16 rounded-full overflow-hidden border-4 border-white shadow-md">
-                      <img src={msg.authorAvatar || `https://picsum.photos/seed/${msg.authorName || i}/100/100`} alt="" className="w-full h-full object-cover" />
+                      <img
+                        src={resolveAvatar(avatarCache, msg.familyMemberId, msg.authorAvatar, msg.authorName || String(i))}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                     <span className="px-3 py-1 rounded-full bg-[#eab308]/10 text-[#eab308] text-[10px] font-black">
                       {msg.authorName === currentUser?.name ? "我" : (msg.familyMemberId === Number(id) && msg.authorName === member?.name ? "原作者" : msg.authorRole)}

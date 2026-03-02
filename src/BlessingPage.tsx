@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "motion/react";
 import confetti from "canvas-confetti";
 import { FamilyEvent, Message, MessageType } from "./types";
 import { cn, getRelativeTime } from "./lib/utils";
+import { useAvatarCache, resolveAvatar } from "./lib/useAvatarCache";
 import { isDemoMode } from "./demo-data";
 
 const PUNCT_END = /[。！？….,!?]$/;
@@ -26,7 +27,9 @@ export const BlessingPage: React.FC = () => {
   const [transcription, setTranscription] = useState("");
   const [event, setEvent] = useState<FamilyEvent | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  // NOTE: 存储成员名字 -> 最新头像的映射，确保历史留言都显示最新头像
+  // NOTE: 全局头像缓存（memberId -> avatarUrl），任何用户改头像后自动更新
+  const avatarCache = useAvatarCache();
+  // NOTE: 按姓名索引家庭成员头像，作为 memberId 不存在时的兑底
   const [memberAvatarMap, setMemberAvatarMap] = useState<Record<string, string>>({});
   const [questions, setQuestions] = useState<string[]>([
     "您还记得家中长辈小时候最喜欢的一件玩具或食物吗？",
@@ -465,8 +468,12 @@ export const BlessingPage: React.FC = () => {
                 >
                   <div className="flex flex-col items-center gap-3 shrink-0">
                     <div className="size-16 rounded-full overflow-hidden border-4 border-white shadow-md">
-                      {/* NOTE: 优先用家庭成员表里的最新头像，兜底用留言里存的头像 */}
-                      <img src={memberAvatarMap[msg.authorName] || msg.authorAvatar || `https://picsum.photos/seed/${msg.authorName || i}/100/100`} alt="" className="w-full h-full object-cover" />
+                      {/* NOTE: 优先用全局缓存(memberId)，其次姓名映射，最后用存储的头像 */}
+                      <img
+                        src={resolveAvatar(avatarCache, msg.familyMemberId, memberAvatarMap[msg.authorName] || msg.authorAvatar, msg.authorName || String(i))}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                     <span className="px-3 py-1 rounded-full bg-[#eab308]/10 text-[#eab308] text-[10px] font-black">
                       {msg.authorName === currentUser?.name ? "我" : msg.authorRole}

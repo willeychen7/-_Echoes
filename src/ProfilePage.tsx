@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Edit2, Share2, LogOut, Heart, MessageSquare, Clock, X, Check, CheckCircle, Camera, Gift, Users, Bell, ChevronRight, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "./lib/utils";
+import { updateAvatarCache } from "./lib/useAvatarCache";
 import { ImageCropper } from "./components/ImageCropper";
 import { DEMO_PERSONAS, isDemoMode } from "./demo-data";
 import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
@@ -212,6 +213,11 @@ export const ProfilePage: React.FC = () => {
     if (savedUser) {
       const parsed = JSON.parse(savedUser);
       localStorage.setItem("currentUser", JSON.stringify({ ...parsed, avatar: url }));
+    }
+
+    // NOTE: 更新全局头像缓存，触发所有订阅组件立刻重渲染
+    if (user.id) {
+      updateAvatarCache(user.id, url);
     }
 
     if (user.id) {
