@@ -37,6 +37,9 @@ export const ProfilePage: React.FC = () => {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [showLeaveDoubleConfirm, setShowLeaveDoubleConfirm] = useState(false);
 
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem("currentUser");
@@ -344,6 +347,49 @@ export const ProfilePage: React.FC = () => {
     { label: "其他", value: "other" }
   ];
 
+  const handleLeaveFamily = async () => {
+    if (isDemoMode(user)) {
+      alert("演示用户不可退出家族。");
+      return;
+    }
+
+    setIsLeaving(true);
+    try {
+      const savedUser = JSON.parse(localStorage.getItem("currentUser") || "{}");
+      const res = await fetch("/api/leave-family", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: savedUser.id,
+          memberId: savedUser.memberId
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error("退出操作失败");
+      }
+
+      // 清理本地存储中关于家族身份的信息
+      localStorage.setItem("currentUser", JSON.stringify({
+        ...savedUser,
+        familyId: 1, // 回到默认公共家族或者空的 ID？
+        memberId: null,
+        relationship: "本人"
+      }));
+
+      alert("已成功退出家族。");
+      window.location.reload();
+    } catch (e: any) {
+      alert(e.message || "退出失败，请稍后重试。");
+    } finally {
+      setIsLeaving(false);
+      setShowLeaveConfirm(false);
+      setShowLeaveDoubleConfirm(false);
+    }
+  };
+
+  const hasJoinedFamily = user.isRegistered && user.familyId && user.familyId !== 0 && user.id;
+
   const handleSwitchPersona = (persona: any) => {
     localStorage.setItem("currentUser", JSON.stringify(persona));
     window.location.reload();
@@ -361,7 +407,23 @@ export const ProfilePage: React.FC = () => {
             setShowEditModal(true);
           }
         },
-        ...(user.isRegistered ? [{ icon: Gift, label: "接受家族邀请", color: "text-rose-500 bg-rose-50", action: () => setShowInviteModal(true) }] : []),
+        ...(user.isRegistered ? [
+          hasJoinedFamily
+            ? {
+              icon: CheckCircle, label: "已加入家族", color: "text-emerald-500 bg-emerald-50", action: () => {
+                // 如果是已经加入家族了，允许用户点开看看，但不直接重新进入加入流程
+                // 这里如果用户还是创始人（即 familyId 没有指向外部家族），可以在 logic 里放宽
+                setShowInviteModal(true);
+              }
+            }
+            : { icon: Gift, label: "接受家族邀请码", color: "text-rose-500 bg-rose-50", action: () => setShowInviteModal(true) }
+        ] : []),
+        ...(hasJoinedFamily ? [{
+          icon: LogOut,
+          label: "退出家族",
+          color: "text-red-500 bg-red-50",
+          action: () => setShowLeaveConfirm(true)
+        }] : []),
         ...(isDemoMode(user) ? [{ icon: Users, label: "切换测试用户", color: "text-indigo-500 bg-indigo-50", action: () => setShowPersonaModal(true) }] : []),
         {
           icon: Bell,
@@ -681,6 +743,71 @@ export const ProfilePage: React.FC = () => {
             </motion.div>
           </div>
         )}
+
+        {/* 退出家族二次确认 */}
+        <AnimatePresence>
+          {(showLeaveConfirm || showLeaveDoubleConfirm) && (
+            <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-6 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="bg-white w-full max-w-sm rounded-[3rem] p-8 shadow-2xl text-center space-y-6"
+              >
+                {!showLeaveDoubleConfirm ? (
+                  <>
+                    <div className="size-20 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <LogOut size={32} />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-2xl font-black text-slate-800">确认退出家族？</h3>
+                      <p className="text-sm text-slate-500 leading-relaxed">退出后，您将无法直接查看该家族的档案和动态。所有留言仍会保留但您的身份将解除绑定。</p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <button
+                        onClick={() => setShowLeaveDoubleConfirm(true)}
+                        className="w-full py-4 bg-red-500 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-transform"
+                      >
+                        真的要退出
+                      </button>
+                      <button
+                        onClick={() => setShowLeaveConfirm(false)}
+                        className="w-full py-4 bg-slate-100 text-slate-500 font-black rounded-2xl active:scale-95 transition-transform"
+                      >
+                        我再想想
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="size-20 bg-orange-100 text-orange-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Bell size={32} className="animate-bounce" />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-2xl font-black text-slate-800">最后一次确认</h3>
+                      <p className="text-sm text-slate-500 leading-relaxed">此操作不可撤销，您确定要在此时退出家族吗？</p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <button
+                        onClick={handleLeaveFamily}
+                        disabled={isLeaving}
+                        className="w-full py-4 bg-red-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-transform disabled:opacity-50"
+                      >
+                        {isLeaving ? "正在处理..." : "确定退出"}
+                      </button>
+                      <button
+                        onClick={() => { setShowLeaveConfirm(false); setShowLeaveDoubleConfirm(false); }}
+                        className="w-full py-4 bg-slate-100 text-slate-500 font-black rounded-2xl active:scale-95 transition-transform"
+                      >
+                        点错了，返回
+                      </button>
+                    </div>
+                  </>
+                )}
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {showInviteModal && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">

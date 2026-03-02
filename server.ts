@@ -1490,6 +1490,42 @@ export async function createApp() {
       }
     });
 
+    app.post("/api/leave-family", async (req, res) => {
+      try {
+        const { userId, memberId } = req.body;
+        if (!userId) return res.status(400).json({ error: "Missing userId" });
+
+        // 1. Get current user data to notify family before leaving? 
+        // Or just clear the link.
+        const { error: uError } = await supabase
+          .from("users")
+          .update({
+            family_id: null,
+            member_id: null,
+            relationship: null
+          })
+          .eq("id", userId);
+
+        if (uError) throw uError;
+
+        // 2. If it was a registered member, mark as unregistered so they can join again/newly
+        if (memberId) {
+          await supabase
+            .from("family_members")
+            .update({
+              is_registered: false,
+              invite_code: null // Reset invite code to allow reuse or regeneration
+            })
+            .eq("id", memberId);
+        }
+
+        res.json({ success: true, message: "已成功退出家族。" });
+      } catch (err: any) {
+        console.error("[API] Leave family error:", err.message);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     app.put("/api/notifications/:id/read", async (req, res) => {
       try {
         const { error } = await supabase
