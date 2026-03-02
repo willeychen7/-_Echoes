@@ -115,7 +115,7 @@ export async function createApp() {
         if (!apiKey) return res.status(500).json({ error: "Missing API Key" });
 
         const ai = new GoogleGenerativeAI(apiKey);
-        const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const model = ai.getGenerativeModel({ model: "gemini-2.5-pro" });
 
         const messageContext = (messages || []).map((m: any) => `${m.authorName} (${m.authorRole}): ${m.content}`).join("\n");
         const prompt = `你是家族记忆整理师。请根据以下家人在${eventTitle}时的祝福：\n${messageContext}\n\n写一段温馨的家族总结。要求语言温暖、细腻。字数300字左右。`;
@@ -136,7 +136,7 @@ export async function createApp() {
         if (!apiKey) return res.status(500).json({ error: "Missing API Key" });
 
         const ai = new GoogleGenerativeAI(apiKey);
-        const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const model = ai.getGenerativeModel({ model: "gemini-2.5-pro" });
 
         let prompt = "";
         const messageContext = (messages || []).map((m: any) => `${m.authorName} (${m.authorRole}): ${m.content}`).join("\n");
