@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Calendar, User, Plus, X } from "lucide-react";
+import { ArrowLeft, Calendar, User, Plus, X, CheckCircle } from "lucide-react";
 import { Button } from "./components/Button";
 import { cn } from "./lib/utils";
 import { FamilyMember } from "./types";
@@ -18,7 +18,7 @@ export const AddEventPage: React.FC = () => {
 
   // Step 2: Person
   const [members, setMembers] = useState<FamilyMember[]>([]);
-  const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<number[]>([]);
   const [isCustomMember, setIsCustomMember] = useState(false);
   const [customMemberName, setCustomMemberName] = useState("");
   const [eventLocation, setEventLocation] = useState("");
@@ -139,15 +139,24 @@ export const AddEventPage: React.FC = () => {
       finalCustomMemberName = customMemberName.trim();
     }
 
-    if (!date || (!selectedMemberId && !finalCustomMemberName) || !finalEventName) return;
+    if (!date || (selectedMemberIds.length === 0 && !finalCustomMemberName) || !finalEventName) return;
 
     setIsSubmitting(true);
     try {
-      const memberName = isCustomMember
-        ? finalCustomMemberName
-        : members.find(m => m.id === selectedMemberId)?.name || "家人";
+      let finalTitle = "";
+      if (isCustomMember) {
+        finalTitle = `${finalCustomMemberName}的${finalEventName}`;
+      } else {
+        const selectedNames = members
+          .filter(m => selectedMemberIds.includes(m.id))
+          .map(m => m.name);
 
-      const finalTitle = `${memberName}的${finalEventName}`;
+        if (selectedNames.length > 3) {
+          finalTitle = `${selectedNames.slice(0, 3).join("、")}等${selectedNames.length}人的${finalEventName}`;
+        } else {
+          finalTitle = `${selectedNames.join("、")}的${finalEventName}`;
+        }
+      }
 
       const savedUser = localStorage.getItem("currentUser");
       const parsed = savedUser ? JSON.parse(savedUser) : null;
@@ -160,7 +169,8 @@ export const AddEventPage: React.FC = () => {
         type: finalEventName === "生日" ? "birthday" : "other",
         description: `${calendarType === "lunar" ? "农历" : "公历"} ${date}`,
         isRecurring,
-        memberId: isCustomMember ? undefined : selectedMemberId,
+        memberId: isCustomMember ? undefined : selectedMemberIds[0], // 兼容旧逻辑
+        memberIds: isCustomMember ? [] : selectedMemberIds,           // 新逻辑：多候选人
         customMemberName: isCustomMember ? finalCustomMemberName : undefined,
         location: eventLocation,
         notes
@@ -209,38 +219,78 @@ export const AddEventPage: React.FC = () => {
 
         {/* Step 1: Person (Moved from Step 3) */}
         <section className="space-y-3">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="size-6 rounded-full bg-[#eab308] text-black flex items-center justify-center font-bold text-xs">1</div>
-            <h2 className="text-lg font-bold">这是谁的日子？</h2>
+          <div className="flex items-center justify-between mb-2 px-1">
+            <div className="flex items-center gap-3">
+              <div className="size-6 rounded-full bg-[#eab308] text-black flex items-center justify-center font-bold text-xs shadow-sm">1</div>
+              <h2 className="text-lg font-black text-slate-800">这是谁的日子？</h2>
+            </div>
+            {selectedMemberIds.length > 0 && (
+              <span className="text-[10px] font-black uppercase tracking-widest text-[#eab308] bg-[#eab308]/10 px-3 py-1.5 rounded-full border border-[#eab308]/20 animate-pulse">
+                已选中 {selectedMemberIds.length} 位家人
+              </span>
+            )}
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            {members.map(member => (
-              <button
-                key={member.id}
-                onClick={() => {
-                  setSelectedMemberId(member.id);
-                  setIsCustomMember(false);
-                  setCustomMemberName("");
-                }}
-                className={cn(
-                  "flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all",
-                  selectedMemberId === member.id && !isCustomMember
-                    ? "border-[#eab308] bg-[#eab308]/5 shadow-md"
-                    : "border-transparent bg-white hover:bg-slate-50"
-                )}
-              >
-                <div className="size-10 rounded-full overflow-hidden border border-slate-100">
-                  <img
-                    src={(currentUser && member.id === currentUser.memberId) ? currentUser.avatar : (member.avatarUrl || `https://picsum.photos/seed/${member.id}/100/100`)}
-                    alt={member.name}
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-                <span className="text-xs font-bold text-slate-700">{member.name}</span>
-              </button>
-            ))}
+          <div className="grid grid-cols-3 gap-4">
+            {members.map((member) => {
+              const memberId = Number(member.id);
+              const isSelected = selectedMemberIds.some(id => Number(id) === memberId);
+
+              const toggleSelf = () => {
+                setIsCustomMember(false);
+                setCustomMemberName("");
+                setSelectedMemberIds(prev => {
+                  const current = prev.map(Number);
+                  return current.includes(memberId)
+                    ? current.filter(id => id !== memberId)
+                    : [...current, memberId];
+                });
+              };
+
+              return (
+                <button
+                  key={memberId}
+                  type="button"
+                  onClick={toggleSelf}
+                  className={cn(
+                    "flex flex-col items-center gap-3 p-4 rounded-[2rem] border-[3px] transition-all relative overflow-visible h-full",
+                    isSelected
+                      ? "border-[#eab308] bg-[#eab308]/10 shadow-[0_10px_30px_rgba(234,179,8,0.2)] scale-105 z-10"
+                      : "border-slate-100 bg-white hover:border-slate-200"
+                  )}
+                >
+                  <div className={cn(
+                    "size-20 rounded-full overflow-hidden border-4 transition-all shadow-md",
+                    isSelected ? "border-[#eab308] ring-8 ring-[#eab308]/10" : "border-white"
+                  )}>
+                    <img
+                      src={(currentUser && Number(member.id) === Number(currentUser.memberId)) ? currentUser.avatar : (member.avatarUrl || `https://picsum.photos/seed/${member.id}/100/100`)}
+                      alt={member.name}
+                      className="w-full h-full object-cover pointer-events-none"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className={cn(
+                      "text-xs font-black transition-colors pointer-events-none",
+                      isSelected ? "text-slate-900" : "text-slate-400"
+                    )}>{member.name}</span>
+                    {isSelected && <span className="text-[8px] font-black text-[#eab308] uppercase tracking-tighter">已选中</span>}
+                  </div>
+
+                  {isSelected && (
+                    <div className="absolute -top-2 -right-2 bg-[#eab308] text-white p-1.5 rounded-full shadow-xl z-30 ring-4 ring-white">
+                      <CheckCircle size={22} fill="currentColor" />
+                    </div>
+                  )}
+
+                  {!isSelected && (
+                    <div className="absolute inset-0 bg-slate-900/0 hover:bg-slate-900/5 rounded-[2rem] transition-colors pointer-events-none" />
+                  )}
+                </button>
+              );
+            })}
 
             {isCustomMember ? (
               <div className="flex flex-col items-center gap-2 p-3 rounded-2xl border-2 border-[#eab308] bg-[#eab308]/5 shadow-md relative">
@@ -266,7 +316,7 @@ export const AddEventPage: React.FC = () => {
               <button
                 onClick={() => {
                   setIsCustomMember(true);
-                  setSelectedMemberId(null);
+                  setSelectedMemberIds([]);
                 }}
                 className={cn(
                   "flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all border-transparent bg-white hover:bg-slate-50"
@@ -467,7 +517,7 @@ export const AddEventPage: React.FC = () => {
           <Button
             size="lg"
             className="flex-[2] bg-[#eab308] hover:bg-[#d9a306] text-black rounded-2xl font-bold shadow-lg shadow-[#eab308]/20 border-none"
-            disabled={!date || (!selectedMemberId && !customMemberName.trim()) || (!eventName && !customEventNameInput.trim()) || isSubmitting}
+            disabled={!date || (selectedMemberIds.length === 0 && !customMemberName.trim()) || (!eventName && !customEventNameInput.trim()) || isSubmitting}
             onClick={handleAdd}
           >
             {isSubmitting ? "正在创建..." : "确认创建"}

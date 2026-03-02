@@ -379,9 +379,14 @@ export const FamilySquare: React.FC = () => {
                 .sort((a, b) => a.daysRemaining - b.daysRemaining)
                 .map(event => {
                   const linkedMember = event.memberId ? members.find(m => m.id == event.memberId) : null;
-                  const displayName = linkedMember?.name || event.customMemberName || null;
-                  const isMe = currentUser && linkedMember && linkedMember.id == currentUser.memberId;
-                  const displayAvatar = isMe ? currentUser.avatar : (linkedMember?.avatarUrl || null);
+                  const linkedMembers = (event.memberIds && event.memberIds.length > 0)
+                    ? members.filter(m => event.memberIds!.includes(m.id))
+                    : (linkedMember ? [linkedMember] : []);
+
+                  const displayName = linkedMembers.length > 0
+                    ? (linkedMembers.length > 3 ? `${linkedMembers.slice(0, 3).map(m => m.name).join("、")}等${linkedMembers.length}人` : linkedMembers.map(m => m.name).join("、"))
+                    : (event.customMemberName || null);
+
                   const displayTip = (event.notes || "").length > 30 ? (event.notes || "").slice(0, 28) + "..." : event.notes || "";
                   const getEventInfo = (type: string, title: string) => {
                     if (type === "birthday") return { label: "生日", color: "bg-pink-50 text-pink-500" };
@@ -400,14 +405,29 @@ export const FamilySquare: React.FC = () => {
                           {/* Row 1: Avatar & Name & Trash */}
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-4 min-w-0">
-                              <div className="size-16 rounded-full border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center bg-slate-50">
-                                {displayAvatar ? (
-                                  <img src={displayAvatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <div className="flex -space-x-4">
+                                {linkedMembers.length > 0 ? (
+                                  linkedMembers.slice(0, 3).map((m, idx) => {
+                                    const isMee = currentUser && m.id == currentUser.memberId;
+                                    const mAvatar = isMee ? currentUser.avatar : m.avatarUrl;
+                                    return (
+                                      <div key={m.id} className="size-16 rounded-full border-4 border-white shadow-md overflow-hidden shrink-0 bg-slate-50 relative" style={{ zIndex: 10 - idx }}>
+                                        <img src={mAvatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                      </div>
+                                    );
+                                  })
                                 ) : (
-                                  <span className="text-[20px] font-black text-[#eab308]">{displayName?.charAt(0) || "?"}</span>
+                                  <div className="size-16 rounded-full border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center bg-slate-50">
+                                    <span className="text-[20px] font-black text-[#eab308]">{displayName?.charAt(0) || "?"}</span>
+                                  </div>
+                                )}
+                                {linkedMembers.length > 3 && (
+                                  <div className="size-16 rounded-full border-4 border-white shadow-md flex items-center justify-center bg-slate-100 text-slate-400 text-xs font-black" style={{ zIndex: 5 }}>
+                                    +{linkedMembers.length - 3}
+                                  </div>
                                 )}
                               </div>
-                              <p className="text-4xl font-black text-slate-800 truncate">{displayName}</p>
+                              <p className={cn("font-black text-slate-800 truncate", (displayName || "").length > 6 ? "text-2xl" : "text-4xl")}>{displayName}</p>
                             </div>
                             <button onClick={() => handleDeleteEvent(event.id)} className="size-12 flex items-center justify-center text-slate-300 hover:text-red-400 transition-colors">
                               <Trash2 size={28} />

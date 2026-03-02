@@ -271,9 +271,13 @@ export const CalendarPage: React.FC = () => {
                 return dayA - dayB;
               }).map((event) => {
                 const member = members.find(m => m.id == event.memberId);
-                const displayName = member?.name || event.customMemberName || null;
-                const isMe = currentUser && member && member.id == currentUser.memberId;
-                const displayAvatar = isMe ? currentUser.avatar : (member?.avatarUrl || null);
+                const linkedMembers = (event.memberIds && event.memberIds.length > 0)
+                  ? members.filter(m => event.memberIds!.includes(m.id))
+                  : (member ? [member] : []);
+
+                const displayName = linkedMembers.length > 0
+                  ? (linkedMembers.length > 3 ? `${linkedMembers.slice(0, 3).map(m => m.name).join("、")}等${linkedMembers.length}人` : linkedMembers.map(m => m.name).join("、"))
+                  : (event.customMemberName || null);
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 const [y, m_val, d_val] = event.date.split("-").map(Number);
@@ -297,14 +301,29 @@ export const CalendarPage: React.FC = () => {
                       <div className="relative z-10 flex flex-col h-full">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-4 min-w-0">
-                            <div className="size-16 rounded-full border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center bg-slate-50">
-                              {displayAvatar ? (
-                                <img src={displayAvatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <div className="flex -space-x-4">
+                              {linkedMembers.length > 0 ? (
+                                linkedMembers.slice(0, 3).map((m, idx) => {
+                                  const isMee = currentUser && m.id == currentUser.memberId;
+                                  const mAvatar = isMee ? currentUser.avatar : m.avatarUrl;
+                                  return (
+                                    <div key={m.id} className="size-16 rounded-full border-4 border-white shadow-md overflow-hidden shrink-0 bg-slate-50 relative" style={{ zIndex: 10 - idx }}>
+                                      <img src={mAvatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                    </div>
+                                  );
+                                })
                               ) : (
-                                <span className="text-[20px] font-black text-[#eab308]">{displayName?.charAt(0) || "?"}</span>
+                                <div className="size-16 rounded-full border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center bg-slate-50">
+                                  <span className="text-[20px] font-black text-[#eab308]">{displayName?.charAt(0) || "?"}</span>
+                                </div>
+                              )}
+                              {linkedMembers.length > 3 && (
+                                <div className="size-16 rounded-full border-4 border-white shadow-md flex items-center justify-center bg-slate-100 text-slate-400 text-xs font-black" style={{ zIndex: 5 }}>
+                                  +{linkedMembers.length - 3}
+                                </div>
                               )}
                             </div>
-                            <p className="text-4xl font-black text-slate-800 truncate">{displayName}</p>
+                            <p className={cn("font-black text-slate-800 truncate", (displayName || "").length > 6 ? "text-2xl" : "text-4xl")}>{displayName}</p>
                           </div>
                           <button onClick={() => handleDeleteEvent(event.id)} className="size-12 flex items-center justify-center text-slate-300 hover:text-red-400 transition-colors">
                             <Trash2 size={28} />

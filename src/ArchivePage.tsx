@@ -346,7 +346,8 @@ export const ArchivePage: React.FC = () => {
         mediaRecorderRef.current = mediaRecorder;
         mediaRecorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
         mediaRecorder.onstop = () => {
-          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const mimeType = mediaRecorder.mimeType || 'audio/webm';
+          const blob = new Blob(audioChunksRef.current, { type: mimeType });
           setRecordedAudioUrl(URL.createObjectURL(blob));
         };
         mediaRecorder.start();
@@ -716,45 +717,40 @@ export const ArchivePage: React.FC = () => {
                     </button>
                     <p className="text-xs font-black text-slate-300 tracking-widest uppercase">选择照片</p>
                   </motion.div>
-                ) : isRecording && inputMode === "voice" ? (
+                ) : (inputMode === "voice" && (isRecording || recordedAudioUrl)) ? (
                   <motion.div
-                    key="recording-ui"
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="flex flex-col items-center justify-center py-4 space-y-4"
-                  >
-                    <motion.button
-                      onClick={toggleRecording}
-                      animate={{
-                        scale: [1, 1.05, 1],
-                        boxShadow: [
-                          "0px 0px 0px 0px rgba(234, 179, 8, 0.2)",
-                          "0px 0px 0px 20px rgba(234, 179, 8, 0)",
-                          "0px 0px 0px 0px rgba(234, 179, 8, 0.2)"
-                        ]
-                      }}
-                      transition={{ repeat: Infinity, duration: 1.5 }}
-                      className="size-20 bg-[#eab308] text-white rounded-full flex items-center justify-center shadow-xl shadow-[#eab308]/30 border-4 border-white transition-transform active:scale-90"
-                    >
-                      <div className="size-6 bg-white rounded-lg animate-pulse" />
-                    </motion.button>
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="flex items-center gap-2 bg-red-50 px-3 py-1 rounded-full border border-red-100">
-                        <div className="size-2 bg-red-500 rounded-full animate-pulse" />
-                        <span className="text-lg font-black font-mono text-red-500">
-                          {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
-                        </span>
-                      </div>
-                    </div>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="input-form"
+                    key="voice-active"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="flex-1 flex flex-col gap-4"
                   >
-                    {inputMode === "voice" && recordedAudioUrl && (
+                    {isRecording && (
+                      <div className="flex flex-col items-center justify-center py-2 space-y-4">
+                        <motion.button
+                          onClick={toggleRecording}
+                          animate={{
+                            scale: [1, 1.05, 1],
+                            boxShadow: [
+                              "0px 0px 0px 0px rgba(234, 179, 8, 0.2)",
+                              "0px 0px 0px 20px rgba(234, 179, 8, 0)",
+                              "0px 0px 0px 0px rgba(234, 179, 8, 0.2)"
+                            ]
+                          }}
+                          transition={{ repeat: Infinity, duration: 1.5 }}
+                          className="size-16 bg-[#eab308] text-white rounded-full flex items-center justify-center shadow-lg border-4 border-white transition-transform active:scale-95"
+                        >
+                          <div className="size-5 bg-white rounded-md animate-pulse" />
+                        </motion.button>
+                        <div className="flex items-center gap-2 bg-red-50 px-3 py-1 rounded-full border border-red-100">
+                          <div className="size-1.5 bg-red-500 rounded-full animate-pulse" />
+                          <span className="text-sm font-black font-mono text-red-500">
+                            正在录音 {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {!isRecording && recordedAudioUrl && (
                       <div className="flex justify-center pt-2">
                         <AudioBar
                           url={recordedAudioUrl}
@@ -764,6 +760,21 @@ export const ArchivePage: React.FC = () => {
                         />
                       </div>
                     )}
+
+                    <textarea
+                      className="w-full flex-1 min-h-[120px] text-2xl text-slate-700 bg-amber-50/20 p-4 rounded-3xl border-2 border-dashed border-amber-200/50 focus:ring-0 resize-none font-serif leading-relaxed placeholder:text-slate-300"
+                      placeholder="语音正在转出文字..."
+                      value={transcription}
+                      onChange={(e) => setTranscription(e.target.value)}
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="input-form"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex-1 flex flex-col gap-4"
+                  >
                     <textarea
                       className="w-full min-h-[140px] text-2xl text-slate-700 bg-transparent border-none focus:ring-0 resize-none font-serif leading-relaxed placeholder:text-slate-200"
                       placeholder={inputMode === "video" ? "功能开发中..." : "留下一份温暖记忆..."}

@@ -37,6 +37,7 @@ export interface FamilyEvent {
   daysRemaining?: number;
   isRecurring?: boolean;
   memberId?: number;
+  memberIds?: number[];
   customMemberName?: string;
   location?: string;
   notes?: string;

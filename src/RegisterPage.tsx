@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "./components/Button";
-import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown } from "lucide-react";
 import { Card } from "./components/Card";
 import { cn } from "./lib/utils";
 import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
@@ -46,12 +46,15 @@ export const RegisterPage: React.FC = () => {
 
   const canSubmit = name && phone && password && confirmPassword && verificationCode;
 
-  const relationships = [
+  const topRelationships = [
     { label: "儿子", value: "son" },
     { label: "女儿", value: "daughter" },
     { label: "父亲", value: "father" },
     { label: "母亲", value: "mother" },
-    { label: "配偶", value: "spouse" },
+    { label: "配偶", value: "spouse" }
+  ];
+
+  const otherRelationships = [
     { label: "弟弟", value: "brother" },
     { label: "妹妹", value: "sister" },
     { label: "哥哥", value: "brother" },
@@ -66,6 +69,8 @@ export const RegisterPage: React.FC = () => {
     { label: "侄女/外甥女", value: "niece" },
     { label: "其他", value: "other" }
   ];
+
+  const allRelationships = [...topRelationships, ...otherRelationships];
 
   const handleSendCode = async () => {
     if (!phone) {
@@ -165,7 +170,7 @@ export const RegisterPage: React.FC = () => {
     try {
       if (invitationCode.trim() && inviterId) {
         // 加入已有家族：告知后端新用户与邀请人的关系
-        const relInfo = relationships.find(r => r.label === selectedRelationship);
+        const relInfo = allRelationships.find(r => r.label === selectedRelationship);
         const response = await fetch("/api/register-claim", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -511,21 +516,40 @@ export const RegisterPage: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-8">
-                  {relationships.map((rel) => (
-                    <button
-                      key={rel.label}
-                      onClick={() => setSelectedRelationship(rel.label)}
-                      className={cn(
-                        "py-4 px-2 rounded-2xl border-2 font-bold transition-all text-sm",
-                        selectedRelationship === rel.label
-                          ? "bg-[#eab308] border-[#eab308] text-black shadow-lg shadow-[#eab308]/20"
-                          : "bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100"
-                      )}
+                <div className="space-y-4 mb-8">
+                  <div className="grid grid-cols-2 gap-3">
+                    {topRelationships.map((rel) => (
+                      <button
+                        key={rel.label}
+                        onClick={() => setSelectedRelationship(rel.label)}
+                        className={cn(
+                          "py-4 px-2 rounded-2xl border-2 font-bold transition-all text-sm",
+                          selectedRelationship === rel.label
+                            ? "bg-[#eab308] border-[#eab308] text-black shadow-lg shadow-[#eab308]/20"
+                            : "bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100"
+                        )}
+                      >
+                        {rel.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="relative">
+                    <p className="text-xs text-slate-400 font-bold mb-2 ml-1">更多称呼</p>
+                    <select
+                      className="w-full h-14 rounded-2xl bg-slate-50 border-2 border-transparent px-4 font-bold text-slate-600 focus:border-[#eab308] focus:bg-white outline-none transition-all appearance-none"
+                      value={topRelationships.some(r => r.label === selectedRelationship) ? "" : selectedRelationship}
+                      onChange={(e) => setSelectedRelationship(e.target.value)}
                     >
-                      {rel.label}
-                    </button>
-                  ))}
+                      <option value="" disabled>请选择其他关系...</option>
+                      {otherRelationships.map((rel) => (
+                        <option key={rel.label} value={rel.label}>{rel.label}</option>
+                      ))}
+                    </select>
+                    <div className="absolute right-4 top-[2.4rem] pointer-events-none text-slate-400">
+                      <ChevronDown size={20} />
+                    </div>
+                  </div>
                 </div>
 
                 {selectedRelationship && (

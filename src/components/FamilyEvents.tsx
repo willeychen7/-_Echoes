@@ -44,10 +44,17 @@ export const AudioBar: React.FC<{
             }
         };
 
+        audio.onerror = (e) => {
+            console.error("[AUDIO] Playback error:", e);
+            alert("语音播放失败，可能是格式暂不支持或网络连接问题");
+            onToggleRef.current();
+        };
+
         return () => {
             audio.pause();
             audio.onended = null;
             audio.ontimeupdate = null;
+            audio.onerror = null;
             audioRef.current = null;
         };
     }, [url]);
@@ -58,14 +65,12 @@ export const AudioBar: React.FC<{
         if (!audio) return;
 
         if (isPlaying) {
-            // 只有当音频处于暂停状态时才尝试播放，防止“坎顿重复”
-            if (audio.paused) {
-                audio.play().catch(e => console.error("Audio internal play error:", e));
-            }
+            audio.play().catch(err => {
+                console.error("[AUDIO] Play failed:", err);
+                onToggleRef.current();
+            });
         } else {
-            if (!audio.paused) {
-                audio.pause();
-            }
+            audio.pause();
         }
     }, [isPlaying]);
 
@@ -325,7 +330,11 @@ export const InlineBlessingPanel: React.FC<{
                 const mr = new MediaRecorder(stream);
                 mediaRecorderRef.current = mr;
                 mr.ondataavailable = e => audioChunksRef.current.push(e.data);
-                mr.onstop = () => setRecordedAudioUrl(URL.createObjectURL(new Blob(audioChunksRef.current, { type: 'audio/webm' })));
+                mr.onstop = () => {
+                    const mimeType = mr.mimeType || 'audio/webm';
+                    const blob = new Blob(audioChunksRef.current, { type: mimeType });
+                    setRecordedAudioUrl(URL.createObjectURL(blob));
+                };
                 mr.start();
                 const r = new SR(); r.lang = "zh-CN"; r.continuous = true; r.interimResults = true;
                 r.onresult = (e: any) => {
@@ -637,48 +646,35 @@ export const InlineBlessingPanel: React.FC<{
                                             </button>
                                             <p className="text-sm font-black text-slate-300 tracking-widest uppercase">选择要分享的照片</p>
                                         </motion.div>
-                                    ) : isRecording && inputMode === "voice" ? (
+                                    ) : (inputMode === "voice" && (isRecording || recordedAudioUrl)) ? (
                                         <motion.div
-                                            key="recording-ui"
-                                            initial={{ opacity: 0, scale: 0.9 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            exit={{ opacity: 0, scale: 1.1 }}
-                                            className="flex flex-col items-center justify-center py-4 space-y-6"
-                                        >
-                                            <motion.button
-                                                onClick={toggleRecording}
-                                                animate={{
-                                                    scale: [1, 1.05, 1],
-                                                    boxShadow: [
-                                                        "0px 0px 0px 0px rgba(234, 179, 8, 0.2)",
-                                                        "0px 0px 0px 20px rgba(234, 179, 8, 0)",
-                                                        "0px 0px 0px 0px rgba(234, 179, 8, 0.2)"
-                                                    ]
-                                                }}
-                                                transition={{ repeat: Infinity, duration: 1.5 }}
-                                                className="size-24 bg-[#eab308] text-white rounded-full flex items-center justify-center shadow-xl shadow-[#eab308]/30 border-4 border-white active:scale-90 transition-transform"
-                                            >
-                                                <div className="size-8 bg-white rounded-lg animate-pulse" />
-                                            </motion.button>
-                                            <div className="flex flex-col items-center gap-3">
-                                                <div className="flex items-center gap-2 bg-red-50 px-4 py-2 rounded-full border border-red-100 shadow-sm">
-                                                    <div className="size-2 bg-red-500 rounded-full animate-pulse" />
-                                                    <span className="text-lg font-black font-mono text-red-500">
-                                                        {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
-                                                    </span>
-                                                </div>
-                                                <p className="text-sm font-black text-[#eab308] animate-bounce">松开或点击按钮完成录音</p>
-                                            </div>
-                                        </motion.div>
-                                    ) : (
-                                        <motion.div
-                                            key="input-form"
+                                            key="voice-active"
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             className="flex-1 flex flex-col gap-4"
                                         >
-                                            {/* NOTE: 处理语音录制完成后的布局：语音条在上，文本框在下 */}
-                                            {inputMode === "voice" && recordedAudioUrl && (
+                                            {isRecording && (
+                                                <div className="flex flex-col items-center justify-center py-2 space-y-4">
+                                                    <motion.div
+                                                        animate={{
+                                                            scale: [1, 1.1, 1],
+                                                            opacity: [0.5, 1, 0.5]
+                                                        }}
+                                                        transition={{ repeat: Infinity, duration: 1.5 }}
+                                                        className="size-16 bg-red-500 rounded-full flex items-center justify-center shadow-lg shadow-red-200"
+                                                    >
+                                                        <div className="size-6 bg-white rounded-sm" />
+                                                    </motion.div>
+                                                    <div className="flex items-center gap-2 bg-red-50 px-4 py-1.5 rounded-full border border-red-100 shadow-sm">
+                                                        <div className="size-2 bg-red-500 rounded-full animate-pulse" />
+                                                        <span className="text-sm font-black font-mono text-red-500">
+                                                            正在录音 {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {!isRecording && recordedAudioUrl && (
                                                 <div className="flex justify-center pt-2">
                                                     <AudioBar
                                                         url={recordedAudioUrl}
@@ -690,8 +686,22 @@ export const InlineBlessingPanel: React.FC<{
                                             )}
 
                                             <textarea
+                                                className="w-full flex-1 min-h-[100px] text-lg text-slate-700 bg-amber-50/30 p-4 rounded-3xl border-2 border-dashed border-amber-200/50 focus:ring-0 resize-none font-serif leading-relaxed placeholder:text-slate-300"
+                                                placeholder="语音转出的文字将实时显示在这里..."
+                                                value={transcription}
+                                                onChange={e => setTranscription(e.target.value)}
+                                            />
+                                        </motion.div>
+                                    ) : (
+                                        <motion.div
+                                            key="input-form"
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            className="flex-1 flex flex-col gap-4"
+                                        >
+                                            <textarea
                                                 className="w-full flex-1 min-h-[120px] text-lg text-slate-700 bg-transparent border-none focus:ring-0 resize-none font-serif leading-relaxed placeholder:text-slate-200"
-                                                placeholder={inputMode === "video" ? "功能开发中..." : (inputMode === "voice" ? "语音转出的文字将显示在这里，您可以进行修改..." : "写下您的祝福...")}
+                                                placeholder={inputMode === "video" ? "功能开发中..." : "写下您的祝福..."}
                                                 value={transcription}
                                                 onChange={e => setTranscription(e.target.value)}
                                                 disabled={inputMode === "video"}

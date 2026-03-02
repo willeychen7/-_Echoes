@@ -878,6 +878,7 @@ export async function createApp() {
         ...e,
         isRecurring: e.is_recurring,
         memberId: e.member_id,
+        memberIds: e.member_ids, // Supabase JSONB maps directly to array
         customMemberName: e.custom_member_name
       }));
 
@@ -947,6 +948,7 @@ export async function createApp() {
           description,
           is_recurring: !!isRecurring,
           member_id: memberId,
+          member_ids: req.body.memberIds || [], // Accept plural memberIds
           custom_member_name: customMemberName,
           location: location || "",
           notes: notes || ""
