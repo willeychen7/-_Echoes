@@ -14,11 +14,7 @@ let resend: any;
 
 export async function createApp() {
   try {
-    // ESM equivalent of __dirname
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-
-    // Load environment variables locally
+    // Only load environment variables locally
     if (!process.env.VERCEL) {
       try {
         const dotenv = await import("dotenv");
@@ -52,9 +48,6 @@ export async function createApp() {
     // Logging middleware
     app.use((req, res, next) => {
       console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-      if (req.body && req.url.includes("register")) {
-        console.log(`[AUTH] Payload detected, size: ${JSON.stringify(req.body).length} characters`);
-      }
       next();
     });
 
@@ -70,6 +63,34 @@ export async function createApp() {
       }
       next();
     });
+
+    // Only handle static serving / Vite in local development
+    if (!process.env.VERCEL) {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = path.dirname(__filename);
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[SERVER] Development mode: using Vite middleware");
+        try {
+          const { createServer: createViteServer } = await import("vite");
+          const vite = await createViteServer({
+            server: { middlewareMode: true },
+            appType: "spa",
+          });
+          app.use(vite.middlewares);
+        } catch (err) {
+          console.warn("[SERVER] Vite middleware failed to load.");
+        }
+      } else {
+        console.log("[SERVER] Production mode: serving static files from dist");
+        const distPath = path.join(__dirname, "dist");
+        app.use(express.static(distPath));
+        app.get("*", (req, res) => {
+          if (req.url.startsWith("/api")) return res.status(404).json({ error: "API not found" });
+          res.sendFile(path.join(distPath, "index.html"));
+        });
+      }
+    }
 
     // API Routes
     app.get("/api/ping", async (req, res) => {
@@ -1331,34 +1352,6 @@ export async function createApp() {
         res.status(500).json({ error: err.message });
       }
     });
-
-    // Only handle static serving / Vite in local development
-    // In Vercel, the vercel.json rewrites handle all static file serving
-    if (!process.env.VERCEL) {
-      if (process.env.NODE_ENV !== "production") {
-        console.log("[SERVER] Development mode: using Vite middleware");
-        try {
-          const { createServer: createViteServer } = await import("vite");
-          const vite = await createViteServer({
-            server: { middlewareMode: true },
-            appType: "spa",
-          });
-          app.use(vite.middlewares);
-        } catch (err) {
-          console.warn("[SERVER] Vite middleware failed to load.");
-        }
-      } else {
-        console.log("[SERVER] Production mode: serving static files from dist");
-        const distPath = path.join(__dirname, "dist");
-        app.use(express.static(distPath));
-        app.get("*", (req, res) => {
-          if (req.url.startsWith("/api")) {
-            return res.status(404).json({ error: "API endpoint not found" });
-          }
-          res.sendFile(path.join(distPath, "index.html"));
-        });
-      }
-    }
 
     return app;
   } catch (err: any) {
