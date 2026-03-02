@@ -503,13 +503,13 @@ export const ProfilePage: React.FC = () => {
                 ) : (
                   notifications.map((n, i) => {
                     const isUnread = !JSON.parse(localStorage.getItem(`read_notifs_old_${user.id}`) || "[]").includes(n.id);
-                    // NOTE: 根据通知类型决定跳转目标
+                    // NOTE: 优先使用后端存储的 link_url 精准跳转，降级到广场
                     const handleNotifClick = () => {
                       setShowNotifications(false);
-                      if (n.event_id) {
-                        navigate("/square", { state: { highlightEventId: n.event_id } });
-                      } else if (n.target_member_id || n.member_id) {
-                        navigate("/archive", { state: { highlightMemberId: n.target_member_id || n.member_id } });
+                      if (n.link_url && n.link_url !== "/profile") {
+                        navigate(n.link_url);
+                      } else if (n.event_id) {
+                        navigate("/square");
                       } else {
                         navigate("/square");
                       }

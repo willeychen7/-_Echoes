@@ -1216,7 +1216,7 @@ export async function createApp() {
 
       const { data: current } = await supabase
         .from("messages")
-        .select("likes, family_member_id, liked_by")
+        .select("likes, family_member_id, liked_by, event_id")
         .eq("id", id)
         .single();
       if (!current) return res.status(404).json({ error: "消息不存在" });
@@ -1247,12 +1247,16 @@ export async function createApp() {
 
       if (!alreadyLiked && current.family_member_id) {
         try {
+          // NOTE: 点赞通知精准携带跳转地址：大事记留言跳广场，档案留言跳档案页
+          const linkUrl = current.event_id
+            ? `/square`
+            : `/archive/${current.family_member_id}`;
           await supabase.from("notifications").insert({
             member_id: current.family_member_id,
             title: "有人给您点赞了",
-            content: `${senderName || "有人"} 赞了您的记忆瞬间`,
+            content: `${senderName || "有人"} 赞了您的${current.event_id ? '大事记留言' : '记忆档案留言'}`,
             type: "like",
-            link_url: `/profile`
+            link_url: linkUrl
           });
         } catch (e) {
           console.error("[NOTIF] Failed to send like notification:", e);
