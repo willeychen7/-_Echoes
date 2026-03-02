@@ -88,6 +88,7 @@ CREATE TABLE events (
     description TEXT,
     is_recurring BOOLEAN DEFAULT TRUE,
     member_id INTEGER REFERENCES family_members(id) ON DELETE SET NULL,
+    member_ids INTEGER[] DEFAULT '{}',  -- 多人关联大事记，存储多个成员 ID
     custom_member_name TEXT,
     location TEXT,
     notes TEXT,
