@@ -26,6 +26,8 @@ export const BlessingPage: React.FC = () => {
   const [transcription, setTranscription] = useState("");
   const [event, setEvent] = useState<FamilyEvent | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  // NOTE: 存储成员名字 -> 最新头像的映射，确保历史留言都显示最新头像
+  const [memberAvatarMap, setMemberAvatarMap] = useState<Record<string, string>>({});
   const [questions, setQuestions] = useState<string[]>([
     "您还记得家中长辈小时候最喜欢的一件玩具或食物吗？",
     "描述一个让您也感到非常幸福的家人的瞬间。"
@@ -65,6 +67,18 @@ export const BlessingPage: React.FC = () => {
         if (Array.isArray(data)) {
           const found = data.find((e: any) => e.id === Number(eventId));
           setEvent(found);
+        }
+      }).catch(console.error);
+      // NOTE: 同时拉取家庭成员最新头像，建立名字->URL映射
+      fetch(`/api/family-members?familyId=${familyId}`).then(r => r.json()).then(members => {
+        if (Array.isArray(members)) {
+          const map: Record<string, string> = {};
+          members.forEach((m: any) => {
+            if (m.name && (m.avatar_url || m.avatarUrl)) {
+              map[m.name] = m.avatar_url || m.avatarUrl;
+            }
+          });
+          setMemberAvatarMap(map);
         }
       }).catch(console.error);
       fetch(`/api/messages?eventId=${eventId}`).then(res => res.json()).then(data => {
@@ -451,7 +465,8 @@ export const BlessingPage: React.FC = () => {
                 >
                   <div className="flex flex-col items-center gap-3 shrink-0">
                     <div className="size-16 rounded-full overflow-hidden border-4 border-white shadow-md">
-                      <img src={msg.authorAvatar || `https://picsum.photos/seed/${msg.authorName || i}/100/100`} alt="" className="w-full h-full object-cover" />
+                      {/* NOTE: 优先用家庭成员表里的最新头像，兜底用留言里存的头像 */}
+                      <img src={memberAvatarMap[msg.authorName] || msg.authorAvatar || `https://picsum.photos/seed/${msg.authorName || i}/100/100`} alt="" className="w-full h-full object-cover" />
                     </div>
                     <span className="px-3 py-1 rounded-full bg-[#eab308]/10 text-[#eab308] text-[10px] font-black">
                       {msg.authorName === currentUser?.name ? "我" : msg.authorRole}

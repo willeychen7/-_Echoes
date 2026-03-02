@@ -239,18 +239,27 @@ export async function createApp() {
       // 3. 核心同步逻辑：更新关联的 users 表
       await supabase.from("users").update({ name, relationship }).eq("member_id", req.params.id);
 
-      // 4. 同步更新该用户失发过的所有留言（通过 family_member_id 精确匹配，而非姓名）
-      // NOTE: 使用 member_id 匹配能确保改名后头像仍能正确同步
+      // 4. 同步更新该用户发过的所有留言
       if (avatarUrl || name) {
         const updateFields: any = {};
         if (name) updateFields.author_name = name;
         if (avatarUrl) updateFields.author_avatar = avatarUrl;
         if (relationship) updateFields.author_role = relationship;
 
+        // 先通过 family_member_id 精确更新
         await supabase
           .from("messages")
           .update(updateFields)
           .eq("family_member_id", req.params.id);
+
+        // NOTE: 兜底：用旧姓名匹配 (family_member_id 为 null 的历史留言)
+        if (oldMember?.name && avatarUrl) {
+          await supabase
+            .from("messages")
+            .update({ author_avatar: avatarUrl })
+            .eq("author_name", oldMember.name)
+            .is("family_member_id", null);
+        }
 
         // NOTE: 同步更新个人记忆瞬间里的头像（memories 表）
         const memoriesFields: any = {};
