@@ -1,3 +1,4 @@
+// Force deployment sync - Vercel build trigger
 import React, { useState, useEffect, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Edit2, Share2, LogOut, Heart, MessageSquare, Clock, X, Check, CheckCircle, Camera, Gift, Users, Bell, ChevronRight, Plus } from "lucide-react";
