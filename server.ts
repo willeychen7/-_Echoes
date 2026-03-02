@@ -362,29 +362,55 @@ export async function createApp() {
         const parts = code.split("-");
         targetMemberId = parseInt(parts[1]);
         inviterId = parseInt(parts[2]);
-      } else {
-        // Fallback to legacy static invite code
-        const { data: legacyMember } = await supabase.from("family_members").select("*").eq("invite_code", code).single();
-        if (legacyMember) {
-          return res.json({ inviterName: legacyMember.name, inviterRole: legacyMember.standard_role || legacyMember.relationship, inviterId: legacyMember.id });
+
+        const { data: inviter } = await supabase.from("family_members").select("*").eq("id", inviterId).single();
+        const { data: target } = await supabase.from("family_members").select("*").eq("id", targetMemberId).single();
+
+        if (!inviter || !target) {
+          return res.status(404).json({ error: "Invalid invitation link" });
         }
-        return res.status(404).json({ error: "Invalid invite code" });
+
+        return res.json({
+          inviterName: inviter.name,
+          inviterRole: inviter.standard_role || inviter.relationship,
+          inviterId: inviter.id,
+          targetName: target.name,
+          targetId: target.id
+        });
+      } else {
+        // Legacy: FA-XXXX-XXXX
+        const { data: target } = await supabase.from("family_members").select("*").eq("invite_code", code).single();
+        if (!target) return res.status(404).json({ error: "Invalid invite code" });
+
+        // Find who created this profile
+        const { data: creatorLink } = await supabase
+          .from("archive_memory_creators")
+          .select("creator_member_id")
+          .eq("member_id", target.id)
+          .maybeSingle();
+
+        if (creatorLink) {
+          const { data: inviter } = await supabase.from("family_members").select("*").eq("id", creatorLink.creator_member_id).single();
+          if (inviter) {
+            return res.json({
+              inviterName: inviter.name,
+              inviterRole: inviter.standard_role || inviter.relationship,
+              inviterId: inviter.id,
+              targetName: target.name,
+              targetId: target.id
+            });
+          }
+        }
+
+        // Fallback: If no creator found, it's a self-claim or root invite
+        return res.json({
+          inviterName: target.name,
+          inviterRole: target.standard_role || target.relationship,
+          inviterId: target.id,
+          targetName: target.name,
+          targetId: target.id
+        });
       }
-
-      const { data: inviter, error: inviterError } = await supabase.from("family_members").select("*").eq("id", inviterId).single();
-      const { data: target, error: targetError } = await supabase.from("family_members").select("*").eq("id", targetMemberId).single();
-
-      if (inviterError || !inviter || targetError || !target) {
-        return res.status(404).json({ error: "Invalid invitation link" });
-      }
-
-      res.json({
-        inviterName: inviter.name,
-        inviterRole: inviter.standard_role || inviter.relationship,
-        inviterId: inviter.id,
-        targetName: target.name,
-        targetId: target.id
-      });
     });
 
     // --- NEW: Archive Creator Info ---
@@ -427,13 +453,27 @@ export async function createApp() {
           const parts = inviteCode.split("-");
           targetId = parseInt(parts[1]);
           inviterId = parseInt(parts[2]);
+        } else {
+          // Legacy check
+          const { data: legacyTarget } = await supabase.from("family_members").select("*").eq("invite_code", inviteCode).single();
+          if (legacyTarget) {
+            targetId = legacyTarget.id;
+            const { data: creatorLink } = await supabase.from("archive_memory_creators").select("creator_member_id").eq("member_id", targetId).maybeSingle();
+            if (creatorLink) {
+              inviterId = creatorLink.creator_member_id;
+            } else {
+              // Self-claim (no creator link)
+              inviterId = targetId;
+            }
+          }
         }
 
         // 1. Get inviter and target
         const { data: inviter } = await supabase.from("family_members").select("*").eq("id", inviterId).single();
         const { data: target } = await supabase.from("family_members").select("*").eq("id", targetId).single();
 
-        if (!inviter || !target) return res.status(404).json({ error: "Invitation not found" });
+        if (!target) return res.status(404).json({ error: "Target profile not found" });
+        if (!inviter) return res.status(404).json({ error: "Inviter not found" });
 
         // 2. Perform Relationship Mapping (Atomic Logic)
         const resolveRigorousRel = async (role: string, inviter: any, targetId: number) => {
