@@ -1,4 +1,4 @@
-import createApp from '../server.js';
+import createApp from '../server';
 let cachedApp: any;
 
 export default async (req: any, res: any) => {

@@ -1289,32 +1289,32 @@ export async function createApp() {
       }
     });
 
-    // Vite middleware for development
-    if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
-      try {
-        const { createServer: createViteServer } = await import("vite");
-        const vite = await createViteServer({
-          server: { middlewareMode: true },
-          appType: "spa",
-        });
-        app.use(vite.middlewares);
+    // Only handle static serving / Vite in local development
+    // In Vercel, the vercel.json rewrites handle all static file serving
+    if (!process.env.VERCEL) {
+      if (process.env.NODE_ENV !== "production") {
         console.log("[SERVER] Development mode: using Vite middleware");
-      } catch (err) {
-        console.warn("[SERVER] Vite middleware failed to load, normal in production/Vercel.");
-      }
-    }
-
-    // Static serving only in production/vercel
-    if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
-      console.log("[SERVER] Production mode: serving static files from dist");
-      const distPath = path.join(__dirname, "dist");
-      app.use(express.static(distPath));
-      app.get("*", (req, res) => {
-        if (req.url.startsWith("/api")) {
-          return res.status(404).json({ error: "API endpoint not found" });
+        try {
+          const { createServer: createViteServer } = await import("vite");
+          const vite = await createViteServer({
+            server: { middlewareMode: true },
+            appType: "spa",
+          });
+          app.use(vite.middlewares);
+        } catch (err) {
+          console.warn("[SERVER] Vite middleware failed to load.");
         }
-        res.sendFile(path.join(distPath, "index.html"));
-      });
+      } else {
+        console.log("[SERVER] Production mode: serving static files from dist");
+        const distPath = path.join(__dirname, "dist");
+        app.use(express.static(distPath));
+        app.get("*", (req, res) => {
+          if (req.url.startsWith("/api")) {
+            return res.status(404).json({ error: "API endpoint not found" });
+          }
+          res.sendFile(path.join(distPath, "index.html"));
+        });
+      }
     }
 
     return app;
