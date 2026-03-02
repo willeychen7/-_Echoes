@@ -1247,10 +1247,10 @@ export async function createApp() {
 
       if (!alreadyLiked && current.family_member_id) {
         try {
-          // NOTE: 点赞通知精准携带跳转地址：大事记留言跳广场，档案留言跳档案页
+          // NOTE: 点赞通知精准携带跳转地址：大事记留言跳祝福页并高亮留言，档案留言跳档案页
           const linkUrl = current.event_id
-            ? `/square`
-            : `/archive/${current.family_member_id}`;
+            ? `/blessing/${current.event_id}?highlightMsg=${id}`
+            : `/archive/${current.family_member_id}?highlightMsg=${id}`;
           await supabase.from("notifications").insert({
             member_id: current.family_member_id,
             title: "有人给您点赞了",

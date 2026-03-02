@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Share2, Mic, MessageSquare, Camera, Video, Sparkles, RotateCcw, Play, Heart, Calendar as IconCalendar, MapPin, FileText, Send, X } from "lucide-react";
 import { Button } from "./components/Button";
 import { Card } from "./components/Card";
@@ -13,8 +13,13 @@ const PUNCT_END = /[。！？….,!?]$/;
 
 export const BlessingPage: React.FC = () => {
   const { eventId } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState<"say" | "questions">("say");
+  const [highlightedMsgId, setHighlightedMsgId] = useState<number | null>(() => {
+    const h = searchParams.get("highlightMsg");
+    return h ? Number(h) : null;
+  });
   const [inputMode, setInputMode] = useState<"voice" | "text" | "photo" | "video">("voice");
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -68,6 +73,18 @@ export const BlessingPage: React.FC = () => {
             isLiked: m.likedBy?.includes(userKey) || false
           })).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
           setMessages(formatted);
+          // NOTE: 如果有点赞跳转的高亮 ID，等 DOM 渲染后滚动到该留言并高亮 3 秒
+          const targetId = searchParams.get("highlightMsg");
+          if (targetId) {
+            setTimeout(() => {
+              const el = document.getElementById(`msg-${targetId}`);
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+                setHighlightedMsgId(Number(targetId));
+                setTimeout(() => setHighlightedMsgId(null), 3500);
+              }
+            }, 600);
+          }
         } else {
           setMessages([]);
         }
@@ -419,10 +436,16 @@ export const BlessingPage: React.FC = () => {
               return (
                 <motion.div
                   key={msg.id}
+                  id={`msg-${msg.id}`}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.1 }}
-                  className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-50 flex gap-5"
+                  className={cn(
+                    "bg-white p-6 rounded-[2.5rem] shadow-xl border flex gap-5 transition-all duration-700",
+                    highlightedMsgId === msg.id
+                      ? "border-[#eab308] shadow-[0_0_30px_rgba(234,179,8,0.35)] ring-4 ring-[#eab308]/20 scale-[1.02]"
+                      : "border-slate-50"
+                  )}
                 >
                   <div className="flex flex-col items-center gap-3 shrink-0">
                     <div className="size-16 rounded-full overflow-hidden border-4 border-white shadow-md">
