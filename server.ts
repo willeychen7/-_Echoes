@@ -2,36 +2,41 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
-import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import { Resend } from "resend";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// NOTE: 密码哈希的 salt 轮数，12 是生产级别的安全默认值
 const BCRYPT_SALT_ROUNDS = 12;
 
-// Load environment variables
-dotenv.config({ path: ".env.local" });
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
+// Top-level variables for caching
 let supabase: any;
 let resend: any;
-console.log("[SERVER] Starting initialization...");
 
 export async function createApp() {
-  console.log("[SERVER] createApp called");
   try {
+    // ESM equivalent of __dirname
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+
+    // Load environment variables locally
+    if (!process.env.VERCEL) {
+      try {
+        const dotenv = await import("dotenv");
+        dotenv.config({ path: ".env.local" });
+      } catch (e) {
+        console.warn("dotenv not found or .env.local missing, ignoring.");
+      }
+    }
+
     const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
     const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || "";
     const resendApiKey = process.env.RESEND_API_KEY || "";
 
     if (!supabaseUrl || !supabaseKey) {
-      console.error("【警告】缺失 Supabase URL 或 Key。如果是在 Vercel 运行，请添加环境变量。");
+      console.error("[SERVER] Warning: Missing Supabase URL or Key.");
     }
 
-    // Initialize clients inside createApp to ensure they catch environment variables correctly
+    // Initialize clients if not already initialized
     if (!supabase && supabaseUrl && supabaseKey) {
       supabase = createClient(supabaseUrl, supabaseKey);
     }
@@ -40,8 +45,6 @@ export async function createApp() {
     }
 
     const app = express();
-    const PORT = Number(process.env.PORT) || 3000;
-
     // Express middleware
     app.use(express.json({ limit: "10mb" }));
     app.use(express.urlencoded({ limit: "10mb", extended: true }));
