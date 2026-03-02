@@ -203,6 +203,10 @@ export const AddEventPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    console.log("[DEBUG] selectedMemberIds updated:", selectedMemberIds);
+  }, [selectedMemberIds]);
+
   return (
     <div className="min-h-screen flex flex-col bg-[#fdfbf7] text-slate-900 font-serif pb-32">
       <header className="sticky top-0 z-[60] bg-white/80 backdrop-blur-md px-6 py-5 flex items-center justify-between shadow-sm shrink-0 border-b border-slate-100">
@@ -234,16 +238,20 @@ export const AddEventPage: React.FC = () => {
           <div className="grid grid-cols-3 gap-4">
             {members.map((member) => {
               const memberId = Number(member.id);
-              const isSelected = selectedMemberIds.some(id => Number(id) === memberId);
+              const isSelected = selectedMemberIds.includes(memberId);
 
-              const toggleSelf = () => {
+              const toggleSelf = (e: React.MouseEvent) => {
+                e.preventDefault();
+                e.stopPropagation();
                 setIsCustomMember(false);
                 setCustomMemberName("");
                 setSelectedMemberIds(prev => {
-                  const current = prev.map(Number);
-                  return current.includes(memberId)
-                    ? current.filter(id => id !== memberId)
-                    : [...current, memberId];
+                  const isPresent = prev.includes(memberId);
+                  if (isPresent) {
+                    return prev.filter(id => id !== memberId);
+                  } else {
+                    return [...prev, memberId];
+                  }
                 });
               };
 
