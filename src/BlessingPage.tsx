@@ -43,6 +43,8 @@ export const BlessingPage: React.FC = () => {
   }, []);
 
   useLayoutEffect(() => {
+    // NOTE: 如果是从通知高亮跳转来的，不要滚到顶部，让scrollIntoView正常工作
+    if (searchParams.get("highlightMsg")) return;
     const scrollContainer = document.querySelector('.scroll-container');
     if (scrollContainer) {
       scrollContainer.scrollTo(0, 0);
