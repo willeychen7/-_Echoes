@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Calendar, User, Plus, X, CheckCircle } from "lucide-react";
+import { ArrowLeft, Calendar, User, Plus, X, CheckCircle, Check } from "lucide-react";
 import { Button } from "./components/Button";
 import { cn } from "./lib/utils";
 import { FamilyMember } from "./types";
@@ -288,8 +288,8 @@ export const AddEventPage: React.FC = () => {
                   </div>
 
                   {isSelected && (
-                    <div className="absolute top-1 right-1 bg-white text-[#eab308] p-0.5 rounded-full shadow-lg z-30 ring-2 ring-[#eab308]">
-                      <CheckCircle size={16} fill="currentColor" className="text-white" />
+                    <div className="absolute top-0 right-0 bg-[#eab308] text-white p-1 rounded-full shadow-lg z-30 ring-2 ring-white transform translate-x-1 -translate-y-1">
+                      <Check size={14} strokeWidth={4} />
                     </div>
                   )}
 
@@ -446,14 +446,15 @@ export const AddEventPage: React.FC = () => {
               </button>
             </div>
 
-            <div className="relative flex-1 flex items-center justify-end gap-3 pr-2">
+            <div className="flex-1 flex items-center gap-2 min-w-0">
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.preventDefault();
                   const now = new Date();
                   setDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
                 }}
                 className={cn(
-                  "px-3 py-1 rounded-lg text-xs font-black transition-all",
+                  "px-3 py-2 rounded-xl text-xs font-black transition-all shrink-0",
                   date === new Date().toISOString().split('T')[0]
                     ? "bg-[#eab308] text-black shadow-sm"
                     : "bg-slate-100 text-slate-500 hover:bg-slate-200"
@@ -461,21 +462,22 @@ export const AddEventPage: React.FC = () => {
               >
                 今日
               </button>
-              <div className="relative flex items-center">
+
+              <div className="relative flex-1 flex items-center bg-slate-50 rounded-xl px-3 border border-slate-100 group focus-within:border-[#eab308]/50 focus-within:bg-white transition-all">
                 <input
                   type="date"
                   id="event-date-input"
-                  className="absolute inset-0 opacity-0 cursor-pointer z-20"
+                  className="flex-1 h-10 bg-transparent text-sm font-bold outline-none text-slate-700 min-w-0"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                 />
-                <Calendar
-                  size={24}
-                  className="text-[#eab308] cursor-pointer relative z-10"
-                />
-                <span className="ml-2 text-lg font-bold text-slate-700 pointer-events-none">
-                  {date ? (date.split('-').slice(1).join('/') || '选择日期') : '选择日期'}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => (document.getElementById('event-date-input') as any)?.showPicker?.()}
+                  className="p-1 hover:bg-white rounded-lg transition-colors"
+                >
+                  <Calendar size={18} className="text-[#eab308]" />
+                </button>
               </div>
             </div>
           </div>
