@@ -6,7 +6,7 @@ import { FamilyMember, Message, MessageType } from "./types";
 import { Button } from "./components/Button";
 import { Card } from "./components/Card";
 import { getRelativeTime, cn } from "./lib/utils";
-import { useAvatarCache, resolveAvatar, seedAvatarCache } from "./lib/useAvatarCache";
+import { useAvatarCache, resolveAvatar, updateAvatarCache } from "./lib/useAvatarCache";
 import { getRelativeRelationship } from "./lib/relationships";
 import confetti from "canvas-confetti";
 import { DEMO_MEMBERS, isDemoMode } from "./demo-data";
@@ -145,26 +145,40 @@ export const ArchivePage: React.FC = () => {
             if (res.ok) {
               const data = await res.json();
               setMember(data);
+              // NOTE: 同步全局头像缓存，确保其他地方看到的头像也是最新的
+              if (data.id && (data.avatar_url || data.avatarUrl)) {
+                updateAvatarCache(data.id, data.avatar_url || data.avatarUrl);
+              }
             }
-            // NOTE: 拉取全部家庭成员并更新头像缓存，这样当其他人改过头像时历史留言也会实时同步
-            const familyId = parsed?.familyId;
-            if (familyId) {
-              fetch(`/api/family-members?familyId=${familyId}`).then(r => r.json()).then(members => {
-                if (Array.isArray(members)) {
-                  const idMap: Record<string, string> = {};
-                  members.forEach((m: any) => {
-                    const url = m.avatar_url || m.avatarUrl;
-                    if (m.id && url) idMap[String(m.id)] = url;
+
+            // --- 新增：预热整个家庭的头像缓存，确保留言作者的头像也是最新的 ---
+            const familyId = parsed?.familyId || "demo";
+            if (!isDemoMode(parsed)) {
+              const allMemRes = await fetch(`/api/family-members?familyId=${familyId}`);
+              if (allMemRes.ok) {
+                const allMembers = await allMemRes.json();
+                if (Array.isArray(allMembers)) {
+                  allMembers.forEach((m: any) => {
+                    if (m.id && (m.avatar_url || m.avatarUrl)) {
+                      updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
+                    }
                   });
-                  if (Object.keys(idMap).length > 0) seedAvatarCache(idMap);
                 }
-              }).catch(console.error);
+              }
             }
           }
 
           const msgRes = await fetch(`/api/memories?memberId=${id}`);
           if (msgRes.ok) {
             const data = await msgRes.json();
+            // 同步这些过往留言所属作者的头像到本地缓存
+            if (Array.isArray(data)) {
+              data.forEach((m: any) => {
+                if (m.authorId && m.authorAvatar) {
+                  updateAvatarCache(m.authorId, m.authorAvatar);
+                }
+              });
+            }
             const currUser = parsed;
             const formattedMessages = (Array.isArray(data) ? data : []).map((m: any) => {
               const userKey = currUser ? String(currUser.memberId || currUser.id || currUser.name) : "匿名";
@@ -880,7 +894,7 @@ export const ArchivePage: React.FC = () => {
                   <div className="flex flex-col items-center gap-3 shrink-0">
                     <div className="size-16 rounded-full overflow-hidden border-4 border-white shadow-md">
                       <img
-                        src={resolveAvatar(avatarCache, msg.familyMemberId, msg.authorAvatar, msg.authorName || String(i))}
+                        src={resolveAvatar(avatarCache, msg.authorId, msg.authorAvatar, msg.authorName || String(i))}
                         alt=""
                         className="w-full h-full object-cover"
                       />

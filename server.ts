@@ -115,7 +115,7 @@ export async function createApp() {
         if (!apiKey) return res.status(500).json({ error: "Missing API Key" });
 
         const ai = new GoogleGenerativeAI(apiKey);
-        const model = ai.getGenerativeModel({ model: "gemini-2.5-pro" });
+        const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const messageContext = (messages || []).map((m: any) => `${m.authorName} (${m.authorRole}): ${m.content}`).join("\n");
         const prompt = `你是家族记忆整理师。请根据以下家人在${eventTitle}时的祝福：\n${messageContext}\n\n写一段温馨的家族总结。要求语言温暖、细腻。字数300字左右。`;
@@ -136,7 +136,7 @@ export async function createApp() {
         if (!apiKey) return res.status(500).json({ error: "Missing API Key" });
 
         const ai = new GoogleGenerativeAI(apiKey);
-        const model = ai.getGenerativeModel({ model: "gemini-2.5-pro" });
+        const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         let prompt = "";
         const messageContext = (messages || []).map((m: any) => `${m.authorName} (${m.authorRole}): ${m.content}`).join("\n");
@@ -168,6 +168,61 @@ export async function createApp() {
         res.status(500).json({ error: "AI生成失败: " + err.message });
       }
     });
+
+    // --- Helper for syncing member profile changes to messages/memories ---
+    async function syncMemberContent(memberId: string | number, name: string, oldName: string | null, avatarUrl: string | null, relationship: string | null) {
+      if (!supabase) return;
+
+      const updateFields: any = {};
+      if (avatarUrl) updateFields.author_avatar = avatarUrl;
+      // NOTE: We don't usually sync roles automatically because they vary by wall, 
+      // but if the user changed their global role/relationship, we might want to?
+      // For now, let's focus on name and avatar.
+
+      const memoriesFields: any = {};
+      if (name) memoriesFields.author_name = name;
+      if (avatarUrl) memoriesFields.author_avatar = avatarUrl;
+      if (relationship) memoriesFields.author_relationship = relationship;
+
+      // 1. Update memories (which have author_id column)
+      if (Object.keys(memoriesFields).length > 0) {
+        await supabase
+          .from("memories")
+          .update(memoriesFields)
+          .eq("author_id", memberId);
+      }
+
+      // 2. Update messages (where family_member_id is author, i.e., events)
+      const messageFields: any = {};
+      if (name) messageFields.author_name = name;
+      if (avatarUrl) messageFields.author_avatar = avatarUrl;
+      if (relationship) messageFields.author_role = relationship;
+
+      if (Object.keys(messageFields).length > 0) {
+        await supabase
+          .from("messages")
+          .update(messageFields)
+          .eq("family_member_id", memberId)
+          .not("event_id", "is", null);
+
+        // 3. Fallback: Update messages by name (for archive comments where ID is wall ID)
+        if (oldName) {
+          await supabase
+            .from("messages")
+            .update(messageFields)
+            .eq("author_name", oldName);
+
+          // NOTE: Robust check: also try name without spaces (for cases like "王小 宝")
+          const nameNoSpace = oldName.replace(/\s+/g, "");
+          if (nameNoSpace !== oldName) {
+            await supabase
+              .from("messages")
+              .update(messageFields)
+              .eq("author_name", nameNoSpace);
+          }
+        }
+      }
+    }
 
     app.get("/api/family-members", async (req, res) => {
       const { familyId } = req.query;
@@ -239,39 +294,8 @@ export async function createApp() {
       // 3. 核心同步逻辑：更新关联的 users 表
       await supabase.from("users").update({ name, relationship }).eq("member_id", req.params.id);
 
-      // 4. 同步更新该用户发过的所有留言
-      if (avatarUrl || name) {
-        const updateFields: any = {};
-        if (name) updateFields.author_name = name;
-        if (avatarUrl) updateFields.author_avatar = avatarUrl;
-        if (relationship) updateFields.author_role = relationship;
-
-        // 先通过 family_member_id 精确更新
-        await supabase
-          .from("messages")
-          .update(updateFields)
-          .eq("family_member_id", req.params.id);
-
-        // NOTE: 兜底：用旧姓名匹配 (family_member_id 为 null 的历史留言)
-        if (oldMember?.name && avatarUrl) {
-          await supabase
-            .from("messages")
-            .update({ author_avatar: avatarUrl })
-            .eq("author_name", oldMember.name)
-            .is("family_member_id", null);
-        }
-
-        // NOTE: 同步更新个人记忆瞬间里的头像（memories 表）
-        const memoriesFields: any = {};
-        if (name) memoriesFields.author_name = name;
-        if (avatarUrl) memoriesFields.author_avatar = avatarUrl;
-        if (Object.keys(memoriesFields).length > 0) {
-          await supabase
-            .from("memories")
-            .update(memoriesFields)
-            .eq("author_id", req.params.id);
-        }
-      }
+      // 4. Sync profile changes to past content
+      await syncMemberContent(req.params.id, name, oldMember?.name, avatarUrl, relationship);
 
       res.json({ success: true });
     });
@@ -609,6 +633,9 @@ export async function createApp() {
           family_id: inviter.family_id,
           member_id: data.id
         });
+
+        // 6. Sync profile changes (especially avatar/name from registration) to past content
+        await syncMemberContent(data.id, name, target.name, avatarUrl, relationshipToInviter);
 
         res.json({ success: true, memberId: data.id, familyId: inviter.family_id });
       } catch (err: any) {
@@ -1031,23 +1058,43 @@ export async function createApp() {
         return res.status(500).json({ error: error.message });
       }
 
-      const formatted = (rawData || []).map((m: any) => ({
-        id: m.id,
-        familyMemberId: m.family_member_id || m.familyMemberId,
-        authorName: m.author_name || m.authorName || "家人",
-        authorRole: m.author_role || m.authorRole || "家人",
-        authorAvatar: m.author_avatar || m.authorAvatar,
-        content: m.content || "",
-        type: m.type || "text",
-        mediaUrl: m.media_url || m.mediaUrl,
-        duration: m.duration,
-        createdAt: m.created_at || m.createdAt,
-        likes: m.likes || 0,
-        likedBy: m.liked_by || [],
-        eventId: m.event_id || m.eventId
-      }));
+      // 精准同步：获取该家族所有成员名单及最新头像，强制纠偏旧数据
+      const { data: familyMembers } = await supabase.from("family_members").select("id, name, avatar_url");
+      const nameToIdMap: Record<string, number> = {};
+      const nameToAvatarMap: Record<string, string> = {};
+      familyMembers?.forEach(f => {
+        nameToIdMap[f.name] = f.id;
+        nameToIdMap[f.name.replace(/\s+/g, "")] = f.id;
+        if (f.avatar_url) {
+          nameToAvatarMap[f.name] = f.avatar_url;
+          nameToAvatarMap[f.name.replace(/\s+/g, "")] = f.avatar_url;
+        }
+      });
 
-      console.log(`[API] Returning ${formatted.length} messages`);
+      const formatted = (rawData || []).map((m: any) => {
+        const nameKey = m.author_name?.replace(/\s+/g, "") || "";
+        const authorId = m.event_id ? m.family_member_id : (nameToIdMap[m.author_name] || nameToIdMap[nameKey] || m.author_id || null);
+        // 重要修复：优先从成员表获取最新图片，否则才用旧表中的字段
+        const authorAvatar = (m.author_name ? nameToAvatarMap[m.author_name] : null) || (nameKey ? nameToAvatarMap[nameKey] : null) || m.author_avatar || m.authorAvatar;
+
+        return {
+          id: m.id,
+          familyMemberId: m.family_member_id || m.familyMemberId,
+          authorId,
+          authorName: m.author_name || m.authorName || "家人",
+          authorRole: m.author_role || m.authorRole || "家人",
+          authorAvatar,
+          content: m.content || "",
+          type: m.type || "text",
+          mediaUrl: m.media_url || m.mediaUrl,
+          duration: m.duration,
+          createdAt: m.created_at || m.createdAt,
+          likes: m.likes || 0,
+          likedBy: m.liked_by || [],
+          eventId: m.event_id || m.eventId
+        };
+      });
+
       res.json(formatted);
     });
 
@@ -1128,20 +1175,41 @@ export async function createApp() {
 
         if (error) throw error;
 
-        const formatted = (data || []).map(m => ({
-          id: m.id,
-          familyMemberId: m.member_id,
-          authorName: m.author_name,
-          authorRole: m.author_relationship,
-          authorAvatar: m.author_avatar,
-          content: m.content,
-          type: m.type,
-          mediaUrl: m.media_url,
-          duration: m.duration,
-          likes: m.likes || 0,
-          likedBy: m.liked_by || [],
-          createdAt: m.created_at
-        }));
+        // 增强同步：从姓名和 ID 映射出作者最新资料，防止记忆中的数据过时
+        const { data: familyMembers } = await supabase.from("family_members").select("id, name, avatar_url");
+        const nameToIdMap: Record<string, number> = {};
+        const nameToAvatarMap: Record<string, string> = {};
+        familyMembers?.forEach(f => {
+          nameToIdMap[f.name] = f.id;
+          nameToIdMap[f.name.replace(/\s+/g, "")] = f.id;
+          if (f.avatar_url) {
+            nameToAvatarMap[f.name] = f.avatar_url;
+            nameToAvatarMap[f.name.replace(/\s+/g, "")] = f.avatar_url;
+          }
+        });
+
+        const formatted = (data || []).map(m => {
+          const nameKey = m.author_name?.replace(/\s+/g, "") || "";
+          const authorId = m.author_id || nameToIdMap[m.author_name] || nameToIdMap[nameKey] || null;
+          // IMPORTANT: 强制覆盖为成员中心当前的头像
+          const authorAvatar = (m.author_name ? nameToAvatarMap[m.author_name] : null) || (nameKey ? nameToAvatarMap[nameKey] : null) || m.author_avatar;
+
+          return {
+            id: m.id,
+            familyMemberId: m.member_id,
+            authorId,
+            authorName: m.author_name,
+            authorRole: m.author_relationship,
+            authorAvatar,
+            content: m.content,
+            type: m.type,
+            mediaUrl: m.media_url,
+            duration: m.duration,
+            likes: m.likes || 0,
+            likedBy: m.liked_by || [],
+            createdAt: m.created_at
+          };
+        });
         res.json(formatted);
       } catch (err: any) {
         console.error("[API] GET Memories error:", err.message);

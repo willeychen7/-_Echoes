@@ -9,6 +9,7 @@ import { cn } from "../lib/utils";
 import { getRelativeTime } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 import { isDemoMode } from "../demo-data";
+import { useAvatarCache, resolveAvatar } from "../lib/useAvatarCache";
 import confetti from "canvas-confetti";
 
 /**
@@ -130,6 +131,7 @@ export const WallMessages: React.FC<{
 }> = ({ messages, currentUser, getMsgTypeInfo, handleLike, onDeleteMessage, maxVisible }) => {
     const [expanded, setExpanded] = useState(false);
     const [playingId, setPlayingId] = useState<number | null>(null);
+    const avatarCache = useAvatarCache();
 
     const visibleMessages = expanded ? messages : messages.slice(0, maxVisible);
     const hasMore = messages.length > maxVisible;
@@ -145,7 +147,12 @@ export const WallMessages: React.FC<{
                     <div key={msg.id} className="flex gap-4">
                         <div className="flex flex-col items-center gap-1.5 shrink-0">
                             <div className="size-12 rounded-full overflow-hidden border-2 border-white shadow-md">
-                                <img src={msg.authorAvatar || `https://picsum.photos/seed/${msg.authorName || i}/100/100`} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                <img
+                                    src={resolveAvatar(avatarCache, msg.authorId || msg.familyMemberId, msg.authorAvatar, msg.authorName || String(i))}
+                                    alt=""
+                                    className="w-full h-full object-cover"
+                                    referrerPolicy="no-referrer"
+                                />
                             </div>
                             <span className="text-[9px] font-black text-[#eab308] bg-[#eab308]/10 px-2 py-0.5 rounded-full whitespace-nowrap">
                                 {isAuthor ? "我" : msg.authorRole}

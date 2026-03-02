@@ -11,6 +11,7 @@ import { DEMO_MEMBERS, DEMO_EVENTS, DEMO_DEFAULT_USER, isDemoMode } from "./demo
 import { supabase } from "./lib/supabase";
 import { DEFAULT_AVATAR } from "./constants";
 import { AudioBar, WallMessages, InlineBlessingPanel } from "./components/FamilyEvents";
+import { updateAvatarCache } from "./lib/useAvatarCache";
 
 const getZodiac = (year: number) => {
   const zodiacs = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"];
@@ -122,7 +123,15 @@ export const FamilySquare: React.FC = () => {
       } else {
         const familyId = parseInt(String(parsed.familyId));
         fetch(`/api/family-members?familyId=${familyId}`).then(res => res.json()).then(data => {
-          if (Array.isArray(data)) setMembers(data);
+          if (Array.isArray(data)) {
+            setMembers(data);
+            // NOTE: 同步全局头像缓存
+            data.forEach((m: any) => {
+              if (m.id && (m.avatar_url || m.avatarUrl)) {
+                updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
+              }
+            });
+          }
           fetch(`/api/events?familyId=${familyId}`).then(res => res.json()).then(data => {
             if (Array.isArray(data)) setEvents(data);
           }).catch(console.error);
@@ -167,6 +176,10 @@ export const FamilySquare: React.FC = () => {
                 ? { ...m, ...updated, avatarUrl: updated.avatar_url, name: updated.name, relationship: updated.relationship }
                 : m
             ));
+            // 同步更新全局头像缓存
+            if (updated.avatar_url) {
+              updateAvatarCache(updated.id, updated.avatar_url);
+            }
             // 如果更新的是我自己，同步我的个人资料
             if (updated.id === parsed.memberId) {
               const freshUser = { ...parsed, avatar: updated.avatar_url, name: updated.name };

@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "motion/react";
 import confetti from "canvas-confetti";
 import { FamilyEvent, Message, MessageType } from "./types";
 import { cn, getRelativeTime } from "./lib/utils";
-import { useAvatarCache, resolveAvatar, seedAvatarCache } from "./lib/useAvatarCache";
+import { useAvatarCache, resolveAvatar, updateAvatarCache } from "./lib/useAvatarCache";
 import { isDemoMode } from "./demo-data";
 
 const PUNCT_END = /[。！？….,!?]$/;
@@ -72,29 +72,33 @@ export const BlessingPage: React.FC = () => {
           setEvent(found);
         }
       }).catch(console.error);
-      // NOTE: 同时拉取家庭成员最新头像，建立双重索引：memberId + 姓名
+      // NOTE: 同时拉取家庭成员最新头像，建立名字->URL映射
       fetch(`/api/family-members?familyId=${familyId}`).then(r => r.json()).then(members => {
         if (Array.isArray(members)) {
-          const nameMap: Record<string, string> = {};
-          const idMap: Record<string, string> = {};
+          const map: Record<string, string> = {};
           members.forEach((m: any) => {
-            const url = m.avatar_url || m.avatarUrl;
-            if (m.name && url) nameMap[m.name] = url;
-            // NOTE: seed 全局缓存（memberId -> url），所有人当前头像都写入
-            if (m.id && url) idMap[String(m.id)] = url;
+            if (m.name && (m.avatar_url || m.avatarUrl)) {
+              map[m.name] = m.avatar_url || m.avatarUrl;
+            }
+            if (m.id && (m.avatar_url || m.avatarUrl)) {
+              updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
+            }
           });
-          setMemberAvatarMap(nameMap);
-          // NOTE: 批量更新缓存，触发所有页面重渲染最新头像
-          if (Object.keys(idMap).length > 0) seedAvatarCache(idMap);
+          setMemberAvatarMap(map);
         }
       }).catch(console.error);
       fetch(`/api/messages?eventId=${eventId}`).then(res => res.json()).then(data => {
         if (Array.isArray(data)) {
           const userKey = currentUser ? String(currentUser.memberId || currentUser.id || currentUser.name) : "匿名";
-          const formatted = data.filter((m: any) => m.eventId === Number(eventId)).map((m: any) => ({
-            ...m,
-            isLiked: m.likedBy?.includes(userKey) || false
-          })).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          const formatted = data.filter((m: any) => m.eventId === Number(eventId)).map((m: any) => {
+            if (m.authorId && m.authorAvatar) {
+              updateAvatarCache(m.authorId, m.authorAvatar);
+            }
+            return {
+              ...m,
+              isLiked: m.likedBy?.includes(userKey) || false
+            };
+          }).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
           setMessages(formatted);
           // NOTE: 如果有点赞跳转的高亮 ID，等 DOM 渲染后滚动到该留言并高亮 3 秒
           const targetId = searchParams.get("highlightMsg");

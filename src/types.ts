@@ -46,6 +46,7 @@ export interface FamilyEvent {
 export interface Message {
   id: number;
   familyMemberId: number;
+  authorId?: number;
   authorName: string;
   authorRole: string;
   authorAvatar?: string;

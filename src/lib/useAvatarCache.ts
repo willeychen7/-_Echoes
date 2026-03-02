@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const AVATAR_CACHE_KEY = "familyAvatarCache";
+const AVATAR_CACHE_KEY = "familyAvatarCache_v3";
 const AVATAR_EVENT = "avatar-updated";
 
 /**
@@ -44,21 +44,6 @@ export function updateAvatarCache(memberId: number | string, avatarUrl: string) 
         current[String(memberId)] = avatarUrl;
         localStorage.setItem(AVATAR_CACHE_KEY, JSON.stringify(current));
         // NOTE: 触发所有订阅的组件刷新头像
-        window.dispatchEvent(new CustomEvent(AVATAR_EVENT));
-    } catch { }
-}
-
-/**
- * 批量写入所有家庭成员头像（仅触发一次刷新事件）。
- * 在 BlessingPage / ArchivePage 拉取成员列表时调用，
- * 确保任何成员改头像后，所有历史留言都显示最新头像。
- */
-export function seedAvatarCache(entries: Record<string, string>) {
-    try {
-        const current = JSON.parse(localStorage.getItem(AVATAR_CACHE_KEY) || "{}");
-        const merged = { ...current, ...entries };
-        localStorage.setItem(AVATAR_CACHE_KEY, JSON.stringify(merged));
-        // NOTE: 只触发一次事件，避免多次重渲染
         window.dispatchEvent(new CustomEvent(AVATAR_EVENT));
     } catch { }
 }
