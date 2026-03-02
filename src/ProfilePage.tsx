@@ -503,8 +503,19 @@ export const ProfilePage: React.FC = () => {
                 ) : (
                   notifications.map((n, i) => {
                     const isUnread = !JSON.parse(localStorage.getItem(`read_notifs_old_${user.id}`) || "[]").includes(n.id);
+                    // NOTE: 根据通知类型决定跳转目标
+                    const handleNotifClick = () => {
+                      setShowNotifications(false);
+                      if (n.event_id) {
+                        navigate("/square", { state: { highlightEventId: n.event_id } });
+                      } else if (n.target_member_id || n.member_id) {
+                        navigate("/archive", { state: { highlightMemberId: n.target_member_id || n.member_id } });
+                      } else {
+                        navigate("/square");
+                      }
+                    };
                     return (
-                      <div key={i} className={cn("p-4 rounded-[2rem] flex gap-4 border border-slate-100/50 transition-colors", isUnread ? "bg-orange-50" : "bg-slate-50")}>
+                      <button key={i} onClick={handleNotifClick} className={cn("w-full p-4 rounded-[2rem] flex gap-4 border border-slate-100/50 transition-all text-left active:scale-[0.98] group", isUnread ? "bg-orange-50 hover:bg-orange-100/70" : "bg-slate-50 hover:bg-slate-100")}>
                         <div className="relative shrink-0">
                           <img src={n.sender_avatar || n.authorAvatar || `https://picsum.photos/seed/${n.sender_name || n.authorName}/100/100`} className="size-12 rounded-full object-cover border-2 border-white shadow-sm" alt="" />
                           {n.type === "like" && (
@@ -519,7 +530,10 @@ export const ProfilePage: React.FC = () => {
                           {n.content && n.type !== "like" && <p className="text-xs text-slate-400 mt-1 italic truncate">“{n.content}”</p>}
                           <p className="text-[10px] text-slate-300 mt-2 font-bold uppercase tracking-tighter">{getRelativeTime(n.created_at || n.createdAt)}</p>
                         </div>
-                      </div>
+                        <div className="self-center text-slate-200 group-hover:text-slate-400 transition-colors shrink-0">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </div>
+                      </button>
                     )
                   })
                 )}
