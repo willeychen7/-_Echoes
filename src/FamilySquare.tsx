@@ -10,465 +10,57 @@ import confetti from "canvas-confetti";
 import { GoogleGenAI } from "@google/genai";
 import { DEMO_MEMBERS, DEMO_EVENTS, DEMO_DEFAULT_USER, isDemoMode } from "./demo-data";
 import { supabase } from "./lib/supabase";
+import { DEFAULT_AVATAR } from "./constants";
+import { AudioBar, WallMessages, InlineBlessingPanel } from "./components/FamilyEvents";
 
-// NOTE: 内嵌祝福面板，点击事件卡片上的"祝福"按钮后就地展开，无需跳页
-const InlineBlessingPanel: React.FC<{
-  event: FamilyEvent;
-  currentUser: any;
-  onClose: () => void;
-}> = ({ event, currentUser, onClose }) => {
-  const [inputMode, setInputMode] = useState<"voice" | "text" | "photo" | "video">("voice");
-  const [transcription, setTranscription] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
-  const [showWall, setShowWall] = useState(false);
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
-  const [aiSummary, setAiSummary] = useState("");
-  const [showInput, setShowInput] = useState(true);
-
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const recognitionRef = useRef<any>(null);
-
-  // 加载该事件的留言
-  useEffect(() => {
-    fetch(`/api/messages?eventId=${event.id}`)
-      .then(res => res.json())
-      .then(data => setMessages(data || []));
-  }, [event.id]);
-
-  const toggleRecording = () => {
-    if (isRecording) {
-      recognitionRef.current?.__shouldContinue && (recognitionRef.current.__shouldContinue = false);
-      recognitionRef.current?.stop();
-      if (mediaRecorderRef.current?.state !== 'inactive') mediaRecorderRef.current?.stop();
-      if (timerRef.current) clearInterval(timerRef.current);
-      setIsRecording(false);
-    } else {
-      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SR) { alert("当前浏览器不支持语音识别，请使用 Chrome"); return; }
-      setRecordedAudioUrl(null); setIsRecording(true); setTranscription(""); setRecordingTime(0);
-      audioChunksRef.current = [];
-      timerRef.current = setInterval(() => setRecordingTime(p => p + 1), 1000);
-      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-        const mr = new MediaRecorder(stream);
-        mediaRecorderRef.current = mr;
-        mr.ondataavailable = e => audioChunksRef.current.push(e.data);
-        mr.onstop = () => setRecordedAudioUrl(URL.createObjectURL(new Blob(audioChunksRef.current, { type: 'audio/webm' })));
-        mr.start();
-        const r = new SR(); r.lang = "zh-CN"; r.continuous = true; r.interimResults = true;
-        r.onresult = (e: any) => {
-          let final = "", interim = "";
-          for (let i = e.resultIndex; i < e.results.length; i++) {
-            if (e.results[i].isFinal) final += e.results[i][0].transcript;
-            else interim += e.results[i][0].transcript;
-          }
-          setTranscription(prev => (prev + final) + interim);
-        };
-        recognitionRef.current = r; r.__shouldContinue = true; r.start();
-      });
-    }
-  };
-
-  const handleSend = () => {
-    if (!transcription && inputMode === "text") return;
-    confetti({ particleCount: 80, spread: 50, origin: { y: 0.8 } });
-
-    const msgData = {
-      familyMemberId: event.memberId || 0,
-      authorName: currentUser?.name || "家人",
-      authorRole: currentUser?.relationship || "家人",
-      authorAvatar: currentUser?.avatar,
-      content: transcription || (inputMode === "photo" ? "分享了照片" : inputMode === "video" ? "分享了视频" : "留下了祝福"),
-      type: inputMode === "voice" ? MessageType.AUDIO : inputMode === "photo" ? MessageType.IMAGE : inputMode === "video" ? MessageType.VIDEO : MessageType.TEXT,
-      mediaUrl: inputMode === "photo" ? selectedImage || undefined : inputMode === "video" ? selectedVideo || undefined : inputMode === "voice" ? recordedAudioUrl || undefined : undefined,
-      duration: recordingTime,
-      eventId: event.id
-    };
-
-    fetch("/api/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(msgData)
-    })
-      .then(res => res.json())
-      .then(data => {
-        const newMsg: Message = {
-          ...msgData,
-          id: data.id,
-          createdAt: new Date().toISOString()
-        };
-        setMessages(prev => [newMsg, ...prev]);
-      });
-
-    setTranscription(""); setRecordingTime(0); setRecordedAudioUrl(null); setSelectedImage(null); setSelectedVideo(null);
-    setShowWall(true);
-    setShowInput(false);
-  };
-
-  const handleLike = (id: number) => {
-    setMessages(prev => prev.map(m => m.id === id ? { ...m, likes: (m.likes || 0) + (m.isLiked ? -1 : 1), isLiked: !m.isLiked } : m));
-  };
-
-  /** 删除留言（仅作者本人可调用） */
-  const handleDeleteMessage = (msgId: number) => {
-    setMessages(prev => prev.filter(m => m.id !== msgId));
-    // NOTE: 同时尝试从 API 删除，失败也不影响前端显示
-    fetch(`/api/messages/${msgId}`, { method: "DELETE" }).catch(console.error);
-  };
-
-  const generateAISummary = async () => {
-    if (messages.length === 0) {
-      alert("还没有人留下祝福哦～请先送出第一条祝福吧！");
-      return;
-    }
-    setIsGeneratingAI(true);
-    try {
-      const apiKey = localStorage.getItem("GOOGLE_API_KEY") || "";
-      const ai = new GoogleGenAI({ apiKey });
-      const messageContext = messages.map(m => `${m.authorName} (${m.authorRole}): ${m.content}`).join("\n");
-      const prompt = `你是家族记忆整理师。请根据以下家人在${event.title}时的祝福：\n${messageContext}\n\n写一段温馨的家族总结。要求语言温暖、细腻。字数200字左右。`;
-
-      const result = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: [{ role: "user", parts: [{ text: prompt }] }]
-      });
-
-      setAiSummary(result.text);
-      setShowWall(true);
-    } catch (e) {
-      console.error(e);
-      alert("AI 生成失败，请检查 API Key 是否配置正确");
-    } finally {
-      setIsGeneratingAI(false);
-    }
-  };
-
-  const handleShareSummary = () => {
-    if (!aiSummary) return;
-    navigator.clipboard.writeText(aiSummary).then(() => alert("祝福内容已复制！可以去微信分享啦。"));
-  };
-
-  const getMsgTypeInfo = (type: MessageType) => {
-    switch (type) {
-      case MessageType.AUDIO: return { label: "语音", color: "text-blue-500 bg-blue-50" };
-      case MessageType.IMAGE: return { label: "照片", color: "text-purple-500 bg-purple-50" };
-      case MessageType.VIDEO: return { label: "视频", color: "text-orange-500 bg-orange-50" };
-      default: return { label: "文字", color: "text-slate-400 bg-slate-50" };
-    }
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: "auto" }}
-      exit={{ opacity: 0, height: 0 }}
-      transition={{ duration: 0.35, ease: "easeInOut" }}
-      className="overflow-hidden"
-    >
-      <div className="px-4 pb-6 pt-2 space-y-6 border-t border-slate-100 bg-[#fdfbf7] rounded-b-3xl">
-
-        <AnimatePresence>
-          {showInput && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="space-y-6 overflow-hidden"
-            >
-              {/* 输入模式选择 */}
-              <div className="grid grid-cols-4 gap-3 pt-2">
-                {[
-                  { id: "voice", icon: Mic, label: "语音" },
-                  { id: "text", icon: MessageSquare, label: "文字" },
-                  { id: "photo", icon: Camera, label: "照片" },
-                  { id: "video", icon: Video, label: "视频" },
-                ].map(mode => (
-                  <button key={mode.id} onClick={() => setInputMode(mode.id as any)} className="flex flex-col items-center gap-2 group">
-                    <div className={cn("size-12 rounded-full flex items-center justify-center shadow-md transition-all active:scale-95", inputMode === mode.id ? "bg-[#eab308] text-black scale-105" : "bg-white text-slate-400")}>
-                      <mode.icon size={20} />
-                    </div>
-                    <span className={cn("text-xs font-black tracking-widest", inputMode === mode.id ? "text-[#eab308]" : "text-slate-300")}>{mode.label}</span>
-                  </button>
-                ))}
-              </div>
-
-              {/* 图片/视频预览 */}
-              {(selectedImage || selectedVideo) && (
-                <div className="relative rounded-2xl overflow-hidden border-2 border-white shadow-lg">
-                  {selectedImage && <img src={selectedImage} alt="" className="w-full h-auto" />}
-                  {selectedVideo && <video src={selectedVideo} controls className="w-full h-auto" />}
-                  <button onClick={() => { setSelectedImage(null); setSelectedVideo(null); }} className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full"><X size={16} /></button>
-                </div>
-              )}
-
-              {/* 文字输入区 */}
-              <div className="bg-white rounded-2xl p-5 shadow-lg border border-slate-50 relative">
-                <textarea
-                  className="w-full min-h-[100px] text-lg text-slate-700 bg-transparent border-none focus:ring-0 resize-none font-serif leading-relaxed placeholder:text-slate-200"
-                  placeholder={inputMode === "voice" ? "录音中，文字将自动显示..." : "写下您的祝福..."}
-                  value={transcription}
-                  onChange={e => setTranscription(e.target.value)}
-                />
-                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-50">
-                  {isRecording && (
-                    <span className="text-sm font-black font-mono text-red-500 bg-red-50 px-3 py-1 rounded-full">
-                      {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
-                    </span>
-                  )}
-                  <button
-                    onClick={toggleRecording}
-                    className={cn("size-12 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-90", isRecording ? "bg-red-500 text-white animate-pulse" : "bg-[#eab308]/10 text-[#eab308] hover:bg-[#eab308]/20")}
-                  >
-                    {isRecording ? <div className="size-4 bg-white rounded-sm" /> : <Mic size={20} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* 发送按钮 */}
-              <button
-                onClick={handleSend}
-                className="w-full py-4 bg-[#eab308] text-black rounded-2xl text-lg font-black shadow-lg shadow-[#eab308]/20 flex items-center justify-center gap-2 transition-all active:scale-95"
-              >
-                <Send size={18} /> 送出祝福
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {!showInput && (
-          <motion.button
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            onClick={() => setShowInput(true)}
-            className="w-full py-3 border-2 border-dashed border-[#eab308]/40 text-[#eab308] rounded-2xl text-sm font-black flex items-center justify-center gap-2 hover:bg-[#eab308]/5 transition-all mt-2"
-          >
-            <Plus size={16} strokeWidth={3} /> 再写一条留言
-          </motion.button>
-        )}
-
-        {/* 留言墙折叠展开与AI生成 */}
-        <div className="flex items-center justify-between py-2 px-1 border-t border-slate-100 mt-4">
-          <button
-            onClick={() => setShowWall(v => !v)}
-            className="flex items-center gap-1 text-slate-500"
-          >
-            <span className="text-sm font-black">留言墙 ({messages.length})</span>
-            {showWall ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
-
-          {/* NOTE: AI 生成祝福按钮 —— 始终可见，无留言时点击给出提示 */}
-          <button
-            onClick={generateAISummary}
-            disabled={isGeneratingAI}
-            className="px-4 py-2 bg-[#eab308] text-black rounded-full text-xs font-black shadow-md flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 disabled:opacity-70"
-          >
-            <Sparkles size={13} className={isGeneratingAI ? "animate-spin" : ""} />
-            {isGeneratingAI ? "生成中..." : "✨ 用AI生成祝福"}
-          </button>
-        </div>
-
-        {/* 留言墙为空时的小提示 */}
-        {messages.length === 0 && (
-          <div className="text-center py-6 px-4 bg-amber-50/50 rounded-2xl border border-dashed border-amber-200 mt-2">
-            <p className="text-sm font-black text-slate-500 mb-1">还没有人留言</p>
-            <p className="text-xs text-slate-400">送出祝福后，点击「用AI生成祝福」生成总结</p>
-          </div>
-        )}
-
-        {/* AI 生成结果展示 */}
-        <AnimatePresence>
-          {aiSummary && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.97 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-amber-50/60 border border-[#eab308]/30 rounded-2xl p-5 mt-3 space-y-3"
-            >
-              <p className="text-sm font-black text-[#eab308] flex items-center gap-1"><Sparkles size={13} /> AI 祝福总结</p>
-              <p className="text-base text-slate-600 font-serif italic leading-relaxed">"{aiSummary}"</p>
-              <div className="flex justify-end mt-2">
-                <button
-                  onClick={handleShareSummary}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-[#eab308]/20 text-amber-600 rounded-full text-xs font-black shadow-sm active:scale-95 transition-transform"
-                >
-                  <Share2 size={12} /> 复制分享
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {messages.length > 0 && (
-          <div>
-            <AnimatePresence>
-              {showWall && (() => {
-                const MAX_VISIBLE = 3;
-                const hasMore = messages.length > MAX_VISIBLE;
-                return (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden"
-                  >
-                    {/* 留言墙顶部关闭按钮 */}
-                    <div className="flex items-center justify-between pt-2 pb-3">
-                      <span className="text-sm font-black text-slate-500">共 {messages.length} 条留言</span>
-                      <button
-                        onClick={onClose}
-                        className="px-4 py-2 bg-slate-100 text-slate-500 rounded-full text-xs font-black flex items-center gap-1 hover:bg-slate-200 transition-colors"
-                      >
-                        <X size={12} /> 关闭祝福面板
-                      </button>
-                    </div>
-
-                    <WallMessages
-                      messages={messages}
-                      currentUser={currentUser}
-                      getMsgTypeInfo={getMsgTypeInfo}
-                      handleLike={handleLike}
-                      onDeleteMessage={handleDeleteMessage}
-                      maxVisible={MAX_VISIBLE}
-                    />
-                  </motion.div>
-                );
-              })()}
-            </AnimatePresence>
-          </div>
-        )}
-      </div>
-    </motion.div>
-  );
+const getZodiac = (year: number) => {
+  const zodiacs = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"];
+  return zodiacs[(year - 4) % 12];
 };
 
-/**
- * 留言墙子组件 —— 默认显示前 N 条，超出时提供展开/收起按钮
- * 支持真实音频播放和作者专属删除
- */
-const WallMessages: React.FC<{
-  messages: Message[];
-  currentUser: any;
-  getMsgTypeInfo: (type: MessageType) => { label: string; color: string };
-  handleLike: (id: number) => void;
-  onDeleteMessage?: (id: number) => void;
-  maxVisible: number;
-}> = ({ messages, currentUser, getMsgTypeInfo, handleLike, onDeleteMessage, maxVisible }) => {
-  const [expanded, setExpanded] = useState(false);
-  const [playingId, setPlayingId] = useState<number | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  const visibleMessages = expanded ? messages : messages.slice(0, maxVisible);
-  const hasMore = messages.length > maxVisible;
-
-  /** 播放/暂停语音留言 */
-  const toggleAudio = (msgId: number, url?: string) => {
-    if (!url) return;
-    if (playingId === msgId) {
-      audioRef.current?.pause();
-      setPlayingId(null);
-      return;
-    }
-    if (audioRef.current) audioRef.current.pause();
-    const audio = new Audio(url);
-    audio.onended = () => setPlayingId(null);
-    audio.play();
-    audioRef.current = audio;
-    setPlayingId(msgId);
-  };
+const Header: React.FC<{
+  userAvatar: string;
+  onHomeClick: () => void;
+  onArchiveClick: () => void;
+}> = ({ userAvatar, onHomeClick, onArchiveClick }) => {
+  const navigate = useNavigate();
 
   return (
-    <div className="space-y-5 pt-2">
-      {visibleMessages.map((msg, i) => {
-        const typeInfo = getMsgTypeInfo(msg.type);
-        const isAuthor = currentUser && msg.authorName === currentUser.name;
-        const isPlaying = playingId === msg.id;
-
-        return (
-          <div key={msg.id} className="flex gap-4">
-            <div className="flex flex-col items-center gap-1.5 shrink-0">
-              <div className="size-12 rounded-full overflow-hidden border-2 border-white shadow-md">
-                <img src={msg.authorAvatar || `https://picsum.photos/seed/${msg.authorName || i}/100/100`} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-              </div>
-              <span className="text-[9px] font-black text-[#eab308] bg-[#eab308]/10 px-2 py-0.5 rounded-full whitespace-nowrap">
-                {isAuthor ? "我" : msg.authorRole}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-base font-black text-slate-800">{msg.authorName}</span>
-                <span className={cn("px-2 py-0.5 rounded-full text-[9px] font-black uppercase", typeInfo.color)}>{typeInfo.label}</span>
-                <span className="text-[10px] text-slate-300 ml-auto font-bold">{getRelativeTime(msg.createdAt)}</span>
-              </div>
-
-              {msg.type === MessageType.TEXT && (
-                <p className="text-base text-slate-600 font-serif italic bg-white p-4 rounded-2xl shadow-sm border border-slate-50">"{msg.content}"</p>
-              )}
-              {msg.type === MessageType.AUDIO && (
-                <div className="space-y-2">
-                  <div className="bg-[#eab308]/5 p-3 rounded-xl flex items-center gap-3">
-                    <button
-                      onClick={() => toggleAudio(msg.id, msg.mediaUrl)}
-                      className={cn("size-9 rounded-full flex items-center justify-center shadow-md shrink-0 transition-colors", isPlaying ? "bg-red-500" : "bg-[#eab308]")}
-                    >
-                      {isPlaying ? <div className="size-3 bg-white rounded-sm" /> : <Play size={16} fill="currentColor" />}
-                    </button>
-                    <div className="flex-1 h-1.5 bg-[#eab308]/20 rounded-full">
-                      <div className={cn("h-full bg-[#eab308] rounded-full transition-all", isPlaying ? "w-2/3 animate-pulse" : "w-0")} />
-                    </div>
-                    <span className="text-xs font-black text-[#eab308]">{msg.duration || 0}"</span>
-                  </div>
-                  {msg.content && <p className="text-sm text-slate-400 italic pl-1">"{msg.content}"</p>}
-                </div>
-              )}
-              {msg.type === MessageType.IMAGE && msg.mediaUrl && (
-                <img src={msg.mediaUrl} alt="" className="rounded-xl shadow-md w-full h-auto border border-white" />
-              )}
-              {msg.type === MessageType.VIDEO && msg.mediaUrl && (
-                <div className="aspect-video bg-black rounded-xl relative flex items-center justify-center overflow-hidden">
-                  <video src={msg.mediaUrl} className="w-full h-full object-cover opacity-60" />
-                  <Play size={32} className="text-white absolute bg-white/20 p-2.5 rounded-full backdrop-blur-sm" />
-                </div>
-              )}
-
-              <div className="flex items-center justify-between mt-3">
-                {/* NOTE: 只有作者本人才能删除自己的留言 */}
-                {isAuthor && onDeleteMessage ? (
-                  <button
-                    onClick={() => { if (window.confirm("确定删除这条留言吗？")) onDeleteMessage(msg.id); }}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-black text-slate-300 hover:text-red-400 hover:bg-red-50 transition-all"
-                  >
-                    <Trash2 size={12} /> 删除
-                  </button>
-                ) : <div />}
-                <button onClick={() => handleLike(msg.id)} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black transition-all active:scale-90", msg.isLiked ? "bg-red-50 text-red-500" : "bg-slate-50 text-slate-300 hover:bg-slate-100")}>
-                  <Heart size={12} fill={msg.isLiked ? "currentColor" : "none"} strokeWidth={3} />
-                  {msg.likes || 0}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-
-      {/* 展开/收起按钮 */}
-      {hasMore && (
+    <header className="sticky top-0 z-50 glass-morphism px-6 py-4 flex items-center justify-between shadow-sm shrink-0">
+      <div className="flex items-center gap-4">
         <button
-          onClick={() => setExpanded(!expanded)}
-          className="w-full py-3 text-sm font-black text-[#eab308] bg-[#eab308]/5 rounded-2xl hover:bg-[#eab308]/10 transition-colors flex items-center justify-center gap-1"
+          onClick={onHomeClick}
+          className="bg-[#eab308] p-2.5 rounded-2xl text-black shadow-lg shadow-[#eab308]/20 active:scale-90 transition-all"
         >
-          {expanded ? (
-            <><ChevronUp size={16} /> 收起留言</>
-          ) : (
-            <><ChevronDown size={16} /> 查看全部 {messages.length} 条留言</>
-          )}
+          <Home size={22} fill="currentColor" />
         </button>
-      )}
-    </div>
+        <div className="flex flex-col">
+          <h1 className="text-xl font-black tracking-tight text-slate-800">家族广场</h1>
+          <div className="flex items-center gap-1.5">
+            <div className="size-1.5 bg-green-500 rounded-full animate-pulse" />
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Family Hub</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigate("/calendar")}
+          className="size-11 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308]/20 transition-all active:scale-90 shadow-sm"
+        >
+          <CalendarIcon size={20} />
+        </button>
+        <button
+          onClick={onArchiveClick}
+          className="flex items-center gap-2 pl-2 pr-4 py-2 bg-slate-900 text-white rounded-2xl shadow-xl shadow-slate-200 active:scale-95 transition-all group"
+        >
+          <div className="size-8 rounded-xl bg-white/10 flex items-center justify-center group-hover:bg-[#eab308] transition-colors">
+            <FolderOpen size={16} />
+          </div>
+          <span className="text-sm font-black tracking-wide">家族档案</span>
+        </button>
+      </div>
+    </header>
   );
 };
 
@@ -477,7 +69,8 @@ export const FamilySquare: React.FC = () => {
   const [events, setEvents] = useState<FamilyEvent[]>([]);
   const [userAvatar, setUserAvatar] = useState(() => {
     const saved = localStorage.getItem("currentUser");
-    return saved ? JSON.parse(saved).avatar : "https://lh3.googleusercontent.com/aida-public/AB6AXuCwusjFRipiiPuQPnlu8lyXqpESaqMYI6iBbwhGJSByETLCJin8fxLFhx7yFrgNeTWxNRtJhFvUv-QBWwbIDe9NLVWYMMK0ykgD39DQ6Im6Fk0zsKWn7prx2EIM__QjICrYLFWoCn6sYCrGgJ0SCCKFDFbrFjQu3IQKzsQ-dTR4tL8GPT25YU3k5ptELq8GvkLOFJQxqZx9IGQa0VEF8olYdHwYHJxmLi4809HoLMucZNjXNwQFYofjtn4dvk6wJiX6mgddchqj_Y";
+    const parsed = saved ? JSON.parse(saved) : null;
+    return (parsed && parsed.avatar && parsed.avatar.length > 20) ? parsed.avatar : DEFAULT_AVATAR;
   });
   const [currentUser, setCurrentUser] = useState<any>(() => {
     const saved = localStorage.getItem("currentUser");
@@ -497,6 +90,7 @@ export const FamilySquare: React.FC = () => {
   const [invitingMember, setInvitingMember] = useState<FamilyMember | null>(null);
   const [eventsSummary, setEventsSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [sentEventIds, setSentEventIds] = useState<number[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -506,10 +100,10 @@ export const FamilySquare: React.FC = () => {
   }, [activities.length]);
 
   useEffect(() => {
-    const loadUser = () => {
-      const savedUser = localStorage.getItem("currentUser");
-      const parsed = savedUser ? JSON.parse(savedUser) : null;
+    const savedUser = localStorage.getItem("currentUser");
+    const parsed = savedUser ? JSON.parse(savedUser) : null;
 
+    const loadUser = () => {
       if (parsed) {
         setCurrentUser(parsed);
         if (parsed.avatar) setUserAvatar(parsed.avatar);
@@ -530,10 +124,20 @@ export const FamilySquare: React.FC = () => {
         const familyId = parseInt(String(parsed.familyId));
         fetch(`/api/family-members?familyId=${familyId}`).then(res => res.json()).then(data => {
           if (Array.isArray(data)) setMembers(data);
-        }).catch(console.error);
-        fetch(`/api/events?familyId=${familyId}`).then(res => res.json()).then(data => {
-          if (Array.isArray(data)) setEvents(data);
-        }).catch(console.error);
+          fetch(`/api/events?familyId=${familyId}`).then(res => res.json()).then(data => {
+            if (Array.isArray(data)) setEvents(data);
+          }).catch(console.error);
+
+          // Fetch messages to see which events I've addressed
+          fetch(`/api/messages`).then(res => res.json()).then(data => {
+            if (Array.isArray(data)) {
+              const mySentIds = data
+                .filter((m: any) => m.authorName === parsed.name && m.eventId)
+                .map((m: any) => m.eventId);
+              setSentEventIds(mySentIds);
+            }
+          }).catch(console.error);
+        });
       }
     };
     loadUser();
@@ -544,9 +148,6 @@ export const FamilySquare: React.FC = () => {
 
     // 核心修复：开启 Supabase Realtime 订阅，监听整个家族的成员变动
     let channel: any = null;
-    const savedUser = localStorage.getItem("currentUser");
-    const parsed = savedUser ? JSON.parse(savedUser) : null;
-
     if (parsed && parsed.familyId && !isDemoMode(parsed)) {
       channel = supabase
         .channel(`family-${parsed.familyId}-sync`)
@@ -579,9 +180,13 @@ export const FamilySquare: React.FC = () => {
         .subscribe();
     }
 
+    const handleSent = (e: any) => setSentEventIds(prev => [...prev, e.detail.eventId]);
+    window.addEventListener('blessing-sent' as any, handleSent);
+
     return () => {
       window.removeEventListener('storage', h);
       window.removeEventListener('sync-user', h);
+      window.removeEventListener('blessing-sent' as any, handleSent);
       if (channel) supabase.removeChannel(channel);
     };
   }, []);
@@ -679,7 +284,14 @@ export const FamilySquare: React.FC = () => {
   return (
     <>
       <header className="sticky top-0 z-50 glass-morphism px-6 py-4 flex items-center shadow-sm shrink-0 transition-colors">
-        <button onClick={() => navigate("/")} className="p-2 -ml-2 rounded-full hover:bg-black/5 text-[#eab308] transition-colors">
+        <button
+          onClick={() => {
+            const sc = document.querySelector('.scroll-container');
+            if (sc) sc.scrollTo({ top: 0, behavior: "smooth" });
+            else window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          className="p-2 -ml-2 rounded-full hover:bg-black/5 text-[#eab308] transition-colors"
+        >
           <Home size={24} />
         </button>
         <h1 className="text-xl font-bold font-display flex-1 text-center text-slate-800 transition-all">家族广场</h1>
@@ -854,7 +466,7 @@ export const FamilySquare: React.FC = () => {
 
                           {/* Row 4: Action Buttons */}
                           <div className="flex gap-3 mt-auto pt-3 border-t border-slate-50">
-                            {!isOpen && (
+                            {(!isOpen && !sentEventIds.includes(event.id)) && (
                               <button
                                 onClick={() => setOpenBlessingEventId(event.id)}
                                 className="flex-1 py-4 rounded-2xl text-xl font-black flex items-center justify-center transition-all active:scale-95 gap-2 bg-[#eab308]/5 text-[#eab308]"
@@ -863,12 +475,21 @@ export const FamilySquare: React.FC = () => {
                                 送出祝福
                               </button>
                             )}
-                            {!isOpen && (
+                            {(!isOpen && !sentEventIds.includes(event.id)) && (
                               <button
                                 onClick={() => window.location.href = 'tel:10086'}
                                 className="size-16 bg-[#eab308]/5 text-[#eab308] rounded-2xl flex items-center justify-center shadow-sm transition-transform active:scale-95"
                               >
                                 <Phone size={24} />
+                              </button>
+                            )}
+                            {(!isOpen && sentEventIds.includes(event.id)) && (
+                              <button
+                                onClick={() => setOpenBlessingEventId(event.id)}
+                                className="flex-1 py-4 rounded-2xl text-xl font-black flex items-center justify-center transition-all active:scale-95 gap-2 bg-[#eab308]/5 text-[#eab308]"
+                              >
+                                <MessageSquare size={24} />
+                                留言墙
                               </button>
                             )}
                           </div>
@@ -882,6 +503,7 @@ export const FamilySquare: React.FC = () => {
                             event={event}
                             currentUser={currentUser}
                             onClose={() => setOpenBlessingEventId(null)}
+                            hasSentBlessing={sentEventIds.includes(event.id)}
                           />
                         )}
                       </AnimatePresence>

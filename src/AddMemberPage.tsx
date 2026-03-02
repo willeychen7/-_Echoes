@@ -6,10 +6,12 @@ import { motion, AnimatePresence } from "motion/react";
 import { deduceRole, RELATIONSHIP_OPTIONS } from "./lib/relationships";
 import { ImageCropper } from "./components/ImageCropper";
 import { isDemoMode } from "./demo-data";
+import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
 
 export const AddMemberPage: React.FC = () => {
   const navigate = useNavigate();
   const [name, setName] = useState("");
+  const [birthDate, setBirthDate] = useState("");
   const [relationship, setRelationship] = useState("");
   const [customRelationship, setCustomRelationship] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
@@ -20,7 +22,7 @@ export const AddMemberPage: React.FC = () => {
   const [newMemberId, setNewMemberId] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const scrollContainer = document.querySelector('.scroll-container');
     if (scrollContainer) {
       scrollContainer.scrollTo(0, 0);
@@ -34,14 +36,7 @@ export const AddMemberPage: React.FC = () => {
     return [...shuffled.slice(0, 5).map(r => r.label), "其他"];
   }, []);
 
-  const defaultAvatars = [
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka",
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=Bob",
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=Molly",
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=John",
-    "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah"
-  ];
+  const defaultAvatars = SYSTEM_AVATARS;
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -74,7 +69,7 @@ export const AddMemberPage: React.FC = () => {
           relationship: finalRelationship,
           avatarUrl: avatar || `https://picsum.photos/seed/${name}/200/200`,
           bio: "",
-          birthDate: "",
+          birthDate,
           familyId,
           createdByMemberId,
           standardRole: deducedRole
@@ -92,7 +87,7 @@ export const AddMemberPage: React.FC = () => {
           relationship: finalRelationship,
           avatarUrl: avatar || `https://picsum.photos/seed/${name}/200/200`,
           bio: "",
-          birthDate: "",
+          birthDate,
           isRegistered: false,
           standardRole: deducedRole,
           createdByMemberId: currentUser?.memberId
@@ -114,7 +109,8 @@ export const AddMemberPage: React.FC = () => {
 
   const copyCode = () => {
     if (inviteCode) {
-      navigator.clipboard.writeText(inviteCode);
+      const inviteLink = `${window.location.origin}/register?code=${inviteCode}`;
+      navigator.clipboard.writeText(`邀请您加入岁月留声家族！直接点击链接注册：${inviteLink} \n或者手动输入邀请码: ${inviteCode}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -142,8 +138,8 @@ export const AddMemberPage: React.FC = () => {
             <div className="text-4xl font-mono font-bold text-[#eab308] tracking-wider break-all">
               {inviteCode}
             </div>
-            <p className="text-[10px] text-slate-400 mt-2">
-              (可选) 如果家人也在使用该小程序，您可以将此码发送给他们，注册后即可产生关联。否则可以忽略。
+            <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+              (可选) 如果家人也在使用该小程序，您可以点击下方「复制邀请链接」发送给他们。他们点开链接即可直接注册并与您建立家族关联。
             </p>
           </div>
 
@@ -158,9 +154,9 @@ export const AddMemberPage: React.FC = () => {
             <div className="flex gap-3">
               <button
                 onClick={copyCode}
-                className="flex-1 py-3 text-[#eab308] font-bold bg-[#eab308]/10 rounded-xl hover:bg-[#eab308]/20 flex items-center justify-center"
+                className="flex-1 py-3 text-[#eab308] font-bold bg-[#eab308]/10 rounded-xl hover:bg-[#eab308]/20 flex items-center justify-center transition-all active:scale-95"
               >
-                {copied ? "已复制" : "复制邀请码"}
+                {copied ? "已复制链接" : "复制邀请链接"}
                 {!copied && <Copy size={16} className="ml-1" />}
               </button>
               <button
@@ -235,6 +231,18 @@ export const AddMemberPage: React.FC = () => {
               placeholder="请输入家人的姓名"
               value={name}
               onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-xl font-black px-1 flex items-center">
+              出生年月 <span className="text-sm font-normal text-slate-400 ml-2 tracking-widest">(选填)</span>
+            </label>
+            <input
+              type="date"
+              className="w-full h-16 px-6 rounded-2xl border-none bg-white shadow-md text-xl font-bold text-slate-700 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
             />
           </div>
 

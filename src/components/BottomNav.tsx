@@ -1,10 +1,11 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Home, BookOpen, Calendar, User } from "lucide-react";
 import { cn } from "../lib/utils";
 import { motion } from "motion/react";
 
 export const BottomNav: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const navItems = [
     { to: "/square", label: "广场", icon: Home },
     { to: "/square#archive", label: "档案", icon: BookOpen },
@@ -29,40 +30,47 @@ export const BottomNav: React.FC = () => {
   return (
     <div className="w-full shrink-0 z-50 glass-morphism border-t border-slate-100 bg-white/95 pb-1">
       <nav className="flex justify-around items-center px-2 py-3">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            onClick={() => handleNavClick(item.to)}
-            className={({ isActive }) =>
-              cn(
-                "flex flex-col items-center gap-1 transition-all duration-300 relative px-4 py-1 rounded-xl",
-                isActive ? "text-[#eab308]" : "text-slate-400"
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <div className={cn(
-                  "transition-all duration-300",
-                  isActive ? "scale-110" : "scale-100"
-                )}>
-                  <item.icon size={24} strokeWidth={isActive ? 2.5 : 2} />
-                </div>
-                <span className={cn(
-                  "text-[10px] font-bold tracking-tight transition-opacity",
-                  isActive ? "opacity-100" : "opacity-60"
-                )}>{item.label}</span>
-                {isActive && (
-                  <motion.div
-                    layoutId="activeTabBadge"
-                    className="absolute -top-1 right-3 size-1.5 rounded-full bg-[#eab308] shadow-[0_0_8px_rgba(234,179,8,0.6)]"
-                  />
-                )}
-              </>
-            )}
-          </NavLink>
-        ))}
+        {navItems.map((item) => {
+          // 自定义激活状态逻辑，用于区分 /square 和 /square#archive
+          const isItemActive = item.to.includes("#")
+            ? location.pathname === item.to.split("#")[0] && location.hash === "#" + item.to.split("#")[1]
+            : location.pathname === item.to && location.hash === "";
+
+          return (
+            <button
+              key={item.to}
+              onClick={() => {
+                const [path, hash] = item.to.split("#");
+                if (location.pathname === path && location.hash === (hash ? "#" + hash : "")) {
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                } else {
+                  navigate(item.to);
+                }
+              }}
+              className={cn(
+                "flex flex-col items-center gap-1 transition-all duration-300 relative px-4 py-1 rounded-xl outline-none",
+                isItemActive ? "text-[#eab308]" : "text-slate-400"
+              )}
+            >
+              <div className={cn(
+                "transition-all duration-300",
+                isItemActive ? "scale-110" : "scale-100"
+              )}>
+                <item.icon size={24} strokeWidth={isItemActive ? 2.5 : 2} />
+              </div>
+              <span className={cn(
+                "text-[10px] font-bold tracking-tight transition-opacity",
+                isItemActive ? "opacity-100" : "opacity-60"
+              )}>{item.label}</span>
+              {isItemActive && (
+                <motion.div
+                  layoutId="activeTabBadge"
+                  className="absolute -top-1 right-3 size-1.5 rounded-full bg-[#eab308] shadow-[0_0_8px_rgba(234,179,8,0.6)]"
+                />
+              )}
+            </button>
+          );
+        })}
       </nav>
     </div>
   );

@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import { Resend } from "resend";
+import { GoogleGenAI } from "@google/genai";
 
 // NOTE: 密码哈希的 salt 轮数，12 是生产级别的安全默认值
 const BCRYPT_SALT_ROUNDS = 12;
@@ -38,15 +39,52 @@ export async function createApp() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
-  app.use(express.json());
+  // Express middleware
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
   // Logging middleware
   app.use((req, res, next) => {
-    console.log(`${req.method} ${req.url}`);
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    if (req.body && req.url.includes("register")) {
+      console.log(`[AUTH] Payload detected, size: ${JSON.stringify(req.body).length} characters`);
+    }
+    next();
+  });
+
+  // Error handling middleware for parsing errors
+  app.use((err: any, req: any, res: any, next: any) => {
+    if (err instanceof SyntaxError && 'status' in err && (err as any).status === 400 && 'body' in err) {
+      console.error("[EXPRESS] JSON Syntax Error:", err.message);
+      return res.status(400).json({ error: "Invalid JSON payload" });
+    }
+    if (err.status === 413) {
+      console.error("[EXPRESS] Payload Too Large");
+      return res.status(413).json({ error: "Payload too large. Please use a smaller image." });
+    }
     next();
   });
 
   // API Routes
+  app.post("/api/generate-blessing-summary", async (req, res) => {
+    try {
+      const { messages, eventTitle } = req.body;
+      const apiKey = process.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "Missing API Key" });
+      const ai = new GoogleGenAI({ apiKey });
+      const messageContext = (messages || []).map((m: any) => `${m.authorName} (${m.authorRole}): ${m.content}`).join("\n");
+      const prompt = `你是家族记忆整理师。请根据以下家人在${eventTitle}时的祝福：\n${messageContext}\n\n写一段温馨的家族总结。要求语言温暖、细腻。字数300字左右。`;
+      const result = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: prompt }] }]
+      });
+      res.json({ text: result.text });
+    } catch (err: any) {
+      console.error("[GEMINI] Error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/family-members", async (req, res) => {
     const { familyId } = req.query;
     if (!familyId) {
@@ -92,6 +130,15 @@ export async function createApp() {
 
   app.put("/api/family-members/:id", async (req, res) => {
     const { name, relationship, avatarUrl, bio, birthDate } = req.body;
+
+    // 1. 先获取旧的名称，以便同步之前的留言
+    const { data: oldMember } = await supabase
+      .from("family_members")
+      .select("name")
+      .eq("id", req.params.id)
+      .single();
+
+    // 2. 更新成员表
     const { error } = await supabase
       .from("family_members")
       .update({
@@ -104,56 +151,119 @@ export async function createApp() {
       .eq("id", req.params.id);
 
     if (error) return res.status(500).json({ error: error.message });
+
+    // 3. 核心同步逻辑：更新关联的 users 表
+    await supabase.from("users").update({ name, relationship }).eq("member_id", req.params.id);
+
+    // 4. 同步更新该用户失发过的所有留言（通过 family_member_id 精确匹配，而非姓名）
+    // NOTE: 使用 member_id 匹配能确保改名后头像仍能正确同步
+    if (avatarUrl || name) {
+      const updateFields: any = {};
+      if (name) updateFields.author_name = name;
+      if (avatarUrl) updateFields.author_avatar = avatarUrl;
+      if (relationship) updateFields.author_role = relationship;
+
+      await supabase
+        .from("messages")
+        .update(updateFields)
+        .eq("family_member_id", req.params.id);
+    }
+
     res.json({ success: true });
   });
 
   app.delete("/api/family-members/:id", async (req, res) => {
-    // Delete messages first (Cascade is preferred in DB, but let's be explicit if needed)
-    const { error: messageDeleteError } = await supabase.from("messages").delete().eq("family_member_id", req.params.id);
-    if (messageDeleteError) console.error("Error deleting messages:", messageDeleteError.message); // Log but don't block if messages don't exist
+    try {
+      // 1. 获取目标成员状态
+      const { data: member, error: fetchError } = await supabase
+        .from("family_members")
+        .select("is_registered")
+        .eq("id", req.params.id)
+        .maybeSingle();
 
-    // Delete events related to this family member
-    const { error: eventDeleteError } = await supabase.from("events").delete().eq("member_id", req.params.id);
-    if (eventDeleteError) console.error("Error deleting events:", eventDeleteError.message);
+      if (fetchError || !member) {
+        return res.status(404).json({ error: "档案未找到" });
+      }
 
-    const { error } = await supabase.from("family_members").delete().eq("id", req.params.id);
+      // 2. 核心逻辑：如果档案已注册为真实用户，禁止他人删除
+      if (member.is_registered) {
+        return res.status(403).json({ error: "该成员已正式注册，您无权删除其实名档案" });
+      }
 
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ success: true });
+      // 3. 执行级联删除逻辑
+      // 删除关联留言
+      const { error: messageDeleteError } = await supabase.from("messages").delete().eq("family_member_id", req.params.id);
+      if (messageDeleteError) console.error("Error deleting messages:", messageDeleteError.message);
+
+      // 删除关联大事记
+      const { error: eventDeleteError } = await supabase.from("events").delete().eq("member_id", req.params.id);
+      if (eventDeleteError) console.error("Error deleting events:", eventDeleteError.message);
+
+      // 删除创建者记录
+      await supabase.from("archive_memory_creators").delete().eq("member_id", req.params.id);
+
+      // 最后删除成员本身
+      const { error } = await supabase.from("family_members").delete().eq("id", req.params.id);
+
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[MEMBER] DELETE error:", err.message);
+      res.status(500).json({ error: "删除失败，系统异常" });
+    }
   });
 
   app.post("/api/family-members", async (req, res) => {
-    const { name, relationship, avatarUrl, bio, birthDate, standardRole } = req.body;
-    const inviteCode = `FA-${Math.floor(1000 + Math.random() * 9000)}`;
+    try {
+      const { name, relationship, avatarUrl, bio, birthDate, standardRole, familyId, createdByMemberId } = req.body;
+      const inviteCode = `FA-${Math.floor(1000 + Math.random() * 9000)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
-    // Check if member already exists
-    const { data: existing } = await supabase
-      .from("family_members")
-      .select("id")
-      .eq("name", name)
-      .single();
+      const { data: existing } = await supabase
+        .from("family_members")
+        .select("id")
+        .eq("name", name)
+        .eq("family_id", familyId)
+        .maybeSingle();
 
-    if (existing) {
-      return res.json({ id: existing.id, linked: true });
+      if (existing) {
+        return res.json({ id: existing.id, linked: true });
+      }
+
+      const { data, error } = await supabase
+        .from("family_members")
+        .insert({
+          family_id: familyId,
+          name,
+          relationship,
+          avatar_url: avatarUrl,
+          bio,
+          birth_date: birthDate || null,
+          invite_code: inviteCode,
+          is_registered: false,
+          standard_role: standardRole || ""
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // 记录创建者关系
+      if (createdByMemberId) {
+        try {
+          await supabase.from("archive_memory_creators").insert({
+            member_id: data.id,
+            creator_member_id: createdByMemberId
+          });
+        } catch (subErr) {
+          console.warn("[MEMBER] Warning: Failed to record creator linkage:", subErr);
+        }
+      }
+
+      res.json({ id: data.id, linked: false, inviteCode });
+    } catch (err: any) {
+      console.error("[MEMBER] POST error:", err.message);
+      res.status(500).json({ error: "创建档案失败，请稍后重试" });
     }
-
-    const { data, error } = await supabase
-      .from("family_members")
-      .insert({
-        name,
-        relationship,
-        avatar_url: avatarUrl,
-        bio,
-        birth_date: birthDate,
-        invite_code: inviteCode,
-        is_registered: false,
-        standard_role: standardRole || ""
-      })
-      .select()
-      .single();
-
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ id: data.id, linked: false, inviteCode });
   });
 
   // NOTE: 验证邀请码 - 返回邀请人信息，供前端显示关系选择界面
@@ -190,6 +300,32 @@ export async function createApp() {
       inviterId: inviter.id,
       targetName: target.name,
       targetId: target.id
+    });
+  });
+
+  // --- NEW: Archive Creator Info ---
+  app.get("/api/archive-creators/:memberId", async (req, res) => {
+    const { memberId } = req.params;
+    const { data, error } = await supabase
+      .from("archive_memory_creators")
+      .select(`
+        id,
+        creator_member_id,
+        family_members!archive_memory_creators_creator_member_id_fkey (
+          name
+        )
+      `)
+      .eq("member_id", Number(memberId))
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") return res.json({ creatorName: "系统" });
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json({
+      creatorId: data.creator_member_id,
+      creatorName: (data.family_members as any)?.name || "系统"
     });
   });
 
@@ -478,6 +614,7 @@ export async function createApp() {
 
   // Generic registration (creating new family)
   app.post("/api/register-new", async (req, res) => {
+    console.log("[REGISTER-NEW] Start registration for:", req.body.phone);
     try {
       const { name, phone, password, avatar } = req.body;
       if (!name || !phone || !password) {
@@ -560,17 +697,37 @@ export async function createApp() {
         return res.status(401).json({ error: "关联档案丢失，请联系管理员" });
       }
 
-      // 4. Return user info without password
+      // 4. 获取用户统计数据
+      const { count: memoriesCount } = await supabase.from("messages").select("*", { count: 'exact', head: true }).eq("family_member_id", member.id);
+
+      const { data: memberMessages } = await supabase.from("messages").select("id").eq("family_member_id", member.id);
+      const msgIds = memberMessages?.map(m => m.id) || [];
+      const { count: likesCount } = await supabase.from("likes").select("*", { count: 'exact', head: true }).in("message_id", msgIds);
+
+      const days = Math.max(1, Math.floor((Date.now() - new Date(user.created_at || Date.now()).getTime()) / 86400000));
+
+      // 5. Return user info without password
+      console.log(`[LOGIN] User ${user.phone_or_email} logged in successfully. Avatar present: ${!!member.avatar_url}`);
+
       const safeUser = {
-        name: user.name,
-        relationship: user.relationship,
+        name: member.name || user.name,
+        relationship: member.relationship || user.relationship,
         phone: user.phone_or_email,
         memberId: member.id,
         familyId: member.family_id,
-        avatar: member.avatar_url
+        avatar: member.avatar_url || "",
+        bio: member.bio || "",
+        birthday: member.birth_date || "",
+        gender: member.gender || "男",
+        joinDate: user.created_at || new Date().toISOString(),
+        stats: {
+          memories: memoriesCount || 0,
+          likes: likesCount || 0,
+          days
+        }
       };
 
-      res.json({ success: true, user: safeUser });
+      res.status(200).json({ user: safeUser });
     } catch (err: any) {
       console.error("[LOGIN] Error:", err.message);
       res.status(500).json({ error: "登录系统异常" });
@@ -597,6 +754,39 @@ export async function createApp() {
       memberId: e.member_id,
       customMemberName: e.custom_member_name
     }));
+
+    try {
+      const { data: members } = await supabase.from("family_members").select("*").eq("family_id", familyId);
+      if (members) {
+        const birthdayEvents = members.filter(m => m.birth_date).map(m => {
+          const d = new Date(m.birth_date);
+          const mm = (d.getMonth() + 1).toString().padStart(2, '0');
+          const dd = d.getDate().toString().padStart(2, '0');
+          // virtual ID starting from 100000 to avoid collision
+          return {
+            id: 100000 + m.id,
+            title: `${m.name}的生日`,
+            date: `${new Date().getFullYear()}-${mm}-${dd}`,
+            type: 'person',
+            isRecurring: true,
+            memberId: m.id,
+            customMemberName: m.name,
+            location: '系统自动生成',
+            notes: `大家快来为${m.name}送上生日祝福吧！`,
+            created_at: new Date().toISOString()
+          };
+        });
+
+        birthdayEvents.forEach(virtualEvent => {
+          if (!events.some(e => e.title === virtualEvent.title)) {
+            events.push(virtualEvent as any);
+          }
+        });
+      }
+    } catch (err) {
+      console.error("[EVENTS] Error generating birthday events:", err);
+    }
+
     res.json(events);
   });
 
@@ -642,82 +832,288 @@ export async function createApp() {
     res.json({ id: data.id });
   });
 
-  app.get("/api/messages/:memberId", async (req, res) => {
-    // 关键修复：通过 JOIN 获取最新的头像和信息，而不是使用静态存储的数据
-    const { data, error } = await supabase
-      .from("messages")
-      .select("*, family_members(name, relationship, avatar_url)")
-      .eq("family_member_id", req.params.memberId)
-      .order("created_at", { ascending: false });
+  // 已合并到通用的 /api/messages 路由中，通过 query params 灵活过滤
 
+  app.delete("/api/messages/:id", async (req, res) => {
+    const { id } = req.params;
+    const { error } = await supabase.from("messages").delete().eq("id", id);
     if (error) return res.status(500).json({ error: error.message });
-
-    // 格式化输出以匹配前端期望的结构
-    const formatted = (data || []).map((m: any) => ({
-      ...m,
-      authorName: m.family_members?.name || m.authorName,
-      authorRole: m.family_members?.relationship || m.authorRole,
-      authorAvatar: m.family_members?.avatar_url || m.authorAvatar
-    }));
-
-    res.json(formatted);
+    res.json({ success: true });
   });
 
   app.get("/api/messages", async (req, res) => {
-    // 获取所有留言且同步头像
-    const { data, error } = await supabase
-      .from("messages")
-      .select("*, family_members(name, relationship, avatar_url)")
+    // 通用留言查询：支持通过 eventId 或 memberId 过滤
+    const { eventId, memberId } = req.query;
+
+    console.log(`[API] Fetching messages for eventId: ${eventId}, memberId: ${memberId}`);
+
+    let query = supabase.from("messages").select("*");
+
+    if (eventId) {
+      query = query.eq("event_id", Number(eventId));
+    } else if (memberId) {
+      // NOTE: 记忆档案的留言墙不与大事记共享。大事记的留言必定有 event_id，档案留言必定没有 event_id
+      query = query.eq("family_member_id", Number(memberId)).is("event_id", null);
+    }
+
+    const { data: rawData, error } = await query
       .order("created_at", { ascending: false })
-      .limit(50); // 防过度加载
+      .limit(100);
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      console.error("[API] Messages fetch error:", error.message);
+      return res.status(500).json({ error: error.message });
+    }
 
-    const formatted = (data || []).map((m: any) => ({
-      ...m,
-      authorName: m.family_members?.name || m.authorName,
-      authorRole: m.family_members?.relationship || m.authorRole,
-      authorAvatar: m.family_members?.avatar_url || m.authorAvatar
+    const formatted = (rawData || []).map((m: any) => ({
+      id: m.id,
+      familyMemberId: m.family_member_id || m.familyMemberId,
+      authorName: m.author_name || m.authorName || "家人",
+      authorRole: m.author_role || m.authorRole || "家人",
+      authorAvatar: m.author_avatar || m.authorAvatar,
+      content: m.content || "",
+      type: m.type || "text",
+      mediaUrl: m.media_url || m.mediaUrl,
+      duration: m.duration,
+      createdAt: m.created_at || m.createdAt,
+      likes: m.likes || 0,
+      likedBy: m.liked_by || [],
+      eventId: m.event_id || m.eventId
     }));
 
+    console.log(`[API] Returning ${formatted.length} messages`);
     res.json(formatted);
   });
 
   app.post("/api/messages", async (req, res) => {
     const { familyMemberId, authorName, authorRole, authorAvatar, content, type, mediaUrl, duration, eventId } = req.body;
-    const { data, error } = await supabase
-      .from("messages")
-      .insert({
-        family_member_id: familyMemberId,
-        author_name: authorName,
-        author_role: authorRole,
-        author_avatar: authorAvatar,
-        content,
-        type,
-        media_url: mediaUrl,
-        duration,
-        event_id: eventId
-      })
-      .select()
-      .single();
+    try {
+      // 1. Save the message
+      const { data: message, error } = await supabase
+        .from("messages")
+        .insert({
+          family_member_id: familyMemberId,
+          author_name: authorName,
+          author_role: authorRole,
+          author_avatar: authorAvatar,
+          content,
+          type,
+          media_url: mediaUrl,
+          duration,
+          event_id: eventId
+        })
+        .select()
+        .single();
 
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ id: data.id });
+      if (error) throw error;
+
+      // 2. Logic for Triggering Notifications
+      // Case A: Memory Archive Comment (familyMemberId provided)
+      if (familyMemberId) {
+        // Prevent notifying self
+        const { data: currentMember } = await supabase.from("family_members").select("name").eq("id", familyMemberId).single();
+        if (authorName !== currentMember?.name) {
+          await supabase.from("notifications").insert({
+            member_id: familyMemberId,
+            title: "记忆档案有新留言",
+            content: `${authorName} 在您的记忆档案中留言了：“${content.substring(0, 20)}${content.length > 20 ? '...' : ''}”`,
+            type: "archive_comment",
+            link_url: `/archive/${familyMemberId}`
+          });
+        }
+      }
+
+      // Case B: Event Comment (eventId provided)
+      if (eventId) {
+        const { data: event } = await supabase.from("events").select("*").eq("id", eventId).single();
+        if (event && event.member_id) {
+          // Notify the person this event is about (e.g. Birthday boy/girl)
+          const { data: targetMember } = await supabase.from("family_members").select("name").eq("id", event.member_id).single();
+          if (authorName !== targetMember?.name) {
+            await supabase.from("notifications").insert({
+              member_id: event.member_id,
+              title: "大事记新动态",
+              content: `${authorName} 回应了关于您的事件【${event.title}】`,
+              type: "event_comment",
+              link_url: "/square"
+            });
+          }
+        }
+      }
+
+      res.json({ id: message.id });
+    } catch (err: any) {
+      console.error("[MESSAGES] Post error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
   });
-  app.post("/api/messages/:id/like", async (req, res) => {
-    const { id } = req.params;
-    const { data: current } = await supabase.from("messages").select("likes").eq("id", id).single();
-    const newLikes = (current?.likes || 0) + 1;
 
-    const { data, error } = await supabase
-      .from("messages")
-      .update({ likes: newLikes })
+  // --- NEW: Memories Endpoints (Archive Specific) ---
+  app.get("/api/memories", async (req, res) => {
+    try {
+      const { memberId } = req.query;
+      if (!memberId) return res.status(400).json({ error: "memberId is required" });
+
+      const { data, error } = await supabase
+        .from("memories")
+        .select("*")
+        .eq("member_id", Number(memberId))
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const formatted = (data || []).map(m => ({
+        id: m.id,
+        familyMemberId: m.member_id,
+        authorName: m.author_name,
+        authorRole: m.author_relationship,
+        authorAvatar: m.author_avatar,
+        content: m.content,
+        type: m.type,
+        mediaUrl: m.media_url,
+        duration: m.duration,
+        likes: m.likes || 0,
+        likedBy: m.liked_by || [],
+        createdAt: m.created_at
+      }));
+      res.json(formatted);
+    } catch (err: any) {
+      console.error("[API] GET Memories error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/memories", async (req, res) => {
+    try {
+      console.log("[API] POST Memory Payload:", JSON.stringify(req.body).substring(0, 200));
+      const { familyMemberId, authorId, authorName, authorRole, authorAvatar, content, type, mediaUrl, duration } = req.body;
+      const { data, error } = await supabase
+        .from("memories")
+        .insert({
+          member_id: familyMemberId,
+          author_id: authorId,
+          author_name: authorName,
+          author_relationship: authorRole,
+          author_avatar: authorAvatar,
+          content,
+          type,
+          media_url: mediaUrl,
+          duration
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json({ id: data.id });
+    } catch (err: any) {
+      console.error("[API] POST Memories error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/memories/:id", async (req, res) => {
+    try {
+      const { error } = await supabase.from("memories").delete().eq("id", req.params.id);
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[API] DELETE Memory error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/memories/:id/like", async (req, res) => {
+    const { id } = req.params;
+    const { senderId } = req.body;
+    const { data: current } = await supabase.from("memories").select("*").eq("id", id).single();
+    if (!current) return res.status(404).json({ error: "Memory not found" });
+
+    const likedBy = current.liked_by || [];
+    const alreadyLiked = likedBy.includes(String(senderId));
+    const newLikedBy = alreadyLiked ? likedBy.filter((u: string) => u !== String(senderId)) : [...likedBy, String(senderId)];
+    const newLikes = alreadyLiked ? Math.max(0, (current.likes || 0) - 1) : (current.likes || 0) + 1;
+
+    const { data: updated, error } = await supabase
+      .from("memories")
+      .update({ likes: newLikes, liked_by: newLikedBy })
       .eq("id", id)
       .select()
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
-    res.json({ success: true, likes: data.likes });
+    res.json({ success: true, likes: updated.likes, isLiked: !alreadyLiked });
+  });
+
+  // --- NEW: Stats Endpoint ---
+  app.get("/api/stats/:memberId", async (req, res) => {
+    const mid = Number(req.params.memberId);
+
+    const [msgsRes, memsRes] = await Promise.all([
+      supabase.from("messages").select("likes").eq("family_member_id", mid),
+      supabase.from("memories").select("likes").eq("member_id", mid)
+    ]);
+
+    const msgLikes = (msgsRes.data || []).reduce((s, m) => s + (m.likes || 0), 0);
+    const memLikes = (memsRes.data || []).reduce((s, m) => s + (m.likes || 0), 0);
+    const msgCount = (msgsRes.data || []).length;
+    const memCount = (memsRes.data || []).length;
+
+    res.json({
+      likes: msgLikes + memLikes,
+      memories: msgCount + memCount
+    });
+  });
+
+  app.post("/api/messages/:id/like", async (req, res) => {
+    const { id } = req.params;
+    const { senderName, senderAvatar, senderId } = req.body;
+
+    const { data: current } = await supabase
+      .from("messages")
+      .select("likes, family_member_id, liked_by")
+      .eq("id", id)
+      .single();
+    if (!current) return res.status(404).json({ error: "消息不存在" });
+
+    const likedBy: string[] = current.liked_by || [];
+    const userKey = senderId ? String(senderId) : (senderName || "匿名");
+    const alreadyLiked = likedBy.includes(userKey);
+
+    let newLikes: number;
+    let newLikedBy: string[];
+
+    if (alreadyLiked) {
+      newLikes = Math.max(0, (current.likes || 0) - 1);
+      newLikedBy = likedBy.filter(u => u !== userKey);
+    } else {
+      newLikes = (current.likes || 0) + 1;
+      newLikedBy = [...likedBy, userKey];
+    }
+
+    const { data: updated, error } = await supabase
+      .from("messages")
+      .update({ likes: newLikes, liked_by: newLikedBy })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    if (!alreadyLiked && current.family_member_id) {
+      try {
+        await supabase.from("notifications").insert({
+          member_id: current.family_member_id,
+          title: "有人给您点赞了",
+          content: `${senderName || "有人"} 赞了您的记忆瞬间`,
+          type: "like",
+          link_url: `/profile`
+        });
+      } catch (e) {
+        console.error("[NOTIF] Failed to send like notification:", e);
+      }
+    }
+
+    res.json({ success: true, likes: updated.likes, isLiked: !alreadyLiked });
   });
 
   // OTP Verification Logic
@@ -808,6 +1204,7 @@ export async function createApp() {
     const { email, code } = req.body;
     if (!email || !code) return res.status(400).json({ error: "Email and code are required" });
 
+    // First, verify the OTP code
     const { data: otpData, error: otpError } = await supabase
       .from("otp_codes")
       .select("*")
@@ -815,10 +1212,59 @@ export async function createApp() {
       .single();
 
     if (otpError || !otpData) return res.status(400).json({ error: "验证码已失效或未发送" });
-    if (otpData.code !== code) return res.status(400).json({ error: "验证码不正确" });
-    if (new Date(otpData.expires_at) < new Date()) return res.status(400).json({ error: "验证码已过期" });
+
+    if (otpData.code !== code) {
+      return res.status(400).json({ error: "验证码不正确" });
+    }
+
+    const isExpired = new Date(otpData.expires_at) < new Date();
+    if (isExpired) {
+      return res.status(400).json({ error: "验证码已过期" });
+    }
 
     res.json({ success: true });
+  });
+
+  // Notifications Endpoints
+  app.get("/api/notifications/:memberId", async (req, res) => {
+    const { data, error } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("member_id", req.params.memberId)
+      .order("created_at", { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  });
+
+  app.put("/api/notifications/read-all/:memberId", async (req, res) => {
+    try {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("member_id", req.params.memberId);
+
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[NOTIF] Read all error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/notifications/:id/read", async (req, res) => {
+    try {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("id", req.params.id);
+
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[NOTIF] Read single error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Vite middleware for development

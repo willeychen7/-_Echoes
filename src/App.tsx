@@ -11,28 +11,13 @@ import { AddMemberPage } from "./AddMemberPage";
 import { BlessingPage } from "./BlessingPage";
 import { AddEventPage } from "./AddEventPage";
 import { ProfilePage } from "./ProfilePage";
+import { NotificationsPage } from "./NotificationsPage";
 import { BottomNav } from "./components/BottomNav";
 
 const AppContent: React.FC = () => {
   useEffect(() => {
-    // Demo Initialization: Force "陈建国" (ID 3) if no user exists
-    const savedUser = localStorage.getItem("currentUser");
-    if (!savedUser) {
-      const demoUser = {
-        name: "陈建国",
-        phone: "13800138000",
-        avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuCwusjFRipiiPuQPnlu8lyXqpESaqMYI6iBbwhGJSByETLCJin8fxLFhx7yFrgNeTWxNRtJhFvUv-QBWwbIDe9NLVWYMMmK0ykgD39DQ6Im6Fk0zsKWn7prx2EIM__QjICrYLFWoCn6sYCrGgJ0SCCKFDFbrFjQu3IQKzsQ-dTR4tL8GPT25YU3k5ptELq8GvkLOFJQxqZx9IGQa0VEF8olYdHwYHJxmLi4809HoLMucZNjXNwQFYofjtn4dvk6wJiX6mgddchqj_Y",
-        relationship: "父亲",
-        familyId: "FAM888888",
-        memberId: 3,
-        isRegistered: true,
-        bio: "热爱生活，记录美好。",
-        birthday: "1965-05-12",
-        gender: "男",
-        standardRole: "father"
-      };
-      localStorage.setItem("currentUser", JSON.stringify(demoUser));
-    }
+    // 核心修复：移除自动注入演示用户的逻辑，防止其覆盖真实用户的登录状态。
+    // 演示用户应仅在首次点击“立即开启”或未登录时，通过 LandingPage 明确触发。
   }, []);
 
   const location = useLocation();
@@ -58,6 +43,7 @@ const AppContent: React.FC = () => {
           <Route path="/blessing/:eventId" element={<BlessingPage />} />
           <Route path="/blessing" element={<Navigate to="/square" />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
         </Routes>
       </div>
       {shouldShowNav && <BottomNav />}

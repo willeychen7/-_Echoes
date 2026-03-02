@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useLayoutEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Share2, Mic, MessageSquare, Camera, Video, Sparkles, RotateCcw, Play, Heart, Calendar as IconCalendar, MapPin, FileText, Send, X } from "lucide-react";
 import { Button } from "./components/Button";
 import { Card } from "./components/Card";
 import { motion, AnimatePresence } from "motion/react";
-import { GoogleGenAI } from "@google/genai";
 import confetti from "canvas-confetti";
 import { FamilyEvent, Message, MessageType } from "./types";
 import { cn, getRelativeTime } from "./lib/utils";
+import { isDemoMode } from "./demo-data";
 
 const PUNCT_END = /[。！？….,!?]$/;
 
@@ -37,7 +37,7 @@ export const BlessingPage: React.FC = () => {
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const scrollContainer = document.querySelector('.scroll-container');
     if (scrollContainer) {
       scrollContainer.scrollTo(0, 0);
@@ -62,7 +62,12 @@ export const BlessingPage: React.FC = () => {
       }).catch(console.error);
       fetch(`/api/messages?eventId=${eventId}`).then(res => res.json()).then(data => {
         if (Array.isArray(data)) {
-          setMessages(data.filter((m: any) => m.eventId === Number(eventId)).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+          const userKey = currentUser ? String(currentUser.memberId || currentUser.id || currentUser.name) : "匿名";
+          const formatted = data.filter((m: any) => m.eventId === Number(eventId)).map((m: any) => ({
+            ...m,
+            isLiked: m.likedBy?.includes(userKey) || false
+          })).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          setMessages(formatted);
         } else {
           setMessages([]);
         }
@@ -166,12 +171,33 @@ export const BlessingPage: React.FC = () => {
     setTranscription("");
     setRecordedAudioUrl(null);
     setRecordingTime(0);
+    // 录完后保持当前的选择模式，不要强制退出，这样就能显示出带文字的框
     setSelectedImage(null);
     setSelectedVideo(null);
   };
-
-  const handleLike = (id: number) => {
+  const handleLike = async (id: number) => {
+    // 乐观更新 UI
     setMessages(prev => prev.map(m => m.id === id ? { ...m, likes: (m.likes || 0) + (m.isLiked ? -1 : 1), isLiked: !m.isLiked } : m));
+
+    if (!isDemoMode(currentUser)) {
+      try {
+        const res = await fetch(`/api/messages/${id}/like`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            senderName: currentUser?.name || "有人",
+            senderAvatar: currentUser?.avatar || "",
+            senderId: currentUser?.memberId || currentUser?.id || currentUser?.name || ""
+          })
+        });
+        const data = await res.json();
+        if (data.likes !== undefined) {
+          setMessages(prev => prev.map(m => m.id === id ? { ...m, likes: data.likes, isLiked: data.isLiked } : m));
+        }
+      } catch (e) {
+        console.error("Like sync error:", e);
+      }
+    }
   };
 
   const generateAIEcho = async () => {
@@ -182,19 +208,20 @@ export const BlessingPage: React.FC = () => {
     }
     setIsSummarizing(true);
     try {
-      const apiKey = localStorage.getItem("GOOGLE_API_KEY") || "";
-      const ai = new GoogleGenAI({ apiKey });
-      const messageContext = messages.map(m => `${m.authorName} (${m.authorRole}): ${m.content}`).join("\n");
-      const prompt = `你是家族记忆整理师。请根据以下家人在${event?.title}时的祝福：\n${messageContext}\n\n写一段温馨的家族总结。要求语言温暖、细腻。字数300字左右。`;
-
-      const result = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts: [{ text: prompt }] }]
+      const res = await fetch("/api/generate-blessing-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages, eventTitle: event?.title || "活动" })
       });
-
-      setAiSummary(result.text);
+      const data = await res.json();
+      if (data.text) {
+        setAiSummary(data.text);
+      } else {
+        alert(data.error || "AI生成失败，请重试");
+      }
     } catch (e) {
       console.error(e);
+      alert("AI生成失败，网络错误或系统异常");
     } finally {
       setIsSummarizing(false);
     }
@@ -415,14 +442,15 @@ export const BlessingPage: React.FC = () => {
                     </div>
 
                     {msg.type === MessageType.TEXT && <p className="text-xl text-slate-600 font-serif italic">“{msg.content}”</p>}
+                    {/* 先显示语音条，再显示识别出的文字 */}
                     {msg.type === MessageType.AUDIO && (
-                      <div className="space-y-3">
+                      <div className="space-y-3 mt-4">
                         <div className="bg-[#eab308]/5 p-4 rounded-xl flex items-center gap-4">
                           <button className="size-12 rounded-full bg-[#eab308] flex items-center justify-center shadow-lg"><Play size={22} fill="currentColor" /></button>
                           <div className="flex-1 h-2 bg-[#eab308]/20 rounded-full"><div className="w-1/3 h-full bg-[#eab308] rounded-full" /></div>
                           <span className="text-sm font-black text-[#eab308]">{msg.duration || 0}"</span>
                         </div>
-                        {msg.content && <p className="text-lg text-slate-400 italic">“{msg.content}”</p>}
+                        {msg.content && <p className="text-lg text-slate-600 font-serif italic mb-2">“{msg.content}”</p>}
                       </div>
                     )}
                     {msg.type === MessageType.IMAGE && (

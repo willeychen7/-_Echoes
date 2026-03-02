@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Phone, Gift, Calendar as LucideCalendar, ArrowLeft, Trash2 } from "lucide-react";
-import { FamilyEvent } from "./types";
+import { ChevronLeft, ChevronRight, Plus, Phone, Gift, Calendar as LucideCalendar, ArrowLeft, Trash2, MessageSquare } from "lucide-react";
+import { FamilyEvent, FamilyMember } from "./types";
 import { Card } from "./components/Card";
 import { useNavigate } from "react-router-dom";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { cn } from "./lib/utils";
-import { FamilyMember } from "./types";
 import { DEMO_EVENTS, DEMO_MEMBERS, isDemoMode } from "./demo-data";
+import { InlineBlessingPanel } from "./components/FamilyEvents";
 
 export const CalendarPage: React.FC = () => {
   const [events, setEvents] = useState<FamilyEvent[]>([]);
@@ -15,6 +15,8 @@ export const CalendarPage: React.FC = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(new Date().getDate());
   const [viewRange, setViewRange] = useState<"day" | "month">("day");
+  const [openBlessingEventId, setOpenBlessingEventId] = useState<number | null>(null);
+  const [sentEventIds, setSentEventIds] = useState<number[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -22,19 +24,40 @@ export const CalendarPage: React.FC = () => {
     const parsed = savedUser ? JSON.parse(savedUser) : null;
     if (parsed) setCurrentUser(parsed);
 
-    if (isDemoMode(parsed)) {
-      const customEvents = JSON.parse(localStorage.getItem("demoCustomEvents") || "[]");
-      setEvents([...DEMO_EVENTS, ...customEvents]);
-      setMembers(DEMO_MEMBERS);
-    } else {
-      const familyId = parseInt(String(parsed.familyId));
-      fetch(`/api/events?familyId=${familyId}`).then(res => res.json()).then(data => {
-        if (Array.isArray(data)) setEvents(data);
-      }).catch(console.error);
-      fetch(`/api/family-members?familyId=${familyId}`).then(res => res.json()).then(data => {
-        if (Array.isArray(data)) setMembers(data);
-      }).catch(console.error);
-    }
+    const loadData = () => {
+      if (isDemoMode(parsed)) {
+        const customEvents = JSON.parse(localStorage.getItem("demoCustomEvents") || "[]");
+        setEvents([...DEMO_EVENTS, ...customEvents]);
+        setMembers(DEMO_MEMBERS);
+      } else {
+        const familyId = parseInt(String(parsed.familyId));
+        fetch(`/api/events?familyId=${familyId}`).then(res => res.json()).then(data => {
+          if (Array.isArray(data)) setEvents(data);
+        }).catch(console.error);
+        fetch(`/api/family-members?familyId=${familyId}`).then(res => res.json()).then(data => {
+          if (Array.isArray(data)) setMembers(data);
+        }).catch(console.error);
+
+        // Fetch messages to see which events I've addressed
+        fetch(`/api/messages`).then(res => res.json()).then(data => {
+          if (Array.isArray(data)) {
+            const mySentIds = data
+              .filter((m: any) => m.authorName === parsed.name && m.eventId)
+              .map((m: any) => m.eventId);
+            setSentEventIds(mySentIds);
+          }
+        }).catch(console.error);
+      }
+    };
+
+    loadData();
+
+    const handleSent = (e: any) => setSentEventIds(prev => [...prev, e.detail.eventId]);
+    window.addEventListener('blessing-sent' as any, handleSent);
+
+    return () => {
+      window.removeEventListener('blessing-sent' as any, handleSent);
+    };
   }, []);
 
 
@@ -42,7 +65,6 @@ export const CalendarPage: React.FC = () => {
     if (!window.confirm("确定要删除这条大事记吗？")) return;
 
     if (isDemoMode(currentUser)) {
-      // NOTE: Demo 模式下从前端 state 和 localStorage 中删除
       setEvents(prev => prev.filter(e => e.id !== eventId));
       const stored = JSON.parse(localStorage.getItem("demoCustomEvents") || "[]");
       const updated = stored.filter((e: any) => e.id !== eventId);
@@ -75,7 +97,7 @@ export const CalendarPage: React.FC = () => {
   };
 
   const getLunarDay = (day: number) => {
-    const lunarDays = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十", "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"];
+    const lunarDays = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十", "廿一", "廿2", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"];
     const month = currentDate.getMonth() + 1;
     const festivals: Record<string, string> = {
       "1-1": "元旦",
@@ -267,72 +289,92 @@ export const CalendarPage: React.FC = () => {
                   return { label: "大事记", color: "bg-emerald-50 text-emerald-500" };
                 };
                 const eventInfo = getEventInfo(event.type || "", event.title);
+                const isOpen = openBlessingEventId === event.id;
 
                 return (
-                  <Card key={event.id} className="p-4 border-none shadow-md shadow-slate-100/40 rounded-3xl bg-white flex flex-col justify-between space-y-4">
-                    {/* Row 1: Avatar & Name & Trash */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="size-16 rounded-full border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center bg-slate-50">
-                          {displayAvatar ? (
-                            <img src={displayAvatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          ) : (
-                            <span className="text-[20px] font-black text-[#eab308]">{displayName?.charAt(0) || "?"}</span>
+                  <div key={event.id} className={cn("rounded-3xl overflow-hidden shadow-md bg-white transition-shadow", isOpen && "shadow-xl shadow-[#eab308]/10 ring-2 ring-[#eab308]/20")}>
+                    <div className="p-3">
+                      <div className="relative z-10 flex flex-col h-full">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-4 min-w-0">
+                            <div className="size-16 rounded-full border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center bg-slate-50">
+                              {displayAvatar ? (
+                                <img src={displayAvatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              ) : (
+                                <span className="text-[20px] font-black text-[#eab308]">{displayName?.charAt(0) || "?"}</span>
+                              )}
+                            </div>
+                            <p className="text-4xl font-black text-slate-800 truncate">{displayName}</p>
+                          </div>
+                          <button onClick={() => handleDeleteEvent(event.id)} className="size-12 flex items-center justify-center text-slate-300 hover:text-red-400 transition-colors">
+                            <Trash2 size={28} />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between mb-3">
+                          <div className={cn("px-5 py-2 rounded-full text-lg font-black tracking-tight", eventInfo.color)}>
+                            {displayName ? (event.title.replace(new RegExp(`^${displayName}(的)?`), '') || eventInfo.label) : eventInfo.label}
+                          </div>
+                          <div className="text-lg font-black text-[#eab308] bg-[#eab308]/5 px-5 py-2 rounded-full whitespace-nowrap">
+                            {isActuallyToday ? "今天" : `${d_val}日`}
+                          </div>
+                        </div>
+
+                        {displayTip && (
+                          <div className="min-w-0 mb-5 ml-1">
+                            <p className="text-xl text-slate-500 font-medium leading-relaxed tracking-tight line-clamp-2">{displayTip}</p>
+                          </div>
+                        )}
+
+                        <div className="flex gap-3 mt-auto pt-3 border-t border-slate-50">
+                          {(!isOpen && !sentEventIds.includes(event.id)) && (
+                            <button
+                              onClick={() => setOpenBlessingEventId(event.id)}
+                              className="flex-1 py-4 rounded-2xl text-xl font-black flex items-center justify-center transition-all active:scale-95 gap-2 bg-[#eab308]/5 text-[#eab308]"
+                            >
+                              <Gift size={24} />
+                              送出祝福
+                            </button>
+                          )}
+                          {(!isOpen && !sentEventIds.includes(event.id)) && (
+                            <button
+                              onClick={() => window.location.href = 'tel:10086'}
+                              className="size-16 bg-[#eab308]/5 text-[#eab308] rounded-2xl flex items-center justify-center shadow-sm transition-transform active:scale-95"
+                            >
+                              <Phone size={24} />
+                            </button>
+                          )}
+                          {(!isOpen && sentEventIds.includes(event.id)) && (
+                            <button
+                              onClick={() => setOpenBlessingEventId(event.id)}
+                              className="flex-1 py-4 rounded-2xl text-xl font-black flex items-center justify-center transition-all active:scale-95 gap-2 bg-[#eab308]/5 text-[#eab308]"
+                            >
+                              <MessageSquare size={24} />
+                              留言墙
+                            </button>
                           )}
                         </div>
-                        <p className="text-4xl font-black text-slate-800 truncate">{displayName}</p>
-                      </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event.id); }}
-                        className="size-10 flex items-center justify-center text-slate-200 hover:text-red-400 transition-colors"
-                      >
-                        <Trash2 size={24} />
-                      </button>
-                    </div>
-
-                    {/* Row 2: Tag & Days Remaining */}
-                    <div className="flex items-center justify-between">
-                      <div className={cn("px-4 py-1.5 rounded-full text-lg font-black tracking-tight shrink-0", eventInfo.color)}>
-                        {displayName ? (event.title.replace(new RegExp(`^${displayName}(的)?`), '') || eventInfo.label) : eventInfo.label}
-                      </div>
-                      <div className="text-lg font-black text-[#eab308] bg-[#eab308]/5 px-4 py-1.5 rounded-full whitespace-nowrap">
-                        {isActuallyToday ? "今天" : `${d_val}日`}
                       </div>
                     </div>
 
-                    {/* Row 3: Event Tip (Conditional) */}
-                    {displayTip && (
-                      <div className="min-w-0">
-                        <p className="text-lg text-slate-400 font-medium leading-relaxed truncate opacity-90">
-                          {displayTip}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Row 4: Actions */}
-                    <div className="flex gap-2 pt-2 border-t border-slate-50">
-                      <button onClick={() => navigate(`/blessing/${event.id}`)} className="flex-1 py-3 bg-[#eab308]/5 text-[#eab308] rounded-2xl text-xl font-black flex items-center justify-center gap-2 transition-transform active:scale-95">
-                        <Gift size={20} /> 祝福
-                      </button>
-                      <button onClick={() => window.location.href = 'tel:10086'} className="size-14 bg-[#eab308]/5 text-[#eab308] rounded-2xl flex items-center justify-center shrink-0 shadow-sm transition-transform active:scale-95">
-                        <Phone size={20} />
-                      </button>
-                    </div>
-                  </Card>
+                    <AnimatePresence>
+                      {isOpen && (
+                        <InlineBlessingPanel
+                          event={event}
+                          currentUser={currentUser}
+                          onClose={() => setOpenBlessingEventId(null)}
+                          hasSentBlessing={sentEventIds.includes(event.id)}
+                        />
+                      )}
+                    </AnimatePresence>
+                  </div>
                 );
               })
             )}
           </div>
         </section>
 
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => navigate("/add-event", { state: { initialDate: formattedSelectedDate } })}
-          className="fixed bottom-24 right-6 size-14 bg-[#eab308] text-white rounded-full shadow-2xl flex items-center justify-center z-[100] ring-4 ring-white"
-        >
-          <Plus size={28} strokeWidth={3} />
-        </motion.button>
+
       </main>
     </>
   );

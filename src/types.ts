@@ -54,6 +54,7 @@ export interface Message {
   duration?: number;
   createdAt: string;
   likes?: number;
+  likedBy?: string[];
   isLiked?: boolean;
   eventId?: number;
 }

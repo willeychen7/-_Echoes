@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useLayoutEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Calendar, User, Plus, X } from "lucide-react";
 import { Button } from "./components/Button";
@@ -37,7 +37,7 @@ export const AddEventPage: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const scrollContainer = document.querySelector('.scroll-container');
     if (scrollContainer) {
       scrollContainer.scrollTo(0, 0);

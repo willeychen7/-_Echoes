@@ -5,6 +5,7 @@ import { Button } from "./components/Button";
 import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus } from "lucide-react";
 import { Card } from "./components/Card";
 import { cn } from "./lib/utils";
+import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
@@ -17,9 +18,10 @@ export const RegisterPage: React.FC = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isAvatarUploaded, setIsAvatarUploaded] = useState(false);
   const [showDefaultAvatars, setShowDefaultAvatars] = useState(false);
-  const [avatar, setAvatar] = useState("https://lh3.googleusercontent.com/aida-public/AB6AXuBAdiBHDqEr2K33fyt5BaRHdl7JV-ITKpBOKDmyz87kyHbJXbxViiMpAoqF0v8hkObP0481dOZWZeNK5mf151CBcsTi2zydCD56k2lIlrJNwk9IImtHScfDETFF-h9tJxjbmxUOZY_g8jEIokPEDj37oagfY6VWKEMIw6Fyk_Uxew_PYRxZzLw_28b4pO4EMCBITCWArexcIpjk4HIlC4udrqA9MrjKSueMBgGE3UpXfLjRdUIZ9OgHLbrq0JWsvpsm1Xm135ZE81s");
+  const [avatar, setAvatar] = useState(DEFAULT_AVATAR);
 
   const [invitationCode, setInvitationCode] = useState("");
+  const [hasUrlCode, setHasUrlCode] = useState(false);
   const [showRelationshipModal, setShowRelationshipModal] = useState(false);
   const [selectedRelationship, setSelectedRelationship] = useState("");
   const [inviterName, setInviterName] = useState("");
@@ -32,6 +34,15 @@ export const RegisterPage: React.FC = () => {
   const [isCodeSent, setIsCodeSent] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [verificationError, setVerificationError] = useState("");
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (code) {
+      setInvitationCode(code);
+      setHasUrlCode(true);
+    }
+  }, []);
 
   const canSubmit = name && phone && password && confirmPassword && verificationCode;
 
@@ -125,6 +136,7 @@ export const RegisterPage: React.FC = () => {
       // 2. Clear invitation code logic
       if (!invitationCode.trim()) {
         await handleCompleteRegistration();
+        setIsValidatingCode(false);
         return;
       }
 
@@ -141,8 +153,9 @@ export const RegisterPage: React.FC = () => {
       setShowRelationshipModal(true);
     } catch {
       setInviteError("网络错误，请稍后重试");
+    } finally {
+      setIsValidatingCode(false);
     }
-    setIsValidatingCode(false);
   };
 
   const handleCompleteRegistration = async () => {
@@ -192,9 +205,9 @@ export const RegisterPage: React.FC = () => {
         currentFamilyId = data.familyId;
         currentMemberId = data.memberId;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Registration error:", error);
-      alert("注册过程中出现错误，请稍后重试。");
+      alert(`注册过程中出现错误: ${error.message || "未知错误"}`);
       return;
     }
 
@@ -214,14 +227,7 @@ export const RegisterPage: React.FC = () => {
     navigate("/register-success");
   };
 
-  const defaultAvatars = [
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuDIwxfzAvsOl_ZzsdHKppuFhs_5iM26_e_p9y0kU5_hiLIVc9JAY_Q8otsTMmOgX5pbn8EPDA2b_WN2KHmuEYiQ_xNJvM7vhbd7cZi38m3JnyKMW5xfg3al0T0-wRjr8BHYEW-69XFpOpqZ0CLKqXYOqBmT2ZzMxzoX_kgqVkuAi9Dx-uoZIO6209WL5x1iIvXLkAyJcupmiN4VgbJxG_YZoKIVS_i2I8CFGTfPC8qlUUhPO4BjYxqiYHbOdcLlV1QacYME0v_b-4Q",
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuBii1EKeh6-0PsDsGlI18r8HM0WItcEYyUf_owucYBCLJQQ90qBfnWGakCC9kNsiFehHUNrtMvMawxlIVe9_EBwvr3SZWkkn38vpLnRKed42OFHwPl_tsqJNOI-53LuvWMRYSFbBqKmYINxfzP0wI63O3ZFxJtBneMO0RBlqsrinM6maOXTTr-TG9lOIHtjgfvT9BiLXyTyPgcpRzIsWVdOdD38DuWNXJUqsytM9RVEsHDVRxFD4dgZEo7HIPkSihEdzor5lWaOxdk",
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuDcpi-D7iS967UY2-GOl9L7943tC0wgzQqK2e9_k9TsPcZ63d6faoor9DhdZ0b_yinSnxo3BOwEQhdj9zWl23tjYfGdxNnb7zyvA8A8-ygv6XRfvjSlobPzPULz0eSpd6ySbAURLCsWu1FdBZEW31OO43ZqpsxkblpBT0ev4jNjkA97Qg9MeNTEgep2uXj5M0a6ygnX1_HeUILUKheMgd-7Zjlug0UxQPn3uly09ea_NSKK4IMC0N2Q7Ndn-V-bEjOGkaGByNGdufQ",
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuBAdiBHDqEr2K33fyt5BaRHdl7JV-ITKpBOKDmyz87kyHbJXbxViiMpAoqF0v8hkObP0481dOZWZeNK5mf151CBcsTi2zydCD56k2lIlrJNwk9IImtHScfDETFF-h9tJxjbmxUOZY_g8jEIokPEDj37oagfY6VWKEMIw6Fyk_Uxew_PYRxZzLw_28b4pO4EMCBITCWArexcIpjk4HIlC4udrqA9MrjKSueMBgGE3UpXfLjRdUIZ9OgHLbrq0JWsvpsm1Xm135ZE81s",
-    "https://picsum.photos/seed/avatar5/200/200",
-    "https://picsum.photos/seed/avatar6/200/200"
-  ];
+  const defaultAvatars = SYSTEM_AVATARS;
 
   const handleAvatarClick = () => {
     setShowDefaultAvatars(!showDefaultAvatars);
@@ -237,9 +243,22 @@ export const RegisterPage: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setAvatar(reader.result as string);
-        setIsAvatarUploaded(true);
-        setShowDefaultAvatars(false);
+        // NOTE: 注册时上传头像先压缩，避免 base64 过大导致服务器 body 解析失败
+        const img = new Image();
+        img.onload = () => {
+          const MAX_SIZE = 400;
+          const canvas = document.createElement("canvas");
+          const scale = Math.min(1, MAX_SIZE / Math.max(img.width, img.height));
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const compressed = canvas.toDataURL("image/jpeg", 0.85);
+          setAvatar(compressed);
+          setIsAvatarUploaded(true);
+          setShowDefaultAvatars(false);
+        };
+        img.src = reader.result as string;
       };
       reader.readAsDataURL(file);
     }
@@ -431,19 +450,29 @@ export const RegisterPage: React.FC = () => {
             )}
           </label>
 
-          <label className="flex flex-col gap-3">
-            <span className="text-[#1e293b] text-lg font-bold px-1">家族邀请码 (选填)</span>
-            <input
-              className={`w-full rounded-[2rem] border-none bg-white shadow-sm h-16 px-6 text-xl font-bold text-[#eab308] focus:ring-2 focus:ring-[#eab308]/20 transition-all ${inviteError ? 'ring-2 ring-red-400' : ''}`}
-              type="text"
-              placeholder="例如: FA-1003"
-              value={invitationCode}
-              onChange={(e) => { setInvitationCode(e.target.value); setInviteError(""); }}
-            />
-            {inviteError && (
-              <p className="text-red-500 text-sm font-bold px-2">{inviteError}</p>
-            )}
-          </label>
+          {!hasUrlCode ? (
+            <label className="flex flex-col gap-3">
+              <span className="text-[#1e293b] text-lg font-bold px-1">家族邀请码 (选填)</span>
+              <input
+                className={`w-full rounded-[2rem] border-none bg-white shadow-sm h-16 px-6 text-xl font-bold text-[#eab308] focus:ring-2 focus:ring-[#eab308]/20 transition-all ${inviteError ? 'ring-2 ring-red-400' : ''}`}
+                type="text"
+                placeholder="例如: FA-1003"
+                value={invitationCode}
+                onChange={(e) => { setInvitationCode(e.target.value); setInviteError(""); }}
+              />
+              {inviteError && (
+                <p className="text-red-500 text-sm font-bold px-2">{inviteError}</p>
+              )}
+            </label>
+          ) : (
+            <div className="bg-[#eab308]/10 p-5 rounded-3xl border border-[#eab308]/20 flex items-center justify-between shadow-sm">
+              <div className="flex flex-col">
+                <span className="text-[#eab308] font-bold text-lg">已绑定专属邀请函</span>
+                <span className="text-sm text-[#eab308]/70 mt-1 font-medium italic">完成注册后即可直接加入家族</span>
+              </div>
+              <div className="text-xs bg-white px-3 py-1.5 rounded-xl text-[#eab308] shadow-sm font-mono font-black">{invitationCode}</div>
+            </div>
+          )}
         </div>
 
         {/* Action Button */}

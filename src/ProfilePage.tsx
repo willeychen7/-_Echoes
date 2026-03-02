@@ -1,10 +1,24 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Settings, ChevronRight, LogOut, Shield, HelpCircle, Bell, Edit, Info, Users, Camera, Gift, X, Plus } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { ArrowLeft, Edit2, Share2, LogOut, Heart, MessageSquare, Clock, X, Check, CheckCircle, Camera, Gift, Users, Bell, ChevronRight, Plus } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "./lib/utils";
 import { ImageCropper } from "./components/ImageCropper";
 import { DEMO_PERSONAS, isDemoMode } from "./demo-data";
+import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
+
+/** 相对时间转换 */
+const getRelativeTime = (dateStr: string) => {
+  if (!dateStr) return "刚刚";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diff = Math.floor((now.getTime() - date.getTime()) / 1000);
+  if (diff < 60) return "刚刚";
+  if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`;
+  if (diff < 2592000) return `${Math.floor(diff / 86400)}天前`;
+  return date.toLocaleDateString();
+};
 
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -21,21 +35,24 @@ export const ProfilePage: React.FC = () => {
   const [tempImage, setTempImage] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem("currentUser");
     const parsed = saved ? JSON.parse(saved) : null;
+    const cachedStats = parsed?.stats || { memories: 0, likes: 0, days: 1 };
+
     return {
       id: parsed?.memberId || null,
-      name: parsed?.name || "陈建国",
+      name: parsed?.name || "家人",
       role: parsed?.relationship || "本人",
-      avatar: parsed?.avatar || "https://lh3.googleusercontent.com/aida-public/AB6AXuCwusjFRipiiPuQPnlu8lyXqpESaqMYI6iBbwhGJSByETLCJin8fxLFhx7yFrgNeTWxNRtJhFvUv-QBWwbIDe9NLVWYMMmK0ykgD39DQ6Im6Fk0zsKWn7prx2EIM__QjICrYLFWoCn6sYCrGgJ0SCCKFDFbrFjQu3IQKzsQ-dTR4tL8GPT25YU3k5ptELq8GvkLOFJQxqZx9IGQa0VEF8olYdHwYHJxmLi4809HoLMucZNjXNwQFYofjtn4dvk6wJiX6mgddchqj_Y",
-      joinDate: "2024-01-15",
+      avatar: parsed?.avatar || parsed?.avatarUrl || DEFAULT_AVATAR,
+      joinDate: parsed?.joinDate || new Date().toISOString(),
       familyId: parsed?.familyId || 1,
-      bio: parsed?.bio || "热爱生活，记录美好。",
-      birthday: parsed?.birthday || "1965-05-12",
+      bio: parsed?.bio || parsed?.signature || "热爱生活，记录美好。",
+      birthday: parsed?.birthday || parsed?.birthDate || "",
       gender: parsed?.gender || "男",
-      stats: { memories: 0, likes: 0, days: 1 },
+      stats: cachedStats,
       isRegistered: !!parsed?.isRegistered
     };
   });
@@ -45,8 +62,9 @@ export const ProfilePage: React.FC = () => {
     bio: "",
     birthday: ""
   });
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const scrollContainer = document.querySelector('.scroll-container');
     if (scrollContainer) {
       scrollContainer.scrollTo(0, 0);
@@ -55,80 +73,127 @@ export const ProfilePage: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem("currentUser");
-    if (savedUser) {
-      const parsed = JSON.parse(savedUser);
-      const updatedUser = {
-        ...user,
-        id: parsed.memberId || null,
-        name: parsed.name || user.name,
-        avatar: parsed.avatar || user.avatar,
-        role: parsed.relationship || user.role,
-        bio: parsed.bio || user.bio,
-        birthday: parsed.birthday || user.birthday,
-        gender: parsed.gender || user.gender,
-        familyId: parsed.familyId || user.familyId,
-        isRegistered: !!parsed.isRegistered,
-      };
-
-      if (updatedUser.id) {
-        fetchStatsAndNotifications(updatedUser);
-      } else {
-        setUser(updatedUser);
-        setEditForm({
-          name: updatedUser.name,
-          bio: updatedUser.bio,
-          birthday: updatedUser.birthday
-        });
-      }
-    }
-  }, []);
-
   const fetchStatsAndNotifications = async (currentUserInfo: any) => {
     try {
-      const [msgsRes, eventsRes] = await Promise.all([
-        fetch("/api/messages"),
-        fetch(currentUserInfo.familyId ? `/api/events?familyId=${currentUserInfo.familyId}` : "/api/events")
+      const memberId = currentUserInfo.memberId || currentUserInfo.id;
+      if (!memberId) {
+        setIsLoading(false);
+        return;
+      }
+
+      // 核心增强：不仅获取统计，还获取最新的档案详情以确保同步
+      const isDemo = isDemoMode(currentUserInfo);
+      const [notifsRes, statsRes, profileRes] = await Promise.all([
+        fetch(`/api/notifications/${memberId}`),
+        fetch(`/api/stats/${memberId}`),
+        !isDemo ? fetch(`/api/family-members/${memberId}`) : Promise.resolve(null)
       ]);
-      const msgs = await msgsRes.json();
-      const events = await eventsRes.json();
 
-      const myEventsIds = events.filter((e: any) => e.memberId === currentUserInfo.id).map((e: any) => e.id);
+      const [notifs, stats, freshProfile] = await Promise.all([
+        notifsRes.json(),
+        statsRes.json(),
+        profileRes ? profileRes.json() : Promise.resolve(null)
+      ]);
 
-      const memoriesCount = msgs.filter((m: any) => m.authorName === currentUserInfo.name).length;
+      const days = Math.max(1, Math.floor((Date.now() - new Date(currentUserInfo.joinDate || Date.now()).getTime()) / 86400000));
 
-      const myWallMsgs = msgs.filter((m: any) =>
-        m.familyMemberId === currentUserInfo.id || myEventsIds.includes(m.eventId)
-      );
-      const likesCount = myWallMsgs.reduce((sum: number, m: any) => sum + (m.likes || 0), 0);
-
-      const newNotifs = myWallMsgs
-        .filter((m: any) => m.authorName !== currentUserInfo.name)
-        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-      const days = Math.max(1, Math.floor((Date.now() - new Date(currentUserInfo.joinDate).getTime()) / 86400000));
-
-      setUser({
+      // 如果有最新的云端档案，同步到本地缓存
+      let finalUserData = {
         ...currentUserInfo,
-        stats: { memories: memoriesCount, likes: likesCount, days }
+        bio: currentUserInfo.bio || currentUserInfo.signature || "热爱生活，记录美好。",
+        birthday: currentUserInfo.birthday || currentUserInfo.birthDate || ""
+      };
+      const statsObj = {
+        memories: stats.memories || 0,
+        likes: stats.likes || 0,
+        days
+      };
+
+      let hasChanges = false;
+      if (freshProfile && freshProfile.id) {
+        const remoteName = freshProfile.name;
+        const remoteAvatar = freshProfile.avatar_url || freshProfile.avatarUrl;
+        const remoteBio = freshProfile.bio || "热爱生活，记录美好。";
+        const remoteBirthday = freshProfile.birth_date || freshProfile.birthDate;
+
+        if (
+          remoteName !== finalUserData.name ||
+          (remoteAvatar && remoteAvatar !== finalUserData.avatar) ||
+          remoteBio !== (finalUserData.bio || "热爱生活，记录美好。") ||
+          remoteBirthday !== finalUserData.birthday
+        ) {
+          finalUserData = {
+            ...finalUserData,
+            name: remoteName,
+            avatar: remoteAvatar || finalUserData.avatar,
+            bio: remoteBio || finalUserData.bio || "热爱生活，记录美好。",
+            birthday: remoteBirthday || finalUserData.birthday
+          };
+          hasChanges = true;
+        }
+      }
+
+      // 无论 profile 是否变化，都要同步最新的 stats 到缓存
+      localStorage.setItem("currentUser", JSON.stringify({
+        ...finalUserData,
+        stats: statsObj
+      }));
+
+      setUser(prevUser => {
+        // 检查统计数据是否有变化
+        const statsChanged =
+          prevUser.stats.memories !== (stats.memories || 0) ||
+          prevUser.stats.likes !== (stats.likes || 0) ||
+          prevUser.stats.days !== days;
+
+        if (!hasChanges && !statsChanged && prevUser.id === finalUserData.memberId) {
+          return prevUser;
+        }
+
+        return {
+          ...prevUser,
+          ...finalUserData,
+          avatar: (finalUserData.avatar && finalUserData.avatar.length > 20) ? finalUserData.avatar : prevUser.avatar,
+          stats: {
+            memories: stats.memories || 0,
+            likes: stats.likes || 0,
+            days
+          }
+        };
       });
-      setEditForm({
-        name: currentUserInfo.name,
-        bio: currentUserInfo.bio,
-        birthday: currentUserInfo.birthday
-      });
-      setNotifications(newNotifs);
+
+      // Removed setEditForm to prevent the signature input from jumping during background API polling.
+
+      setNotifications(Array.isArray(notifs) ? notifs : []);
+      const unread = (Array.isArray(notifs) ? notifs : []).filter((n: any) => !n.is_read).length;
+      setUnreadCount(unread);
     } catch (e) {
-      console.error(e);
-      setUser(currentUserInfo);
-      setEditForm({
-        name: currentUserInfo.name,
-        bio: currentUserInfo.bio,
-        birthday: currentUserInfo.birthday
-      });
+      console.error("Fetch profile stats error:", e);
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem("currentUser");
+    if (!savedUser) {
+      setIsLoading(false);
+      return;
+    }
+    const parsed = JSON.parse(savedUser);
+    if (!parsed.memberId) {
+      setIsLoading(false);
+      return;
+    }
+
+    // 初始加载
+    fetchStatsAndNotifications(parsed);
+
+    // NOTE: 30秒轮询兑底 —— 确保断网后重连也能同步
+    const pollTimer = setInterval(() => fetchStatsAndNotifications(parsed), 30000);
+
+    return () => clearInterval(pollTimer);
+  }, []);
 
   const handleLogout = () => {
     if (isDemoMode(user)) {
@@ -143,14 +208,12 @@ export const ProfilePage: React.FC = () => {
     const updatedUser = { ...user, avatar: url };
     setUser(updatedUser);
 
-    // Save to localStorage
     const savedUser = localStorage.getItem("currentUser");
     if (savedUser) {
       const parsed = JSON.parse(savedUser);
       localStorage.setItem("currentUser", JSON.stringify({ ...parsed, avatar: url }));
     }
 
-    // Save to DB if linked
     if (user.id) {
       await fetch(`/api/family-members/${user.id}`, {
         method: "PUT",
@@ -165,7 +228,6 @@ export const ProfilePage: React.FC = () => {
       });
     }
 
-    // Dispatch sync events
     window.dispatchEvent(new Event('storage'));
     window.dispatchEvent(new Event('sync-user'));
   };
@@ -179,7 +241,6 @@ export const ProfilePage: React.FC = () => {
     };
     setUser(updatedUser);
 
-    // Save to localStorage
     const savedUser = localStorage.getItem("currentUser");
     if (savedUser) {
       const parsed = JSON.parse(savedUser);
@@ -188,11 +249,10 @@ export const ProfilePage: React.FC = () => {
         name: editForm.name,
         bio: editForm.bio,
         birthday: editForm.birthday,
-        avatar: user.avatar // Ensure avatar is kept
+        avatar: user.avatar
       }));
     }
 
-    // Save to DB
     if (user.id) {
       await fetch(`/api/family-members/${user.id}`, {
         method: "PUT",
@@ -207,7 +267,6 @@ export const ProfilePage: React.FC = () => {
     }
 
     setShowEditModal(false);
-    // Dispatch events for same-tab sync and cross-tab sync
     window.dispatchEvent(new Event('storage'));
     window.dispatchEvent(new Event('sync-user'));
   };
@@ -234,11 +293,12 @@ export const ProfilePage: React.FC = () => {
   const handleAcceptInvite = async () => {
     if (!selectedRel || !inviteData) return;
     try {
+      const phone = JSON.parse(localStorage.getItem("currentUser") || "{}").phone;
       const res = await fetch("/api/accept-invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phone: user.role === "本人" ? JSON.parse(localStorage.getItem("currentUser") || "{}").phone : null, // Handle fallback
+          phone: phone,
           inviteCode: inviteCodeInput.trim(),
           relationshipToInviter: selectedRel,
           standardRole: relationships.find(r => r.label === selectedRel)?.value || "other"
@@ -252,7 +312,6 @@ export const ProfilePage: React.FC = () => {
       }
 
       const data = await res.json();
-      // Update local user data
       const savedUser = JSON.parse(localStorage.getItem("currentUser") || "{}");
       localStorage.setItem("currentUser", JSON.stringify({
         ...savedUser,
@@ -274,7 +333,6 @@ export const ProfilePage: React.FC = () => {
     { label: "父亲", value: "father" },
     { label: "母亲", value: "mother" },
     { label: "哥哥/姐姐", value: "sibling" },
-    { label: "弟弟/妹妹", value: "sibling" },
     { label: "孙子/孙女", value: "grandson" },
     { label: "配偶", value: "spouse" },
     { label: "其他", value: "other" }
@@ -282,41 +340,38 @@ export const ProfilePage: React.FC = () => {
 
   const handleSwitchPersona = (persona: any) => {
     localStorage.setItem("currentUser", JSON.stringify(persona));
-    window.location.reload(); // Reload to apply new persona identity everywhere
+    window.location.reload();
   };
 
-  const testPersonas = DEMO_PERSONAS;
-
-  const defaultAvatars = [
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuCwusjFRipiiPuQPnlu8lyXqpESaqMYI6iBbwhGJSByETLCJin8fxLFhx7yFrgNeTWxNRtJhFvUv-QBWwbIDe9NLVWYMMmK0ykgD39DQ6Im6Fk0zsKWn7prx2EIM__QjICrYLFWoCn6sYCrGgJ0SCCKFDFbrFjQu3IQKzsQ-dTR4tL8GPT25YU3k5ptELq8GvkLOFJQxqZx9IGQa0VEF8olYdHwYHJxmLi4809HoLMucZNjXNwQFYofjtn4dvk6wJiX6mgddchqj_Y",
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuDvg6W6IFZ2JuDXanowe2po0Ndn_QmJPFENhHjprVqA22bvfwP64ioaH-ScdlzVoD4OmDEq4Owhiwy5JcXd5r_eQmBI6g7e8qSO3v3gjR7IbsNRaRePyLPJ6-oO0li96mEPtfaFA4JYAQquay2Gxj2UDAsTG6Be_k0WdXbKGyFieLqreF6K2rDFmxJe_hG6CM0TdKAPDlUh5ys0cfZjZKaXgY_Ceu9arfujNoJmvo9lhnmPK7BmGE1H-6dLGdB9a7wtp2FsoTpjA2w",
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuDIwxfzAvsOl_ZzsdHKppuFhs_5iM26_e_p9y0kU5_hiLIVc9JAY_Q8otsTMmOgX5pbn8EPDA2b_WN2KHmuEYiQ_xNJvM7vhbd7cZi38m3JnyKMW5xfg3al0T0-wRjr8BHYEW-69XFpOpqZ0CLKqXYOqBmT2ZzMxzoX_kgqVkuAi9Dx-uoZIO6209WL5x1iIvXLkAyJcupmiN4VgbJxG_YZoKIVS_i2I8CFGTfPC8qlUUhPO4BjYxqiYHbOdcLlV1QacYME0v_b-4Q",
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuBAdiBHDqEr2K33fyt5BaRHdl7JV-ITKpBOKDmyz87kyHbJXbxViiMpAoqF0v8hkObP0481dOZWZeNK5mf151CBcsTi2zydCD56k2lIlrJNwk9IImtHScfDETFF-h9tJxjbmxUOZY_g8jEIokPEDj37oagfY6VWKEMIw6Fyk_Uxew_PYRxZzLw_28b4pO4EMCBITCWArexcIpjk4HIlC4udrqA9MrjKSueMBgGE3UpXfLjRdUIZ9OgHLbrq0JWsvpsm1Xm135ZE81s"
-  ];
+  const defaultAvatars = SYSTEM_AVATARS;
 
   const menuGroups = [
     {
       title: "账号设置",
       items: [
-        { icon: Edit, label: "编辑个人资料", color: "text-blue-500 bg-blue-50", action: () => setShowEditModal(true) },
+        {
+          icon: Edit2, label: "编辑个人资料", color: "text-blue-500 bg-blue-50", action: () => {
+            setEditForm({ name: user.name, bio: user.bio, birthday: user.birthday });
+            setShowEditModal(true);
+          }
+        },
         ...(user.isRegistered ? [{ icon: Gift, label: "接受家族邀请", color: "text-rose-500 bg-rose-50", action: () => setShowInviteModal(true) }] : []),
         ...(isDemoMode(user) ? [{ icon: Users, label: "切换测试用户", color: "text-indigo-500 bg-indigo-50", action: () => setShowPersonaModal(true) }] : []),
-        { icon: Bell, label: "消息通知", color: "text-orange-500 bg-orange-50", badge: notifications.length > 0 ? notifications.length.toString() : "", action: () => setShowNotifications(true) },
-        { icon: Shield, label: "隐私与安全", color: "text-emerald-500 bg-emerald-50" },
-      ]
-    },
-    {
-      title: "关于",
-      items: [
-        { icon: HelpCircle, label: "帮助与反馈", color: "text-purple-500 bg-purple-50" },
-        { icon: Info, label: "关于我们", color: "text-slate-500 bg-slate-100", extra: "v1.0.0" },
+        {
+          icon: Bell,
+          label: "消息通知",
+          color: "text-orange-500 bg-orange-50",
+          badge: unreadCount > 0 ? unreadCount.toString() : "",
+          action: () => navigate("/notifications")
+        },
+        { icon: CheckCircle, label: "隐私与安全", color: "text-emerald-500 bg-emerald-50" },
       ]
     }
   ];
 
   return (
-    <div className="bg-[#fdfbf0] min-h-full">
-      <header className="sticky top-0 z-[60] bg-white/80 backdrop-blur-md px-6 py-5 flex items-center justify-between shadow-sm shrink-0 border-b border-slate-100">
+    <div className="bg-[#fdfbf0] min-h-screen">
+      <header className="sticky top-0 z-[60] glass-morphism px-6 py-4 flex items-center justify-between shadow-sm shrink-0">
         <button onClick={() => navigate(-1)} className="flex items-center gap-1 p-2 -ml-3 rounded-full hover:bg-black/5 text-slate-800 transition-colors group">
           <ArrowLeft size={28} className="group-active:-translate-x-1 transition-transform" />
           <span className="text-lg font-black pr-2">返回</span>
@@ -327,10 +382,9 @@ export const ProfilePage: React.FC = () => {
         <div className="w-10"></div>
       </header>
 
+      {/* isLoading 时不再显示一个空白 div，而是直接显示内容，只是在后台加载 */}
       <main className="px-6 py-8 space-y-10">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-[2.5rem] p-8 shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col items-center text-center relative overflow-hidden"
         >
           <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#eab308]/10 to-transparent pointer-events-none" />
@@ -350,12 +404,29 @@ export const ProfilePage: React.FC = () => {
           </div>
 
           <h2 className="text-2xl font-bold text-slate-800 mb-1">{user.name}</h2>
-          <p className="text-sm text-slate-500 mb-6 italic">“{user.bio}”</p>
+          <div
+            className="flex items-center justify-center gap-2 mb-4 cursor-pointer group px-4 py-1 -mt-1 rounded-full hover:bg-slate-50 transition-colors"
+            onClick={() => {
+              setEditForm({ name: user.name, bio: user.bio, birthday: user.birthday });
+              setShowEditModal(true);
+            }}
+          >
+            <p className="text-sm text-slate-500 italic">“{user.bio}”</p>
+            <div className="bg-[#eab308]/20 p-1 rounded-full text-[#eab308] group-hover:scale-110 transition-transform shadow-sm">
+              <Edit2 size={12} strokeWidth={3} />
+            </div>
+          </div>
+
+          {user.birthday && (
+            <div className="flex items-center justify-center gap-1.5 mb-6 text-xs font-bold text-slate-400 bg-slate-50 px-3 py-1 rounded-full max-w-max mx-auto shadow-sm">
+              <span>🎂 生日：{user.birthday}</span>
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-4 w-full border-t border-slate-100 pt-6">
             <div className="flex flex-col items-center gap-1">
               <span className="text-xl font-bold text-slate-800">{user.stats.memories}</span>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">记忆瞬间</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">留声印记</span>
             </div>
             <div className="flex flex-col items-center gap-1 border-x border-slate-100">
               <span className="text-xl font-bold text-slate-800">{user.stats.likes}</span>
@@ -379,17 +450,16 @@ export const ProfilePage: React.FC = () => {
                     onClick={item.action}
                     className="w-full p-4 flex items-center gap-4 hover:bg-slate-50 rounded-2xl transition-all active:scale-[0.98] group relative"
                   >
-                    <div className={`size-10 rounded-xl ${item.color} flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow`}>
+                    <div className={cn("size-10 rounded-xl flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow", item.color)}>
                       <item.icon size={20} />
                     </div>
                     <span className="font-bold text-slate-700 flex-1 text-left">{item.label}</span>
-                    {item.extra && <span className="text-xs font-bold text-slate-400 mr-2 bg-slate-100 px-2 py-1 rounded-full">{item.extra}</span>}
+                    <ChevronRight size={16} className="text-slate-300 group-hover:text-slate-400 transition-colors" />
                     {item.badge && (
-                      <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full mr-2 shadow-sm shadow-red-200">
+                      <span className="absolute right-12 bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm shadow-red-200 border-2 border-white animate-pulse">
                         {item.badge}
                       </span>
                     )}
-                    <ChevronRight size={16} className="text-slate-300 group-hover:text-slate-400 transition-colors" />
                   </button>
                 ))}
               </div>
@@ -399,35 +469,30 @@ export const ProfilePage: React.FC = () => {
           <div className="bg-white rounded-[2rem] p-2 shadow-sm border border-slate-100">
             <button
               onClick={handleLogout}
-              className="w-full p-4 flex items-center gap-4 hover:bg-red-50 rounded-2xl transition-all active:scale-[0.98] group"
+              className="w-full p-4 flex items-center justify-center gap-3 text-red-500 font-bold hover:bg-red-50 rounded-2xl transition-all"
             >
-              <div className="size-10 rounded-xl text-red-500 bg-red-50 flex items-center justify-center group-hover:bg-red-100 transition-all shadow-sm">
-                <LogOut size={20} />
-              </div>
-              <span className="font-bold text-red-500 flex-1 text-left">退出登录</span>
+              <LogOut size={20} /> 退出登录
             </button>
           </div>
         </div>
       </main>
 
       {/* Modals */}
-      <motion.div
-        className={cn(
-          "fixed inset-0 bg-black/60 z-[100] flex items-end justify-center pointer-events-none transition-opacity",
-          (showAvatarModal || showEditModal || showPersonaModal || showNotifications) ? "opacity-100 pointer-events-auto" : "opacity-0"
-        )}
-      >
-        <AnimatePresence>
-          {showNotifications && (
+      <AnimatePresence>
+        {showNotifications && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              className="bg-white w-full rounded-t-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px] flex flex-col max-h-[85vh]"
+              className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px] flex flex-col max-h-[85vh]"
             >
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center justify-between mb-8 text-left">
                 <h3 className="text-2xl font-bold">消息通知</h3>
-                <button onClick={() => setShowNotifications(false)} className="size-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
+                <button onClick={() => {
+                  setShowNotifications(false);
+                  localStorage.setItem(`read_notifs_old_${user.id}`, localStorage.getItem(`read_notifs_${user.id}`) || "[]");
+                }} className="size-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
                   <X size={20} />
                 </button>
               </div>
@@ -436,29 +501,40 @@ export const ProfilePage: React.FC = () => {
                 {notifications.length === 0 ? (
                   <div className="text-center py-10 text-slate-400 font-bold">暂无新通知</div>
                 ) : (
-                  notifications.map((n, i) => (
-                    <div key={i} className="p-4 bg-slate-50 rounded-2xl flex gap-3 shadow-sm border border-slate-100">
-                      <img src={n.authorAvatar || `https://picsum.photos/seed/${n.authorName}/100/100`} className="size-10 border-2 border-white rounded-full shadow-sm shrink-0" alt="" />
-                      <div>
-                        <p className="text-sm font-bold text-slate-800">
-                          <span className="text-[#eab308]">{n.authorName}</span> 在 <span className="underline decoration-slate-200">{n.eventId ? "你的大事记" : "你的记忆档案"}</span> 里给你留言了！
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1 italic truncate">"{n.content}"</p>
-                        <p className="text-[10px] text-slate-400 mt-2 font-black">{new Date(n.createdAt).toLocaleString()}</p>
+                  notifications.map((n, i) => {
+                    const isUnread = !JSON.parse(localStorage.getItem(`read_notifs_old_${user.id}`) || "[]").includes(n.id);
+                    return (
+                      <div key={i} className={cn("p-4 rounded-[2rem] flex gap-4 border border-slate-100/50 transition-colors", isUnread ? "bg-orange-50" : "bg-slate-50")}>
+                        <div className="relative shrink-0">
+                          <img src={n.sender_avatar || n.authorAvatar || `https://picsum.photos/seed/${n.sender_name || n.authorName}/100/100`} className="size-12 rounded-full object-cover border-2 border-white shadow-sm" alt="" />
+                          {n.type === "like" && (
+                            <div className="absolute -bottom-1 -right-1 size-5 bg-red-500 rounded-full border-2 border-white flex items-center justify-center text-[10px] text-white">❤️</div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-slate-800">
+                            <span className="text-[#eab308]">{n.sender_name || n.authorName}</span>
+                            {n.type === "like" ? ` 赞了你的${n.event_id ? '大事记' : '记忆档案'}留言！` : " 在你的档案里留言了！"}
+                          </p>
+                          {n.content && n.type !== "like" && <p className="text-xs text-slate-400 mt-1 italic truncate">“{n.content}”</p>}
+                          <p className="text-[10px] text-slate-300 mt-2 font-bold uppercase tracking-tighter">{getRelativeTime(n.created_at || n.createdAt)}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    )
+                  })
                 )}
               </div>
             </motion.div>
-          )}
+          </div>
+        )}
 
-          {showAvatarModal && (
+        {showAvatarModal && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              className="bg-white w-full rounded-t-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px]"
+              className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px]"
             >
               <h3 className="text-2xl font-bold mb-8 text-center">更换我的头像</h3>
               <div className="space-y-8">
@@ -469,13 +545,13 @@ export const ProfilePage: React.FC = () => {
                       onClick={() => { handleAvatarChange(url); setShowAvatarModal(false); }}
                       className={cn(
                         "aspect-square rounded-2xl border-2 overflow-hidden hover:border-[#eab308] transition-all",
-                        user.avatar === url ? "border-[#eab308] scale-95" : "border-slate-50"
+                        user.avatar === url ? "border-[#eab308] scale-95 shadow-lg shadow-[#eab308]/20" : "border-slate-50"
                       )}
                     >
                       <img src={url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     </button>
                   ))}
-                  <label className="aspect-square rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-1 text-slate-400 cursor-pointer hover:bg-slate-50">
+                  <label className="aspect-square rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-1 text-slate-400 cursor-pointer hover:bg-slate-50 transition-colors">
                     <Camera size={20} />
                     <span className="text-[10px] font-bold">上传</span>
                     <input type="file" className="hidden" accept="image/*" onChange={(e) => {
@@ -491,16 +567,18 @@ export const ProfilePage: React.FC = () => {
                 <button onClick={() => setShowAvatarModal(false)} className="w-full py-5 bg-slate-100 rounded-3xl font-bold text-slate-500 active:scale-95 transition-transform">取消</button>
               </div>
             </motion.div>
-          )}
+          </div>
+        )}
 
-          {showEditModal && (
+        {showEditModal && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              className="bg-white w-full rounded-t-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px] flex flex-col max-h-[85vh]"
+              className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px] flex flex-col max-h-[85vh]"
             >
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center justify-between mb-8 text-left">
                 <h3 className="text-2xl font-bold">编辑个人资料</h3>
                 <button onClick={() => setShowEditModal(false)} className="size-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
                   <X size={20} />
@@ -508,17 +586,15 @@ export const ProfilePage: React.FC = () => {
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-6 no-scrollbar pb-4 text-left">
-                <div className="space-y-2 text-left">
+                <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-400 ml-4">我的姓名</label>
                   <input
                     type="text"
                     value={editForm.name}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                     className="w-full h-16 px-6 rounded-2xl bg-slate-50 border-none font-bold text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
-                    placeholder="请输入姓名"
                   />
                 </div>
-
                 <div className="space-y-2 text-left">
                   <label className="text-xs font-bold text-slate-400 ml-4">我的生日</label>
                   <input
@@ -528,7 +604,6 @@ export const ProfilePage: React.FC = () => {
                     className="w-full h-16 px-6 rounded-2xl bg-slate-50 border-none font-bold text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
                   />
                 </div>
-
                 <div className="space-y-2 text-left">
                   <label className="text-xs font-bold text-slate-400 ml-4">我的个性签名</label>
                   <textarea
@@ -540,59 +615,62 @@ export const ProfilePage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-slate-50 space-y-3">
+              <div className="pt-6 space-y-3">
                 <button onClick={handleEditSave} className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-xl shadow-[#eab308]/20 active:scale-[0.98] transition-all">
-                  保存所有修改
-                </button>
-                <button onClick={() => setShowEditModal(false)} className="w-full py-5 bg-slate-50 text-slate-400 rounded-3xl font-bold">
-                  取消
+                  保存修改
                 </button>
               </div>
             </motion.div>
-          )}
-          {showPersonaModal && (
+          </div>
+        )}
+
+        {showPersonaModal && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              className="bg-white w-full rounded-t-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px]"
+              className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px]"
             >
               <h3 className="text-2xl font-bold mb-8 text-center">切换演示角色</h3>
-              <div className="space-y-4">
-                {testPersonas.map((persona, i) => (
+              <div className="space-y-4 max-h-[60vh] overflow-y-auto no-scrollbar pb-2">
+                {DEMO_PERSONAS.map((persona, i) => (
                   <button
                     key={i}
                     onClick={() => handleSwitchPersona(persona)}
                     className={cn(
-                      "w-full p-4 flex items-center gap-4 rounded-2xl border-2 transition-all active:scale-[0.98]",
+                      "w-full p-4 flex items-center gap-4 rounded-3xl border-2 transition-all active:scale-[0.98]",
                       user.id === persona.memberId ? "border-[#eab308] bg-[#eab308]/5" : "border-slate-50 hover:bg-slate-50"
                     )}
                   >
-                    <img src={persona.avatar} alt={persona.name} className="size-12 rounded-full object-cover" />
-                    <div className="text-left flex-1">
-                      <div className="font-bold text-slate-800">{persona.name}</div>
-                      <div className="text-xs text-slate-400">当前角色：{persona.relationship}</div>
+                    <img src={persona.avatar} alt={persona.name} className="size-12 rounded-full object-cover shadow-sm" />
+                    <div className="text-left flex-1 min-w-0">
+                      <div className="font-bold text-slate-800 truncate">{persona.name}</div>
+                      <div className="text-xs text-slate-400">关系：{persona.relationship}</div>
                     </div>
                     {user.id === persona.memberId && <div className="size-2 rounded-full bg-[#eab308]" />}
                   </button>
                 ))}
-                <button
-                  onClick={() => setShowPersonaModal(false)}
-                  className="w-full py-5 bg-slate-100 rounded-3xl font-bold text-slate-500 mt-4"
-                >
-                  取消
-                </button>
               </div>
+              <button
+                onClick={() => setShowPersonaModal(false)}
+                className="w-full py-5 bg-slate-100 rounded-3xl font-bold text-slate-500 mt-6 active:scale-95 transition-transform"
+              >
+                取消
+              </button>
             </motion.div>
-          )}
-          {showInviteModal && (
+          </div>
+        )}
+
+        {showInviteModal && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              className="bg-white w-full rounded-t-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px] flex flex-col max-h-[90vh]"
+              className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px] flex flex-col max-h-[90vh]"
             >
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center justify-between mb-8 text-left">
                 <h3 className="text-2xl font-bold">加入家族</h3>
                 <button onClick={() => { setShowInviteModal(false); setInviteData(null); }} className="size-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
                   <X size={20} />
@@ -600,15 +678,15 @@ export const ProfilePage: React.FC = () => {
               </div>
 
               {!inviteData ? (
-                <div className="space-y-6">
+                <div className="space-y-6 text-left">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 ml-4">请输入邀请码</label>
+                    <label className="text-xs font-bold text-slate-400 ml-4">邀请码</label>
                     <input
                       type="text"
                       value={inviteCodeInput}
                       onChange={(e) => { setInviteCodeInput(e.target.value); setInviteError(""); }}
                       className={cn(
-                        "w-full h-16 px-6 rounded-2xl bg-slate-50 border-none font-black text-xl text-[#eab308] focus:ring-2 focus:ring-[#eab308]/20 transition-all",
+                        "w-full h-16 px-6 rounded-2xl bg-slate-50 border-none font-black text-xl text-[#eab308] placeholder:text-slate-200 focus:ring-2 focus:ring-[#eab308]/20 transition-all",
                         inviteError && "ring-2 ring-red-400"
                       )}
                       placeholder="例如: INV-1002-1003"
@@ -618,23 +696,16 @@ export const ProfilePage: React.FC = () => {
                   <button
                     onClick={handleValidateInvite}
                     disabled={isValidatingInvite || !inviteCodeInput}
-                    className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-xl shadow-[#eab308]/20 disabled:opacity-50"
+                    className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-xl shadow-[#eab308]/20 disabled:opacity-50 active:scale-[0.98] transition-all"
                   >
                     {isValidatingInvite ? "验证中..." : "验证邀请码"}
                   </button>
                 </div>
               ) : (
-                <div className="space-y-8 overflow-y-auto no-scrollbar pb-2">
-                  <div className="text-center space-y-4">
-                    <div className="w-16 h-16 bg-[#eab308]/10 rounded-full flex items-center justify-center mx-auto text-[#eab308]">
-                      <Plus size={32} />
-                    </div>
-                    <p className="text-slate-500 leading-relaxed">
-                      <span className="font-bold text-slate-800">{inviteData.inviterName}</span> 邀请您加入家族。<br />
-                      请问您是 <span className="font-bold text-slate-800">{inviteData.inviterName}</span> 的谁？
-                    </p>
-                  </div>
-
+                <div className="space-y-8 overflow-y-auto no-scrollbar pb-2 text-left">
+                  <p className="text-slate-500 leading-relaxed px-4 text-center">
+                    <span className="font-bold text-slate-800">{inviteData.inviterName}</span> 邀请您加入家族。请问您是他的？
+                  </p>
                   <div className="grid grid-cols-2 gap-3">
                     {relationships.map((rel) => (
                       <button
@@ -651,22 +722,19 @@ export const ProfilePage: React.FC = () => {
                       </button>
                     ))}
                   </div>
-
                   <button
                     onClick={handleAcceptInvite}
                     disabled={!selectedRel}
-                    className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-xl shadow-[#eab308]/20 disabled:opacity-50 mt-4"
+                    className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-xl shadow-[#eab308]/20 disabled:opacity-50 mt-4 active:scale-[0.98] transition-all"
                   >
-                    确认加入并同步关系
+                    确认加入
                   </button>
                 </div>
               )}
             </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+          </div>
+        )}
 
-      <AnimatePresence>
         {showCropper && tempImage && (
           <ImageCropper
             image={tempImage}
