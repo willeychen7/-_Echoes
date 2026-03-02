@@ -288,8 +288,8 @@ export const AddEventPage: React.FC = () => {
                   </div>
 
                   {isSelected && (
-                    <div className="absolute -top-2 -right-2 bg-[#eab308] text-white p-1.5 rounded-full shadow-xl z-30 ring-4 ring-white">
-                      <CheckCircle size={22} fill="currentColor" />
+                    <div className="absolute top-1 right-1 bg-white text-[#eab308] p-0.5 rounded-full shadow-lg z-30 ring-2 ring-[#eab308]">
+                      <CheckCircle size={16} fill="currentColor" className="text-white" />
                     </div>
                   )}
 
@@ -446,19 +446,37 @@ export const AddEventPage: React.FC = () => {
               </button>
             </div>
 
-            <div className="relative flex-1 flex items-center justify-end gap-2 pr-2">
-              <input
-                type="date"
-                id="event-date-input"
-                className="w-full h-10 bg-transparent text-lg font-bold text-right outline-none text-black cursor-pointer"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
-              <Calendar
-                size={20}
-                className="text-[#eab308] cursor-pointer"
-                onClick={() => (document.getElementById('event-date-input') as any)?.showPicker?.()}
-              />
+            <div className="relative flex-1 flex items-center justify-end gap-3 pr-2">
+              <button
+                onClick={() => {
+                  const now = new Date();
+                  setDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
+                }}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-black transition-all",
+                  date === new Date().toISOString().split('T')[0]
+                    ? "bg-[#eab308] text-black shadow-sm"
+                    : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                )}
+              >
+                今日
+              </button>
+              <div className="relative flex items-center">
+                <input
+                  type="date"
+                  id="event-date-input"
+                  className="absolute inset-0 opacity-0 cursor-pointer z-20"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                />
+                <Calendar
+                  size={24}
+                  className="text-[#eab308] cursor-pointer relative z-10"
+                />
+                <span className="ml-2 text-lg font-bold text-slate-700 pointer-events-none">
+                  {date ? (date.split('-').slice(1).join('/') || '选择日期') : '选择日期'}
+                </span>
+              </div>
             </div>
           </div>
           {calendarType === "lunar" && (
