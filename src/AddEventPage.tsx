@@ -421,8 +421,9 @@ export const AddEventPage: React.FC = () => {
             <h2 className="text-lg font-bold">设定日期</h2>
           </div>
 
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center gap-4">
-            <div className="flex bg-slate-100 p-1 rounded-xl relative w-32 shrink-0">
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+            {/* Row 1: 公历/农历 toggle */}
+            <div className="flex bg-slate-100 p-1 rounded-xl relative w-28 shrink-0">
               <motion.div
                 className="absolute top-1 bottom-1 bg-white rounded-lg shadow-sm z-0"
                 initial={false}
@@ -446,15 +447,24 @@ export const AddEventPage: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex-1 flex items-center gap-2 min-w-0">
+            {/* Row 2: Date input first, then Today + Calendar icon — compact row, no overflow */}
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                id="event-date-input"
+                className="flex-1 h-10 bg-slate-50 rounded-xl px-3 text-sm font-bold outline-none text-slate-700 border border-slate-100 focus:border-[#eab308]/50 transition-all min-w-0"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
               <button
+                type="button"
                 onClick={(e) => {
                   e.preventDefault();
                   const now = new Date();
                   setDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
                 }}
                 className={cn(
-                  "px-3 py-2 rounded-xl text-xs font-black transition-all shrink-0",
+                  "h-10 px-3 rounded-xl text-xs font-black transition-all shrink-0 whitespace-nowrap",
                   date === new Date().toISOString().split('T')[0]
                     ? "bg-[#eab308] text-black shadow-sm"
                     : "bg-slate-100 text-slate-500 hover:bg-slate-200"
@@ -462,23 +472,13 @@ export const AddEventPage: React.FC = () => {
               >
                 今日
               </button>
-
-              <div className="relative flex-1 flex items-center bg-slate-50 rounded-xl px-3 border border-slate-100 group focus-within:border-[#eab308]/50 focus-within:bg-white transition-all">
-                <input
-                  type="date"
-                  id="event-date-input"
-                  className="flex-1 h-10 bg-transparent text-sm font-bold outline-none text-slate-700 min-w-0"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => (document.getElementById('event-date-input') as any)?.showPicker?.()}
-                  className="p-1 hover:bg-white rounded-lg transition-colors"
-                >
-                  <Calendar size={18} className="text-[#eab308]" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => (document.getElementById('event-date-input') as HTMLInputElement)?.showPicker?.()}
+                className="size-10 flex items-center justify-center rounded-xl bg-[#eab308]/10 hover:bg-[#eab308]/20 transition-colors shrink-0"
+              >
+                <Calendar size={18} className="text-[#eab308]" />
+              </button>
             </div>
           </div>
           {calendarType === "lunar" && (
@@ -553,6 +553,6 @@ export const AddEventPage: React.FC = () => {
         </div>
       </main>
 
-    </div>
+    </div >
   );
 };
