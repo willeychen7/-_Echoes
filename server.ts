@@ -66,6 +66,21 @@ export async function createApp() {
   });
 
   // API Routes
+  app.get("/api/ping", async (req, res) => {
+    res.json({
+      status: "ok",
+      time: new Date().toISOString(),
+      env: {
+        hasSupabaseUrl: !!process.env.VITE_SUPABASE_URL,
+        hasSupabaseKey: !!process.env.VITE_SUPABASE_ANON_KEY,
+        hasResendKey: !!process.env.RESEND_API_KEY,
+        nodeEnv: process.env.NODE_ENV,
+        isVercel: !!process.env.VERCEL
+      },
+      supabaseInitialized: !!supabase
+    });
+  });
+
   app.post("/api/generate-blessing-summary", async (req, res) => {
     try {
       const { messages, eventTitle } = req.body;
@@ -614,6 +629,7 @@ export async function createApp() {
 
   // Generic registration (creating new family)
   app.post("/api/register-new", async (req, res) => {
+    if (!supabase) return res.status(500).json({ error: "服务器初始化失败：数据库未连接" });
     console.log("[REGISTER-NEW] Start registration for:", req.body.phone);
     try {
       const { name, phone, password, avatar } = req.body;
@@ -668,6 +684,7 @@ export async function createApp() {
 
   // Secure Login Endpoint
   app.post("/api/login", async (req, res) => {
+    if (!supabase) return res.status(500).json({ error: "服务器初始化失败：数据库未连接" });
     try {
       const { phone, password } = req.body;
       if (!phone || !password) return res.status(400).json({ error: "Missing phone or password" });
