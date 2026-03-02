@@ -49,6 +49,21 @@ export function updateAvatarCache(memberId: number | string, avatarUrl: string) 
 }
 
 /**
+ * 批量写入所有家庭成员头像（仅触发一次刷新事件）。
+ * 在 BlessingPage / ArchivePage 拉取成员列表时调用，
+ * 确保任何成员改头像后，所有历史留言都显示最新头像。
+ */
+export function seedAvatarCache(entries: Record<string, string>) {
+    try {
+        const current = JSON.parse(localStorage.getItem(AVATAR_CACHE_KEY) || "{}");
+        const merged = { ...current, ...entries };
+        localStorage.setItem(AVATAR_CACHE_KEY, JSON.stringify(merged));
+        // NOTE: 只触发一次事件，避免多次重渲染
+        window.dispatchEvent(new CustomEvent(AVATAR_EVENT));
+    } catch { }
+}
+
+/**
  * 工具函数：从消息中解析出最新头像
  * 优先级：缓存(memberId) > 消息里存的 avatar > picsum 占位
  */

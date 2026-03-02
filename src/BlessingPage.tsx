@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "motion/react";
 import confetti from "canvas-confetti";
 import { FamilyEvent, Message, MessageType } from "./types";
 import { cn, getRelativeTime } from "./lib/utils";
-import { useAvatarCache, resolveAvatar } from "./lib/useAvatarCache";
+import { useAvatarCache, resolveAvatar, seedAvatarCache } from "./lib/useAvatarCache";
 import { isDemoMode } from "./demo-data";
 
 const PUNCT_END = /[。！？….,!?]$/;
@@ -72,16 +72,20 @@ export const BlessingPage: React.FC = () => {
           setEvent(found);
         }
       }).catch(console.error);
-      // NOTE: 同时拉取家庭成员最新头像，建立名字->URL映射
+      // NOTE: 同时拉取家庭成员最新头像，建立双重索引：memberId + 姓名
       fetch(`/api/family-members?familyId=${familyId}`).then(r => r.json()).then(members => {
         if (Array.isArray(members)) {
-          const map: Record<string, string> = {};
+          const nameMap: Record<string, string> = {};
+          const idMap: Record<string, string> = {};
           members.forEach((m: any) => {
-            if (m.name && (m.avatar_url || m.avatarUrl)) {
-              map[m.name] = m.avatar_url || m.avatarUrl;
-            }
+            const url = m.avatar_url || m.avatarUrl;
+            if (m.name && url) nameMap[m.name] = url;
+            // NOTE: seed 全局缓存（memberId -> url），所有人当前头像都写入
+            if (m.id && url) idMap[String(m.id)] = url;
           });
-          setMemberAvatarMap(map);
+          setMemberAvatarMap(nameMap);
+          // NOTE: 批量更新缓存，触发所有页面重渲染最新头像
+          if (Object.keys(idMap).length > 0) seedAvatarCache(idMap);
         }
       }).catch(console.error);
       fetch(`/api/messages?eventId=${eventId}`).then(res => res.json()).then(data => {

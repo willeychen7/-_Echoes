@@ -6,7 +6,7 @@ import { FamilyMember, Message, MessageType } from "./types";
 import { Button } from "./components/Button";
 import { Card } from "./components/Card";
 import { getRelativeTime, cn } from "./lib/utils";
-import { useAvatarCache, resolveAvatar } from "./lib/useAvatarCache";
+import { useAvatarCache, resolveAvatar, seedAvatarCache } from "./lib/useAvatarCache";
 import { getRelativeRelationship } from "./lib/relationships";
 import confetti from "canvas-confetti";
 import { DEMO_MEMBERS, isDemoMode } from "./demo-data";
@@ -145,6 +145,20 @@ export const ArchivePage: React.FC = () => {
             if (res.ok) {
               const data = await res.json();
               setMember(data);
+            }
+            // NOTE: 拉取全部家庭成员并更新头像缓存，这样当其他人改过头像时历史留言也会实时同步
+            const familyId = parsed?.familyId;
+            if (familyId) {
+              fetch(`/api/family-members?familyId=${familyId}`).then(r => r.json()).then(members => {
+                if (Array.isArray(members)) {
+                  const idMap: Record<string, string> = {};
+                  members.forEach((m: any) => {
+                    const url = m.avatar_url || m.avatarUrl;
+                    if (m.id && url) idMap[String(m.id)] = url;
+                  });
+                  if (Object.keys(idMap).length > 0) seedAvatarCache(idMap);
+                }
+              }).catch(console.error);
             }
           }
 
