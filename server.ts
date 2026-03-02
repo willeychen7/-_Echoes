@@ -511,7 +511,7 @@ export async function createApp() {
       if (!inviter || !target) return res.status(404).json({ error: "Invitation record not found" });
 
       // 2. Resolve Relationship
-      async function resolveRigorousRel(role: string, inviter: any, targetId: number) {
+      const resolveRigorousRel = async (role: string, inviter: any, targetId: number) => {
         let updateData: any = { id: targetId };
         let invUpdate: any = { id: inviter.id };
 
@@ -595,7 +595,7 @@ export async function createApp() {
         }
 
         return { updateData, invUpdate };
-      }
+      };
 
       const { updateData, invUpdate } = await resolveRigorousRel(standardRole, inviter, target.id);
 
