@@ -938,25 +938,43 @@ export async function createApp() {
 
     app.post("/api/events", async (req, res) => {
       const { family_id, title, date, type, description, isRecurring, memberId, customMemberName, location, notes } = req.body;
-      const { data, error } = await supabase
+      const memberIds = req.body.memberIds || [];
+
+      // NOTE: 先尝试含 member_ids 的插入，如失败则降级（兼容旧数据库结构）
+      const insertPayload: any = {
+        family_id,
+        title,
+        date,
+        type,
+        description,
+        is_recurring: !!isRecurring,
+        member_id: memberId,
+        member_ids: memberIds,
+        custom_member_name: customMemberName,
+        location: location || "",
+        notes: notes || ""
+      };
+
+      let { data, error } = await (supabase as any)
         .from("events")
-        .insert({
-          family_id,
-          title,
-          date,
-          type,
-          description,
-          is_recurring: !!isRecurring,
-          member_id: memberId,
-          member_ids: req.body.memberIds || [], // Accept plural memberIds
-          custom_member_name: customMemberName,
-          location: location || "",
-          notes: notes || ""
-        })
+        .insert(insertPayload)
         .select()
         .single();
 
-      if (error) return res.status(500).json({ error: error.message });
+      // 如果 member_ids 列不存在，降级重试（不带 member_ids）
+      if (error && (error.message?.includes("member_ids") || error.code === "PGRST204" || error.code === "42703")) {
+        console.warn("[EVENTS] member_ids column may not exist, retrying without it:", error.message);
+        const fallbackPayload = { ...insertPayload };
+        delete fallbackPayload.member_ids;
+        const result = await (supabase as any).from("events").insert(fallbackPayload).select().single();
+        data = result.data;
+        error = result.error;
+      }
+
+      if (error) {
+        console.error("[EVENTS] Insert error:", error.message, JSON.stringify(error));
+        return res.status(500).json({ error: error.message });
+      }
       res.json({ id: data.id });
     });
 
