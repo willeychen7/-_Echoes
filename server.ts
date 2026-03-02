@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import { Resend } from "resend";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // NOTE: 密码哈希的 salt 轮数，12 是生产级别的安全默认值
 const BCRYPT_SALT_ROUNDS = 12;
@@ -89,17 +89,19 @@ export async function createApp() {
         const { messages, eventTitle } = req.body;
         const apiKey = process.env.VITE_GEMINI_API_KEY;
         if (!apiKey) return res.status(500).json({ error: "Missing API Key" });
-        const ai = new GoogleGenAI({ apiKey });
+
+        const ai = new GoogleGenerativeAI(apiKey);
+        const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+
         const messageContext = (messages || []).map((m: any) => `${m.authorName} (${m.authorRole}): ${m.content}`).join("\n");
         const prompt = `你是家族记忆整理师。请根据以下家人在${eventTitle}时的祝福：\n${messageContext}\n\n写一段温馨的家族总结。要求语言温暖、细腻。字数300字左右。`;
-        const result = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: [{ role: "user", parts: [{ text: prompt }] }]
-        });
-        res.json({ text: result.text });
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        res.json({ text: response.text() });
       } catch (err: any) {
         console.error("[GEMINI] Error:", err.message);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: "AI生成失败: " + err.message });
       }
     });
 
