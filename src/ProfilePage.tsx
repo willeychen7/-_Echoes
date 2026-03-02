@@ -407,23 +407,12 @@ export const ProfilePage: React.FC = () => {
             setShowEditModal(true);
           }
         },
-        ...(user.isRegistered ? [
-          hasJoinedFamily
-            ? {
-              icon: CheckCircle, label: "已加入家族", color: "text-emerald-500 bg-emerald-50", action: () => {
-                // 如果是已经加入家族了，允许用户点开看看，但不直接重新进入加入流程
-                // 这里如果用户还是创始人（即 familyId 没有指向外部家族），可以在 logic 里放宽
-                setShowInviteModal(true);
-              }
-            }
-            : { icon: Gift, label: "接受家族邀请码", color: "text-rose-500 bg-rose-50", action: () => setShowInviteModal(true) }
-        ] : []),
-        ...(hasJoinedFamily ? [{
-          icon: LogOut,
-          label: "退出家族",
-          color: "text-red-500 bg-red-50",
-          action: () => setShowLeaveConfirm(true)
-        }] : []),
+        {
+          icon: hasJoinedFamily ? CheckCircle : Gift,
+          label: hasJoinedFamily ? "家族管理" : "接受家族邀请",
+          color: hasJoinedFamily ? "text-emerald-500 bg-emerald-50" : "text-rose-500 bg-rose-50",
+          action: () => setShowInviteModal(true)
+        },
         ...(isDemoMode(user) ? [{ icon: Users, label: "切换测试用户", color: "text-indigo-500 bg-indigo-50", action: () => setShowPersonaModal(true) }] : []),
         {
           icon: Bell,
@@ -818,13 +807,29 @@ export const ProfilePage: React.FC = () => {
               className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px] flex flex-col max-h-[90vh]"
             >
               <div className="flex items-center justify-between mb-8 text-left">
-                <h3 className="text-2xl font-bold">加入家族</h3>
+                <h3 className="text-2xl font-bold">{hasJoinedFamily ? "家族管理" : "加入家族"}</h3>
                 <button onClick={() => { setShowInviteModal(false); setInviteData(null); }} className="size-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
                   <X size={20} />
                 </button>
               </div>
 
-              {!inviteData ? (
+              {hasJoinedFamily ? (
+                <div className="space-y-8 text-center pb-4">
+                  <div className="size-24 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-sm">
+                    <CheckCircle size={48} />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-2xl font-black text-slate-800">已加入家族</p>
+                    <p className="text-sm text-slate-400 font-bold px-6">您当前已关联家族身份，如需加入其他家族，请先退出当前账号的家谱绑定。</p>
+                  </div>
+                  <button
+                    onClick={() => { setShowInviteModal(false); setShowLeaveConfirm(true); }}
+                    className="w-full py-5 bg-red-50 text-red-500 rounded-3xl font-black shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
+                  >
+                    <LogOut size={20} /> 退出当前家族
+                  </button>
+                </div>
+              ) : !inviteData ? (
                 <div className="space-y-6 text-left">
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-400 ml-4">邀请码</label>
