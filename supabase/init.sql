@@ -47,6 +47,7 @@ CREATE TABLE users (
     family_id INTEGER REFERENCES families(id) ON DELETE SET NULL,
     member_id INTEGER,
     relationship TEXT,
+    avatar_url TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
