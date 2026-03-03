@@ -1613,10 +1613,11 @@ export async function createApp() {
           if (u) userId = u.id;
         }
 
-        if (!userId) return res.status(400).json({ error: "用户信息不同步，请尝试退出登录并重新登录后重试。" });
+        // 2. Fetch family context
+        const { data: userData } = await supabase.from("users").select("family_id").eq("id", userId).maybeSingle();
+        const familyToCleanup = userData?.family_id;
 
-        // 1. Get current user data to notify family before leaving? 
-        // Or just clear the link.
+        // 3. Clear user's family links
         const { error: uError } = await supabase
           .from("users")
           .update({
@@ -1628,19 +1629,36 @@ export async function createApp() {
 
         if (uError) throw uError;
 
-        // 2. If it was a registered member, mark as unregistered but KEEP the user_id link for persistence
+        // 4. Update member record to mark as unregistered but keep ownership for persistence
         if (memberId) {
           await supabase
             .from("family_members")
             .update({
               is_registered: false,
               invite_code: null,
-              user_id: userId // ENSURE persistent ownership is locked on leave
+              user_id: userId
             })
             .eq("id", memberId);
         }
 
-        res.json({ success: true, message: "已成功退出家族。" });
+        // 5. AUTO-CLEANUP: If family only had this user, delete the whole family
+        if (familyToCleanup) {
+          const { data: others } = await supabase
+            .from("family_members")
+            .select("id")
+            .eq("family_id", familyToCleanup)
+            .neq("user_id", userId); // Check for anyone else owning a record
+
+          if (!others || others.length === 0) {
+            console.log(`[CLEANUP] Deleting orphaned family ${familyToCleanup}`);
+            await supabase.from("memories").delete().eq("member_id", memberId);
+            await supabase.from("messages").delete().eq("family_member_id", memberId);
+            await supabase.from("family_members").delete().eq("family_id", familyToCleanup);
+            await supabase.from("families").delete().eq("id", familyToCleanup);
+          }
+        }
+
+        res.json({ success: true, message: "已成功退出家族并清理了空档案。" });
       } catch (err: any) {
         console.error("[API] Leave family error:", err.message);
         res.status(500).json({ error: err.message });
