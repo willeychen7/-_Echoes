@@ -302,7 +302,7 @@ export async function createApp() {
         if (targetUserId) {
           const { data: userData } = await supabase
             .from("users")
-            .select("id, name, avatar_url, bio, birth_date, gender")
+            .select("id, name")
             .eq("id", targetUserId)
             .maybeSingle();
 
@@ -310,10 +310,6 @@ export async function createApp() {
             member = {
               ...member,
               name: userData.name || member.name,
-              avatarUrl: userData.avatar_url || member.avatarUrl,
-              bio: userData.bio || member.bio,
-              birthDate: userData.birth_date || member.birthDate,
-              gender: userData.gender || member.gender,
               userId: userData.id
             };
           }
@@ -336,15 +332,11 @@ export async function createApp() {
         }
 
         // 2. Perform the binding and sync latest profile data
-        const { data: user } = await supabase.from("users").select("*").eq("id", userId).single();
+        const { data: user } = await supabase.from("users").select("id, name").eq("id", userId).single();
         if (user) {
           await supabase.from("family_members").update({
             user_id: userId,
-            avatar_url: user.avatar_url,
-            name: user.name || "家人",
-            bio: user.bio,
-            birth_date: user.birth_date,
-            gender: user.gender
+            name: user.name || "家人"
           }).eq("id", memberId);
 
           return res.json({ success: true });
@@ -1666,6 +1658,32 @@ export async function createApp() {
       }
     });
 
+    app.post("/api/users/claim-orphan", async (req, res) => {
+      try {
+        const { userId, name } = req.body;
+        if (!userId || !name) return res.status(400).json({ error: "Missing userId or name" });
+
+        // Try to find an UNCLAIMED member with EXACTLY the same name
+        const { data: member, error } = await supabase
+          .from("family_members")
+          .select("id, family_id")
+          .eq("name", name)
+          .is("user_id", null)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!member) return res.json({ success: false, message: "No orphan found" });
+
+        // Bind them
+        await supabase.from("users").update({ member_id: member.id, family_id: member.family_id }).eq("id", userId);
+        await supabase.from("family_members").update({ user_id: userId, is_registered: true }).eq("id", member.id);
+
+        res.json({ success: true, memberId: member.id });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     app.get("/api/users/sync", async (req, res) => {
       try {
         const { phone } = req.query;
@@ -1682,14 +1700,12 @@ export async function createApp() {
       try {
         const { userId, name, bio, birthDate, avatarUrl, gender } = req.body;
         if (!userId) return res.status(400).json({ error: "Missing userId" });
+
+        // Only update 'name' in users table (other fields like avatar_url might not exist yet)
         const { error } = await supabase.from("users").update({
-          name,
-          bio,
-          birth_date: birthDate,
-          avatar_url: avatarUrl,
-          gender
+          name
         }).eq("id", userId);
-        if (error) throw error;
+        if (error) console.warn("User name update warning (ignorable if partial):", error.message);
 
         // SYNC: Also update ALL family_member records that belong to this user
         await supabase.from("family_members").update({
@@ -1710,7 +1726,7 @@ export async function createApp() {
       try {
         const { data, error } = await supabase
           .from("users")
-          .select("id, name, phone_or_email, family_id, member_id, avatar_url, bio, birth_date, gender, created_at")
+          .select("id, name, phone_or_email, family_id, member_id, created_at")
           .eq("id", req.params.id)
           .single();
 
