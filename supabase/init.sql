@@ -35,6 +35,7 @@ END $$;
 CREATE TABLE families (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
+    creator_id INTEGER, -- Later linked to users(id)
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -47,6 +48,7 @@ CREATE TABLE users (
     family_id INTEGER REFERENCES families(id) ON DELETE SET NULL,
     member_id INTEGER,
     relationship TEXT,
+    avatar_url TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -54,6 +56,7 @@ CREATE TABLE users (
 CREATE TABLE family_members (
     id SERIAL PRIMARY KEY,
     family_id INTEGER REFERENCES families(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, -- LINK TO AUTH USER
     name TEXT NOT NULL,
     relationship TEXT,
     avatar_url TEXT,
