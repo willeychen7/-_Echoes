@@ -48,7 +48,8 @@ export const ProfilePage: React.FC = () => {
     const cachedStats = parsed?.stats || { memories: 0, likes: 0, days: 1 };
 
     return {
-      id: parsed?.memberId || null,
+      id: parsed?.id || parsed?.userId || null, // Global UUID
+      memberId: parsed?.memberId || null,        // Family INT ID
       name: parsed?.name || "家人",
       role: parsed?.relationship || "我",
       avatar: parsed?.avatar || parsed?.avatarUrl || DEFAULT_AVATAR,
@@ -232,12 +233,12 @@ export const ProfilePage: React.FC = () => {
     }
 
     // NOTE: 更新全局头像缓存，触发所有订阅组件立刻重渲染
-    if (user.id) {
-      updateAvatarCache(user.id, url);
+    if (user.memberId) {
+      updateAvatarCache(user.memberId, url);
     }
 
-    if (user.id) {
-      await fetch(`/api/family-members/${user.id}`, {
+    if (user.memberId) {
+      await fetch(`/api/family-members/${user.memberId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -289,8 +290,8 @@ export const ProfilePage: React.FC = () => {
       }));
     }
 
-    if (user.id) {
-      await fetch(`/api/family-members/${user.id}`, {
+    if (user.memberId) {
+      await fetch(`/api/family-members/${user.memberId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -609,7 +610,7 @@ export const ProfilePage: React.FC = () => {
                 <h3 className="text-2xl font-bold">消息通知</h3>
                 <button onClick={() => {
                   setShowNotifications(false);
-                  localStorage.setItem(`read_notifs_old_${user.id}`, localStorage.getItem(`read_notifs_${user.id}`) || "[]");
+                  localStorage.setItem(`read_notifs_old_${user.memberId}`, localStorage.getItem(`read_notifs_${user.memberId}`) || "[]");
                 }} className="size-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
                   <X size={20} />
                 </button>
@@ -620,7 +621,7 @@ export const ProfilePage: React.FC = () => {
                   <div className="text-center py-10 text-slate-400 font-bold">暂无新通知</div>
                 ) : (
                   notifications.map((n, i) => {
-                    const isUnread = !JSON.parse(localStorage.getItem(`read_notifs_old_${user.id}`) || "[]").includes(n.id);
+                    const isUnread = !JSON.parse(localStorage.getItem(`read_notifs_old_${user.memberId}`) || "[]").includes(n.id);
                     // NOTE: 优先使用后端存储的 link_url 精准跳转，降级到广场
                     const handleNotifClick = () => {
                       setShowNotifications(false);
@@ -772,7 +773,7 @@ export const ProfilePage: React.FC = () => {
                     onClick={() => handleSwitchPersona(persona)}
                     className={cn(
                       "w-full p-4 flex items-center gap-4 rounded-3xl border-2 transition-all active:scale-[0.98]",
-                      user.id === persona.memberId ? "border-[#eab308] bg-[#eab308]/5" : "border-slate-50 hover:bg-slate-50"
+                      user.memberId === persona.memberId ? "border-[#eab308] bg-[#eab308]/5" : "border-slate-50 hover:bg-slate-50"
                     )}
                   >
                     <img src={persona.avatar} alt={persona.name} className="size-12 rounded-full object-cover shadow-sm" />
@@ -780,7 +781,7 @@ export const ProfilePage: React.FC = () => {
                       <div className="font-bold text-slate-800 truncate">{persona.name}</div>
                       <div className="text-xs text-slate-400">关系：{persona.relationship}</div>
                     </div>
-                    {user.id === persona.memberId && <div className="size-2 rounded-full bg-[#eab308]" />}
+                    {user.memberId === persona.memberId && <div className="size-2 rounded-full bg-[#eab308]" />}
                   </button>
                 ))}
               </div>

@@ -46,15 +46,20 @@ export async function createApp() {
     (async () => {
       try {
         if (supabase) {
+          // Add profile fields to users table
           await supabase.rpc('exec_sql', {
             sql_query: `
             ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date DATE;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT;
-          ` }).catch((err) => {
-              console.log("Migration RPC check:", err.message);
-            });
+          ` }).catch(err => console.log("Users Migration check:", err.message));
+
+          // Add user_id to family_members for persistent identity
+          await supabase.rpc('exec_sql', {
+            sql_query: `
+            ALTER TABLE family_members ADD COLUMN IF NOT EXISTS user_id INTEGER;
+          ` }).catch(err => console.log("Members Migration check:", err.message));
         }
       } catch (e) {
         console.warn("Migration error:", e);
@@ -286,12 +291,19 @@ export async function createApp() {
           standardRole: data.standard_role
         };
 
-        // NEW: If registered, try to fetch the latest profile from users table for persistence
-        if (data.is_registered) {
+        // NEW: Persistence logic. Try to find the user profile associated with this archive.
+        // We check 3 things: 1. the explicit user_id on the record, or 2. anyone currently registered with this member_id.
+        let targetUserId = data.user_id;
+        if (!targetUserId && data.is_registered) {
+          const { data: linkMatch } = await supabase.from("users").select("id").eq("member_id", data.id).maybeSingle();
+          if (linkMatch) targetUserId = linkMatch.id;
+        }
+
+        if (targetUserId) {
           const { data: userData } = await supabase
             .from("users")
             .select("id, name, avatar_url, bio, birth_date, gender")
-            .eq("member_id", data.id)
+            .eq("id", targetUserId)
             .maybeSingle();
 
           if (userData) {
@@ -684,9 +696,14 @@ export async function createApp() {
           family_id: inviter.family_id,
           member_id: data.id,
           avatar_url: avatarUrl // New Column
-        }).select("id").single();
+        }).select().single();
 
         if (userError) throw userError;
+
+        // NEW: Persistence link
+        if (userData) {
+          await supabase.from("family_members").update({ user_id: userData.id }).eq("id", data.id);
+        }
 
         // 6. Sync profile changes (especially avatar/name from registration) to past content
         await syncMemberContent(data.id, name, target.name, avatarUrl, "我");
@@ -831,13 +848,14 @@ export async function createApp() {
         // 5. Update the User record and sync profile back to the new family member
         const { data: userData } = await supabase.from("users").select("*").eq("phone_or_email", phone).single();
         if (userData) {
-          // Sync global profile to the member record
+          // Sync global profile AND persistent link to the member record
           await supabase.from("family_members").update({
             name: userData.name || target.name,
             avatar_url: (userData as any).avatar_url || target.avatar_url,
             bio: (userData as any).bio || target.bio,
             birth_date: (userData as any).birth_date || target.birth_date,
-            gender: (userData as any).gender || target.gender
+            gender: (userData as any).gender || target.gender,
+            user_id: userData.id // PERSISTENT LINK
           }).eq("id", target.id);
 
           await supabase.from("users").update({
