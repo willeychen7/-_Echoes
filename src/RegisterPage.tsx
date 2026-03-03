@@ -202,7 +202,7 @@ export const RegisterPage: React.FC = () => {
           return;
         }
         const data = await response.json();
-        currentFamilyId = data.familyId || 1;
+        currentFamilyId = data.familyId || null;
         currentMemberId = data.memberId;
         currentUserId = data.userId;
       } else {

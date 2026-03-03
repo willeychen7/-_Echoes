@@ -231,7 +231,7 @@ export const ArchivePage: React.FC = () => {
       origin: { y: 0.6 }
     });
 
-    const familyId = currentUser?.familyId || 1;
+    const familyId = currentUser?.familyId || null;
 
     // --- 核心隐私与持久化逻辑：媒体上传 ---
     const uploadFile = async (dataUrl: string, folder: string, ext: string) => {

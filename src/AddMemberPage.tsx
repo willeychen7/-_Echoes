@@ -52,7 +52,7 @@ export const AddMemberPage: React.FC = () => {
 
     const savedUser = localStorage.getItem("currentUser");
     const currentUser = savedUser ? JSON.parse(savedUser) : null;
-    const familyId = currentUser?.familyId || 1;
+    const familyId = currentUser?.familyId || null;
     const createdByMemberId = currentUser?.memberId;
 
     const finalRelationship = relationship === "其他" ? customRelationship : relationship;

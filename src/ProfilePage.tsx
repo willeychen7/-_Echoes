@@ -55,7 +55,7 @@ export const ProfilePage: React.FC = () => {
       role: parsed?.relationship || "我",
       avatar: getSafeAvatar(parsed?.avatar || parsed?.avatarUrl),
       joinDate: parsed?.joinDate || new Date().toISOString(),
-      familyId: parsed?.familyId || 1,
+      familyId: parsed?.familyId || null,
       bio: parsed?.bio || parsed?.signature || "热爱生活，记录美好。",
       birthday: parsed?.birthday || parsed?.birthDate || "",
       gender: parsed?.gender || "男",
@@ -138,8 +138,20 @@ export const ProfilePage: React.FC = () => {
 
       const remoteBio = freshUser?.bio || freshProfile?.bio || finalUserData.bio || "热爱生活，记录美好。";
       const remoteBirthday = freshUser?.birth_date || freshProfile?.birth_date || freshProfile?.birthDate || finalUserData.birthday;
+      const remoteMemberId = freshUser?.member_id || freshProfile?.id || currentUserInfo.memberId;
+      const remoteFamilyId = freshUser?.family_id || freshProfile?.family_id || currentUserInfo.familyId;
 
       let hasChanges = false;
+
+      // AUTO-CORRECT: If remote IDs are different (e.g. after a leave family), sync them immediately
+      if (remoteMemberId && remoteMemberId !== currentUserInfo.memberId) {
+        finalUserData.memberId = remoteMemberId;
+        hasChanges = true;
+      }
+      if (remoteFamilyId && remoteFamilyId !== currentUserInfo.familyId) {
+        finalUserData.familyId = remoteFamilyId;
+        hasChanges = true;
+      }
 
       // 核心安全策略：后台轮询(isInitial=false) 绝对不更新个人资料字段，只更新统计数据
       // 同时，如果本地刚刚修改过资料（2分钟内），即使是初始加载也忽略远程旧数据覆盖

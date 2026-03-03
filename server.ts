@@ -1645,20 +1645,53 @@ export async function createApp() {
         if (familyToCleanup) {
           const { data: others } = await supabase
             .from("family_members")
-            .select("id")
+            .select("id, user_id")
             .eq("family_id", familyToCleanup)
-            .neq("user_id", userId); // Check for anyone else owning a record
+            .neq("user_id", userId);
 
+          // Check for anyone else owning a record or registered in this family
           if (!others || others.length === 0) {
             console.log(`[CLEANUP] Deleting orphaned family ${familyToCleanup}`);
             await supabase.from("memories").delete().eq("member_id", memberId);
             await supabase.from("messages").delete().eq("family_member_id", memberId);
-            await supabase.from("family_members").delete().eq("family_id", familyToCleanup);
+            await supabase.from("family_members").delete().eq("id", memberId);
             await supabase.from("families").delete().eq("id", familyToCleanup);
           }
         }
 
-        res.json({ success: true, message: "已成功退出家族并清理了空档案。" });
+        // 6. ENFORCE PERSONAL HUB: If the user now has NO family_id in users table, they need back to their own.
+        // Or if they just left, find if they have ANY other membership.
+        const { data: currentAuth } = await supabase.from("users").select("name, family_id, member_id").eq("id", userId).single();
+        if (!currentAuth.family_id) {
+          // Find their own-named family or create one
+          let { data: myOwn } = await supabase.from("family_members").select("id, family_id").eq("name", currentAuth.name).is("is_registered", true).limit(1).maybeSingle();
+
+          if (!myOwn) {
+            const { data: newF } = await supabase.from("families").insert({ name: `${currentAuth.name}的个人空间` }).select().single();
+            const { data: newM } = await supabase.from("family_members").insert({
+              family_id: newF.id,
+              name: currentAuth.name,
+              relationship: "我",
+              is_registered: true,
+              standard_role: "creator"
+            }).select().single();
+            myOwn = { id: newM.id, family_id: newF.id };
+          }
+
+          await supabase.from("users").update({
+            family_id: myOwn.family_id,
+            member_id: myOwn.id
+          }).eq("id", userId);
+
+          return res.json({
+            success: true,
+            message: "已成功退出家族。由于您当前没有其他家族，系统已为您恢复个人档案空间。",
+            newFamilyId: myOwn.family_id,
+            newMemberId: myOwn.id
+          });
+        }
+
+        res.json({ success: true, message: "已成功退出家族。" });
       } catch (err: any) {
         console.error("[API] Leave family error:", err.message);
         res.status(500).json({ error: err.message });
