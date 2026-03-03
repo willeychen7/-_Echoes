@@ -1610,7 +1610,7 @@ export async function createApp() {
 
     app.post("/api/leave-family", async (req, res) => {
       try {
-        let { userId, memberId } = req.body;
+        let { userId, memberId, familyId } = req.body;
 
         // Enhanced: Resolve userId from memberId if missing (backward compatibility)
         if (!userId && memberId) {
@@ -1618,11 +1618,7 @@ export async function createApp() {
           if (u) userId = u.id;
         }
 
-        // 2. Fetch family context
-        const { data: userData } = await supabase.from("users").select("family_id").eq("id", userId).maybeSingle();
-        const familyToCleanup = userData?.family_id;
-
-        // 3. Clear user's family links
+        // 2. Clear user's family links
         const { error: uError } = await supabase
           .from("users")
           .update({
@@ -1634,76 +1630,94 @@ export async function createApp() {
 
         if (uError) throw uError;
 
-        // 4. Update member record to mark as unregistered but keep ownership for persistence
-        if (memberId) {
-          await supabase
-            .from("family_members")
-            .update({
-              is_registered: false,
-              invite_code: null,
-              user_id: userId
-            })
-            .eq("id", memberId);
-        }
+        // 4. OWNERSHIP SUCCESSION & CLEANUP DECISION
+        let familyToCleanup: any = null;
+        const { data: familyObj } = await supabase.from("families").select("creator_id").eq("id", familyId).maybeSingle();
 
-        // 5. AUTO-CLEANUP: If family only had this user, delete the whole family
-        if (familyToCleanup) {
-          const { data: others } = await supabase
+        // If leaving user is the creator
+        if (familyObj && familyObj.creator_id === userId) {
+          // Find successor: earliest joined registered member
+          const { data: successor } = await supabase
             .from("family_members")
             .select("id, user_id")
-            .eq("family_id", familyToCleanup)
-            .neq("user_id", userId);
-
-          // Check for anyone else owning a record or registered in this family
-          if (!others || others.length === 0) {
-            console.log(`[CLEANUP] Deleting orphaned family ${familyToCleanup}`);
-            await supabase.from("memories").delete().eq("member_id", memberId);
-            await supabase.from("messages").delete().eq("family_member_id", memberId);
-            await supabase.from("family_members").delete().eq("id", memberId);
-            await supabase.from("families").delete().eq("id", familyToCleanup);
-          }
-        }
-
-        // 6. ENFORCE PERSONAL HUB: If the user now has NO family_id, they return to their personal Archive.
-        const { data: currentAuth } = await supabase.from("users").select("name, family_id").eq("id", userId).single();
-
-        if (!currentAuth.family_id) {
-          // Find if they ALREADY have a creator-role record in some family (their private one)
-          const { data: existingHub } = await supabase
-            .from("family_members")
-            .select("id, family_id")
-            .eq("name", currentAuth.name)
+            .eq("family_id", familyId)
+            .neq("user_id", userId)
             .is("is_registered", true)
-            .eq("standard_role", "creator")
+            .order("created_at", { ascending: true })
             .limit(1)
             .maybeSingle();
 
-          let myOwn = existingHub;
+          if (successor) {
+            console.log(`[SUCCESSION] Transferring Family ${familyId} to new creator ${successor.user_id}`);
+            await supabase.from("families").update({ creator_id: successor.user_id }).eq("id", familyId);
+            await supabase.from("family_members").update({ standard_role: "creator" }).eq("id", successor.id);
+          } else {
+            console.log(`[SUCCESSION] No survivor for Family ${familyId}. Marking for death.`);
+            familyToCleanup = familyId;
+          }
+        } else {
+          // If not creator, check if they were the literal last member
+          const { count } = await supabase
+            .from("family_members")
+            .select("id", { count: 'exact', head: true })
+            .eq("family_id", familyId)
+            .neq("user_id", userId);
+          if (!count || count === 0) familyToCleanup = familyId;
+        }
 
-          if (!myOwn) {
-            // Create the undeletable personal archive for this user
-            const { data: newF } = await supabase.from("families").insert({ name: `${currentAuth.name}的个人空间` }).select().single();
-            const { data: newM } = await supabase.from("family_members").insert({
-              family_id: newF.id,
-              name: currentAuth.name,
+        // 5. PHYSICAL CLEANUP (Only if no survivors)
+        if (familyToCleanup) {
+          console.log(`[CLEANUP] Purging empty family ${familyToCleanup}`);
+          await supabase.from("memories").delete().eq("member_id", memberId);
+          await supabase.from("messages").delete().eq("family_member_id", memberId);
+          await supabase.from("family_members").delete().eq("id", memberId);
+          await supabase.from("families").delete().eq("id", familyToCleanup);
+        } else if (memberId) {
+          // Just unregister the departing member
+          await supabase.from("family_members").update({
+            is_registered: false,
+            invite_code: null,
+            user_id: null
+          }).eq("id", memberId);
+        }
+
+        // 6. ENFORCE PERSONAL HUD (Home Base)
+        const { data: authUser } = await supabase.from("users").select("name, family_id").eq("id", userId).single();
+        if (!authUser.family_id) {
+          let { data: myArchive } = await supabase.from("family_members")
+            .select("id, family_id")
+            .eq("name", authUser.name)
+            .is("is_registered", true)
+            .eq("standard_role", "creator")
+            .limit(1).maybeSingle();
+
+          if (!myArchive) {
+            const { data: nF } = await supabase.from("families").insert({
+              name: `${authUser.name}的个人空间`,
+              creator_id: userId
+            }).select().single();
+            const { data: nM } = await supabase.from("family_members").insert({
+              family_id: nF.id,
+              name: authUser.name,
               relationship: "我",
               is_registered: true,
-              standard_role: "creator"
+              standard_role: "creator",
+              user_id: userId
             }).select().single();
-            myOwn = { id: newM.id, family_id: newF.id };
+            myArchive = { id: nM.id, family_id: nF.id };
           }
 
           await supabase.from("users").update({
-            family_id: myOwn.family_id,
-            member_id: myOwn.id,
+            family_id: myArchive.family_id,
+            member_id: myArchive.id,
             relationship: "我"
           }).eq("id", userId);
 
           return res.json({
             success: true,
             message: "已成功退出家族。您已回到个人的记忆档案空间。",
-            newFamilyId: myOwn.family_id,
-            newMemberId: myOwn.id
+            newFamilyId: myArchive.family_id,
+            newMemberId: myArchive.id
           });
         }
 

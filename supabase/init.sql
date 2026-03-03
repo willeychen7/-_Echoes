@@ -35,7 +35,6 @@ END $$;
 CREATE TABLE families (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
-    creator_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -48,7 +47,6 @@ CREATE TABLE users (
     family_id INTEGER REFERENCES families(id) ON DELETE SET NULL,
     member_id INTEGER,
     relationship TEXT,
-    avatar_url TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
