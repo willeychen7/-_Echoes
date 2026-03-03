@@ -41,6 +41,7 @@ export const ProfilePage: React.FC = () => {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [showLeaveDoubleConfirm, setShowLeaveDoubleConfirm] = useState(false);
+  const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
 
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem("currentUser");
@@ -592,7 +593,7 @@ export const ProfilePage: React.FC = () => {
           <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#eab308]/10 to-transparent pointer-events-none" />
 
           <div className="relative z-10 mb-4 flex flex-col items-center">
-            <div className="group cursor-pointer relative" onClick={() => setShowAvatarModal(true)}>
+            <div className="group cursor-pointer relative" onClick={() => { setPendingAvatar(user.avatar); setShowAvatarModal(true); }}>
               <div className="size-28 rounded-full border-4 border-white shadow-lg overflow-hidden relative">
                 <img src={user.avatar} alt={user.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" referrerPolicy="no-referrer" />
                 <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -752,16 +753,29 @@ export const ProfilePage: React.FC = () => {
               exit={{ y: "100%" }}
               className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px]"
             >
-              <h3 className="text-2xl font-bold mb-8 text-center">更换我的头像</h3>
+              <h3 className="text-2xl font-bold mb-6 text-center">更换我的头像</h3>
+
+              <div className="flex justify-center mb-8">
+                <div className="size-32 rounded-full border-4 border-[#eab308]/20 shadow-inner overflow-hidden relative bg-slate-50">
+                  <img
+                    src={pendingAvatar || user.avatar}
+                    className="w-full h-full object-cover"
+                    key={pendingAvatar}
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 border-[6px] border-white/50 rounded-full pointer-events-none" />
+                </div>
+              </div>
+
               <div className="space-y-8">
                 <div className="grid grid-cols-4 gap-4">
                   {defaultAvatars.map((url, i) => (
                     <button
                       key={i}
-                      onClick={() => { handleAvatarChange(url); setShowAvatarModal(false); }}
+                      onClick={() => setPendingAvatar(url)}
                       className={cn(
                         "aspect-square rounded-2xl border-2 overflow-hidden hover:border-[#eab308] transition-all",
-                        user.avatar === url ? "border-[#eab308] scale-95 shadow-lg shadow-[#eab308]/20" : "border-slate-50"
+                        (pendingAvatar || user.avatar) === url ? "border-[#eab308] scale-95 shadow-lg shadow-[#eab308]/20" : "border-slate-50"
                       )}
                     >
                       <img src={url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
@@ -780,7 +794,21 @@ export const ProfilePage: React.FC = () => {
                     }} />
                   </label>
                 </div>
-                <button onClick={() => setShowAvatarModal(false)} className="w-full py-5 bg-slate-100 rounded-3xl font-bold text-slate-500 active:scale-95 transition-transform">取消</button>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={() => {
+                      if (pendingAvatar) {
+                        handleAvatarChange(pendingAvatar);
+                        setShowAvatarModal(false);
+                      }
+                    }}
+                    className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-xl shadow-[#eab308]/20 active:scale-[0.98] transition-all"
+                  >
+                    确认更换
+                  </button>
+                  <button onClick={() => setShowAvatarModal(false)} className="w-full py-5 bg-slate-100 rounded-3xl font-bold text-slate-500 active:scale-95 transition-transform">取消</button>
+                </div>
               </div>
             </motion.div>
           </div>
@@ -1036,10 +1064,10 @@ export const ProfilePage: React.FC = () => {
           <ImageCropper
             image={tempImage}
             onCropComplete={(croppedImage) => {
-              handleAvatarChange(croppedImage);
+              setPendingAvatar(croppedImage);
               setShowCropper(false);
               setTempImage(null);
-              setShowAvatarModal(false);
+              // We stay in the modal so they can see preview and hit confirm
             }}
             onClose={() => {
               setShowCropper(false);
