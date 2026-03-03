@@ -263,6 +263,7 @@ export async function createApp() {
       // Map snake_case to camelCase for frontend compatibility if needed
       const members = (data || []).map(m => ({
         ...m,
+        userId: m.user_id, // CRITICAL: Map database user_id to frontend userId
         isRegistered: m.is_registered,
         inviteCode: m.invite_code,
         avatarUrl: m.avatar_url,
@@ -282,22 +283,21 @@ export async function createApp() {
 
         if (error) return res.status(500).json({ error: error.message });
 
+        let targetUserId = data.user_id;
+        if (!targetUserId && data.is_registered) {
+          const { data: linkMatch } = await supabase.from("users").select("id").eq("member_id", data.id).maybeSingle();
+          if (linkMatch) targetUserId = linkMatch.id;
+        }
+
         let member = {
           ...data,
+          userId: targetUserId,
           isRegistered: data.is_registered,
           inviteCode: data.invite_code,
           avatarUrl: data.avatar_url,
           birthDate: data.birth_date,
           standardRole: data.standard_role
         };
-
-        // NEW: Persistence logic. Try to find the user profile associated with this archive.
-        // We check 3 things: 1. the explicit user_id on the record, or 2. anyone currently registered with this member_id.
-        let targetUserId = data.user_id;
-        if (!targetUserId && data.is_registered) {
-          const { data: linkMatch } = await supabase.from("users").select("id").eq("member_id", data.id).maybeSingle();
-          if (linkMatch) targetUserId = linkMatch.id;
-        }
 
         if (targetUserId) {
           const { data: userData } = await supabase

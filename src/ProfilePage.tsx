@@ -245,6 +245,20 @@ export const ProfilePage: React.FC = () => {
             window.dispatchEvent(new Event('sync-user'));
 
             fetchStatsAndNotifications();
+
+            // NEW: Push current local profile to the newly claimed member immediately
+            fetch("/api/users/sync-profile", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: parsed.id,
+                name: parsed.name,
+                bio: parsed.bio || "",
+                birthDate: parsed.birthday || "",
+                avatarUrl: parsed.avatar || "",
+                gender: parsed.gender || "男"
+              })
+            });
           }
         });
     }
