@@ -324,6 +324,37 @@ export async function createApp() {
       }
     });
 
+    app.post("/api/users/bind-member", async (req, res) => {
+      try {
+        const { userId, memberId } = req.body;
+        if (!userId || !memberId) return res.status(400).json({ error: "Missing IDs" });
+
+        // 1. Verify if this member record is already claimed by someone else
+        const { data: member } = await supabase.from("family_members").select("user_id").eq("id", memberId).single();
+        if (member && member.user_id && member.user_id != userId) {
+          return res.status(403).json({ error: "档案已被其他账户绑定" });
+        }
+
+        // 2. Perform the binding and sync latest profile data
+        const { data: user } = await supabase.from("users").select("*").eq("id", userId).single();
+        if (user) {
+          await supabase.from("family_members").update({
+            user_id: userId,
+            avatar_url: user.avatar_url,
+            name: user.name || "家人",
+            bio: user.bio,
+            birth_date: user.birth_date,
+            gender: user.gender
+          }).eq("id", memberId);
+
+          return res.json({ success: true });
+        }
+        res.status(404).json({ error: "Account not found" });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     app.put("/api/family-members/:id", async (req, res) => {
       const { name, relationship, avatarUrl, bio, birthDate } = req.body;
 
@@ -1622,8 +1653,8 @@ export async function createApp() {
             .from("family_members")
             .update({
               is_registered: false,
-              invite_code: null, // Reset invite code to allow reuse or regeneration
-              user_id: userId    // ENSURE persistent ownership
+              invite_code: null,
+              user_id: userId // ENSURE persistent ownership is locked on leave
             })
             .eq("id", memberId);
         }
@@ -1690,43 +1721,7 @@ export async function createApp() {
       }
     });
 
-    app.post("/api/users/claim-orphan", async (req, res) => {
-      try {
-        const { userId, name } = req.body;
-        if (!userId || !name) return res.status(400).json({ error: "Missing identity info" });
 
-        // 查找同名且没有被占用的、非注册的档案
-        const { data: orphans } = await supabase
-          .from("family_members")
-          .select("*")
-          .eq("name", name)
-          .eq("is_registered", false)
-          .is("user_id", null);
-
-        if (orphans && orphans.length > 0) {
-          // 如果只有一个匹配，自动认领；如果有多个，保守起见认领第一个创建的
-          const target = orphans[0];
-
-          // 获取当前用户信息来同步
-          const { data: user } = await supabase.from("users").select("*").eq("id", userId).single();
-
-          if (user) {
-            await supabase.from("family_members").update({
-              user_id: userId,
-              avatar_url: user.avatar_url,
-              bio: user.bio,
-              birth_date: user.birth_date,
-              gender: user.gender
-            }).eq("id", target.id);
-
-            return res.json({ success: true, memberId: target.id });
-          }
-        }
-        res.json({ success: false });
-      } catch (err: any) {
-        res.status(500).json({ error: err.message });
-      }
-    });
 
     app.put("/api/notifications/:id/read", async (req, res) => {
       try {
