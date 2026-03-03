@@ -50,7 +50,7 @@ export const ProfilePage: React.FC = () => {
     return {
       id: parsed?.memberId || null,
       name: parsed?.name || "家人",
-      role: parsed?.relationship || "本人",
+      role: parsed?.relationship || "我",
       avatar: parsed?.avatar || parsed?.avatarUrl || DEFAULT_AVATAR,
       joinDate: parsed?.joinDate || new Date().toISOString(),
       familyId: parsed?.familyId || 1,
@@ -392,7 +392,8 @@ export const ProfilePage: React.FC = () => {
       });
 
       if (!res.ok) {
-        throw new Error("退出操作失败");
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "退出操作失败");
       }
 
       // 清理本地存储中关于家族身份的信息
@@ -422,7 +423,7 @@ export const ProfilePage: React.FC = () => {
     user.familyId !== 0 &&
     user.id &&
     user.role !== "创建者" &&
-    user.role !== "本人";
+    user.role !== "我";
 
   const handleSwitchPersona = (persona: any) => {
     localStorage.setItem("currentUser", JSON.stringify(persona));

@@ -1507,8 +1507,15 @@ export async function createApp() {
 
     app.post("/api/leave-family", async (req, res) => {
       try {
-        const { userId, memberId } = req.body;
-        if (!userId) return res.status(400).json({ error: "Missing userId" });
+        let { userId, memberId } = req.body;
+
+        // Enhanced: Resolve userId from memberId if missing (backward compatibility)
+        if (!userId && memberId) {
+          const { data: u } = await supabase.from("users").select("id").eq("member_id", memberId).maybeSingle();
+          if (u) userId = u.id;
+        }
+
+        if (!userId) return res.status(400).json({ error: "用户信息不同步，请尝试退出登录并重新登录后重试。" });
 
         // 1. Get current user data to notify family before leaving? 
         // Or just clear the link.
