@@ -236,8 +236,14 @@ export const ProfilePage: React.FC = () => {
         .then(data => {
           if (data.success && data.memberId) {
             const latest = JSON.parse(localStorage.getItem("currentUser") || "{}");
-            localStorage.setItem("currentUser", JSON.stringify({ ...latest, memberId: data.memberId }));
-            setUser(prev => ({ ...prev, memberId: data.memberId }));
+            const updated = { ...latest, memberId: data.memberId };
+            localStorage.setItem("currentUser", JSON.stringify(updated));
+            setUser(updated);
+
+            // Trigger global sync so other pages (like Archive) know about the new link
+            window.dispatchEvent(new Event('storage'));
+            window.dispatchEvent(new Event('sync-user'));
+
             fetchStatsAndNotifications();
           }
         });

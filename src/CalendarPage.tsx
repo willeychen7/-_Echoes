@@ -305,7 +305,11 @@ export const CalendarPage: React.FC = () => {
                             <div className="flex -space-x-4">
                               {linkedMembers.length > 0 ? (
                                 linkedMembers.slice(0, 3).map((m, idx) => {
-                                  const isMee = currentUser && (Number(m.id) == Number(currentUser.memberId) || (m.userId && String(m.userId) === String(currentUser.id)));
+                                  const isMee = currentUser && (
+                                    (m.id && currentUser.memberId && String(m.id) === String(currentUser.memberId)) ||
+                                    (m.userId && currentUser.id && String(m.userId) === String(currentUser.id)) ||
+                                    (m.name === currentUser.name && m.isRegistered)
+                                  );
                                   const mAvatar = isMee ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(m.avatarUrl);
                                   return (
                                     <div key={m.id} className="size-16 rounded-full border-4 border-white shadow-md overflow-hidden shrink-0 bg-slate-50 relative" style={{ zIndex: 10 - idx }}>

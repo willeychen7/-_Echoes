@@ -572,7 +572,8 @@ export const FamilySquare: React.FC = () => {
                       <img
                         src={(currentUser && (
                           (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
-                          (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
+                          (member.userId && currentUser.id && String(member.userId) === String(currentUser.id)) ||
+                          (member.name === currentUser.name && member.isRegistered)
                         )) ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(member.avatarUrl)}
                         alt={member.name}
                         className="w-full h-full object-cover"
@@ -582,7 +583,8 @@ export const FamilySquare: React.FC = () => {
                       {/* “我” 标识 */}
                       {(currentUser && (
                         (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
-                        (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
+                        (member.userId && currentUser.id && String(member.userId) === String(currentUser.id)) ||
+                        (member.name === currentUser.name && member.isRegistered)
                       )) && (
                           <div className="absolute bottom-0 right-0 bg-[#eab308] text-black text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-white shadow-sm z-20">
                             我
@@ -591,7 +593,8 @@ export const FamilySquare: React.FC = () => {
 
                       {member.isRegistered && !(currentUser && (
                         (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
-                        (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
+                        (member.userId && currentUser.id && String(member.userId) === String(currentUser.id)) ||
+                        (member.name === currentUser.name && member.isRegistered)
                       )) && (
                           <div className="absolute bottom-0 right-0 bg-emerald-500 text-white p-1 rounded-full border-2 border-white shadow-sm">
                             <CheckCircle size={14} fill="currentColor" className="text-white" />
