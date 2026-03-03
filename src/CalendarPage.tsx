@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { cn } from "./lib/utils";
 import { DEMO_EVENTS, DEMO_MEMBERS, isDemoMode } from "./demo-data";
 import { InlineBlessingPanel } from "./components/FamilyEvents";
+import { getSafeAvatar } from "./constants";
 
 export const CalendarPage: React.FC = () => {
   const [events, setEvents] = useState<FamilyEvent[]>([]);
@@ -304,8 +305,8 @@ export const CalendarPage: React.FC = () => {
                             <div className="flex -space-x-4">
                               {linkedMembers.length > 0 ? (
                                 linkedMembers.slice(0, 3).map((m, idx) => {
-                                  const isMee = currentUser && m.id == currentUser.memberId;
-                                  const mAvatar = isMee ? currentUser.avatar : m.avatarUrl;
+                                  const isMee = currentUser && (Number(m.id) == Number(currentUser.memberId) || (m.userId && String(m.userId) === String(currentUser.id)));
+                                  const mAvatar = isMee ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(m.avatarUrl);
                                   return (
                                     <div key={m.id} className="size-16 rounded-full border-4 border-white shadow-md overflow-hidden shrink-0 bg-slate-50 relative" style={{ zIndex: 10 - idx }}>
                                       <img src={mAvatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />

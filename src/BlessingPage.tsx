@@ -9,6 +9,7 @@ import { FamilyEvent, Message, MessageType } from "./types";
 import { cn, getRelativeTime } from "./lib/utils";
 import { useAvatarCache, resolveAvatar, updateAvatarCache } from "./lib/useAvatarCache";
 import { isDemoMode } from "./demo-data";
+import { getSafeAvatar } from "./constants";
 
 const PUNCT_END = /[。！？….,!?]$/;
 
@@ -459,6 +460,11 @@ export const BlessingPage: React.FC = () => {
                 }
               };
               const typeInfo = getMsgTypeInfo(msg.type);
+              const isAuthor = currentUser && (
+                (msg.authorId && String(msg.authorId) === String(currentUser.id)) ||
+                (msg.familyMemberId && Number(msg.familyMemberId) === Number(currentUser.memberId)) ||
+                (String(msg.authorName) === String(currentUser.name))
+              );
 
               return (
                 <motion.div
@@ -478,13 +484,13 @@ export const BlessingPage: React.FC = () => {
                     <div className="size-16 rounded-full overflow-hidden border-4 border-white shadow-md">
                       {/* NOTE: 优先用全局缓存(memberId)，其次姓名映射，最后用存储的头像 */}
                       <img
-                        src={resolveAvatar(avatarCache, msg.familyMemberId, memberAvatarMap[msg.authorName] || msg.authorAvatar, msg.authorName || String(i))}
+                        src={isAuthor ? getSafeAvatar(currentUser.avatar) : resolveAvatar(avatarCache, msg.familyMemberId, memberAvatarMap[msg.authorName] || msg.authorAvatar, msg.authorName || String(i))}
                         alt=""
                         className="w-full h-full object-cover"
                       />
                     </div>
                     <span className="px-3 py-1 rounded-full bg-[#eab308]/10 text-[#eab308] text-[10px] font-black">
-                      {msg.authorName === currentUser?.name ? "我" : msg.authorRole}
+                      {isAuthor ? "我" : msg.authorRole}
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">

@@ -891,6 +891,11 @@ export const ArchivePage: React.FC = () => {
                 }
               };
               const typeInfo = getMsgTypeInfo(msg.type);
+              const isAuthor = currentUser && (
+                (msg.authorId && String(msg.authorId) === String(currentUser.id)) ||
+                (msg.familyMemberId && Number(msg.familyMemberId) === Number(currentUser.memberId)) ||
+                (String(msg.authorName) === String(currentUser.name))
+              );
               return (
                 <motion.div
                   key={msg.id}
@@ -902,13 +907,13 @@ export const ArchivePage: React.FC = () => {
                   <div className="flex flex-col items-center gap-3 shrink-0">
                     <div className="size-16 rounded-full overflow-hidden border-4 border-white shadow-md">
                       <img
-                        src={resolveAvatar(avatarCache, msg.authorId, msg.authorAvatar, msg.authorName || String(i))}
+                        src={isAuthor ? getSafeAvatar(currentUser.avatar) : resolveAvatar(avatarCache, msg.authorId, msg.authorAvatar, msg.authorName || String(i))}
                         alt=""
                         className="w-full h-full object-cover"
                       />
                     </div>
                     <span className="px-3 py-1 rounded-full bg-[#eab308]/10 text-[#eab308] text-[10px] font-black">
-                      {msg.authorName === currentUser?.name ? "我" : (msg.familyMemberId === Number(id) && msg.authorName === member?.name ? "原作者" : msg.authorRole)}
+                      {isAuthor ? "我" : (msg.familyMemberId === Number(id) && msg.authorName === member?.name ? "原作者" : msg.authorRole)}
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">

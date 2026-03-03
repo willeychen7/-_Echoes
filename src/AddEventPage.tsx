@@ -8,6 +8,7 @@ import { motion } from "motion/react";
 import { BottomNav } from "./components/BottomNav";
 import { DEMO_MEMBERS, isDemoMode } from "./demo-data";
 import { supabase } from "./lib/supabase";
+import { getSafeAvatar } from "./constants";
 
 export const AddEventPage: React.FC = () => {
   const navigate = useNavigate();
@@ -272,7 +273,7 @@ export const AddEventPage: React.FC = () => {
                     isSelected ? "border-[#eab308] ring-8 ring-[#eab308]/10" : "border-white"
                   )}>
                     <img
-                      src={(currentUser && Number(member.id) === Number(currentUser.memberId)) ? currentUser.avatar : (member.avatarUrl || `https://picsum.photos/seed/${member.id}/100/100`)}
+                      src={(currentUser && (Number(member.id) === Number(currentUser.memberId) || (member.userId && String(member.userId) === String(currentUser.id)))) ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(member.avatarUrl)}
                       alt={member.name}
                       className="w-full h-full object-cover pointer-events-none"
                       referrerPolicy="no-referrer"
