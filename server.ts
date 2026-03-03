@@ -1708,13 +1708,20 @@ export async function createApp() {
         if (error) console.warn("User name update warning (ignorable if partial):", error.message);
 
         // SYNC: Also update ALL family_member records that belong to this user
-        await supabase.from("family_members").update({
+        const { data: syncedMembers } = await supabase.from("family_members").update({
           name,
           bio,
           birth_date: birthDate,
           avatar_url: avatarUrl,
           gender
-        }).eq("user_id", userId);
+        }).eq("user_id", userId).select("id");
+
+        // NEW: Also update content (memories/messages) for all matched identities
+        if (syncedMembers && syncedMembers.length > 0) {
+          for (const m of syncedMembers) {
+            await syncMemberContent(m.id, name, null, avatarUrl, null);
+          }
+        }
 
         res.json({ success: true });
       } catch (err: any) {

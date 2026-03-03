@@ -303,20 +303,17 @@ export const ProfilePage: React.FC = () => {
 
     localStorage.setItem("_profileLastMod", Date.now().toString());
 
-    if (user.memberId) {
-      updateAvatarCache(user.memberId, url);
-    }
-
-    if (user.memberId) {
-      await fetch(`/api/family-members/${user.memberId}`, {
+    if (updatedUser.memberId) {
+      updateAvatarCache(updatedUser.memberId, url);
+      await fetch(`/api/family-members/${updatedUser.memberId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: user.name,
-          relationship: user.role,
+          name: updatedUser.name,
+          relationship: updatedUser.role,
           avatarUrl: url,
-          bio: user.bio,
-          birthDate: user.birthday
+          bio: updatedUser.bio,
+          birthDate: updatedUser.birthday
         })
       });
     }
@@ -330,7 +327,14 @@ export const ProfilePage: React.FC = () => {
         await fetch(`/api/users/sync-profile`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, avatarUrl: url })
+          body: JSON.stringify({
+            userId,
+            avatarUrl: url,
+            name: updatedUser.name,
+            bio: updatedUser.bio || "",
+            birthDate: updatedUser.birthday || "",
+            gender: updatedUser.gender || "男"
+          })
         }).catch(console.error);
       }
     }
@@ -362,15 +366,15 @@ export const ProfilePage: React.FC = () => {
 
     localStorage.setItem("_profileLastMod", Date.now().toString());
 
-    if (user.memberId) {
-      await fetch(`/api/family-members/${user.memberId}`, {
+    if (updatedUser.memberId) {
+      await fetch(`/api/family-members/${updatedUser.memberId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: editForm.name,
-          avatarUrl: user.avatar,
-          bio: editForm.bio,
-          birthDate: editForm.birthday
+          name: updatedUser.name,
+          avatarUrl: updatedUser.avatar,
+          bio: updatedUser.bio,
+          birthDate: updatedUser.birthday
         })
       });
     }
@@ -384,7 +388,14 @@ export const ProfilePage: React.FC = () => {
         await fetch(`/api/users/sync-profile`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, name: editForm.name, bio: editForm.bio, birthDate: editForm.birthday })
+          body: JSON.stringify({
+            userId,
+            name: updatedUser.name,
+            bio: updatedUser.bio,
+            birthDate: updatedUser.birthday,
+            avatarUrl: updatedUser.avatar,
+            gender: updatedUser.gender || "男"
+          })
         }).catch(console.error);
       }
     }
