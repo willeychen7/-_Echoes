@@ -101,72 +101,81 @@ export function deduceRole(relationship: string): string {
  * 基于 fatherId, motherId 和 gender 进行树状遍历
  */
 export function getRigorousRelationship(
-    viewerId: number | undefined,
-    targetId: number | undefined,
+    viewer: any,
+    target: any,
     members: any[]
 ): string {
-    if (!viewerId || !targetId) return "家人";
-    if (viewerId == targetId) return "我";
+    const viewerMemberId = viewer?.memberId || viewer?.id;
+    const viewerUserId = viewer?.id || viewer?.userId; // Assuming viewer is currentUser object
+    const targetMemberId = target?.id;
+    const targetUserId = target?.userId;
 
-    const viewer = members.find(m => m.id === viewerId);
-    const target = members.find(m => m.id === targetId);
+    if (!targetMemberId) return "家人";
 
-    if (!viewer || !target) return "家人";
+    // 0. Identity check (Me)
+    const isMe = (viewerMemberId && targetMemberId && viewerMemberId == targetMemberId) ||
+        (viewerUserId && targetUserId && viewerUserId === targetUserId);
+
+    if (isMe) return "我";
+
+    const vNode = members.find(m => m.id === viewerMemberId);
+    const tNode = members.find(m => m.id === targetMemberId);
+
+    if (!vNode || !tNode) return "家人";
 
     // 1. 直系父子/母子关系
-    if (target.id === viewer.fatherId) return "爸爸";
-    if (target.id === viewer.motherId) return "妈妈";
+    if (tNode.id === vNode.fatherId) return "爸爸";
+    if (tNode.id === vNode.motherId) return "妈妈";
 
     // 2. 直系子女关系
-    if (viewer.id === target.fatherId) return target.gender === "female" ? "女儿" : "儿子";
-    if (viewer.id === target.motherId) return target.gender === "female" ? "女儿" : "儿子";
+    if (vNode.id === tNode.fatherId) return tNode.gender === "female" ? "女儿" : "儿子";
+    if (vNode.id === tNode.motherId) return tNode.gender === "female" ? "女儿" : "儿子";
 
     // 3. 祖孙关系
-    const viewerFather = members.find(m => m.id === viewer.fatherId);
-    const viewerMother = members.find(m => m.id === viewer.motherId);
+    const vFather = members.find(m => m.id === vNode.fatherId);
+    const vMother = members.find(m => m.id === vNode.motherId);
 
-    if (viewerFather) {
-        if (target.id === viewerFather.fatherId) return "爷爷";
-        if (target.id === viewerFather.motherId) return "奶奶";
+    if (vFather) {
+        if (tNode.id === vFather.fatherId) return "爷爷";
+        if (tNode.id === vFather.motherId) return "奶奶";
     }
-    if (viewerMother) {
-        if (target.id === viewerMother.fatherId) return "外公";
-        if (target.id === viewerMother.motherId) return "外婆";
+    if (vMother) {
+        if (tNode.id === vMother.fatherId) return "外公";
+        if (tNode.id === vMother.motherId) return "外婆";
     }
 
     // 4. 孙辈关系
-    const targetFather = members.find(m => m.id === target.fatherId);
-    const targetMother = members.find(m => m.id === target.motherId);
+    const tFather = members.find(m => m.id === tNode.fatherId);
+    const tMother = members.find(m => m.id === tNode.motherId);
 
-    if (targetFather) {
-        if (viewer.id === targetFather.fatherId || viewer.id === targetFather.motherId) {
-            return target.gender === "female" ? "孙女" : "孙子";
+    if (tFather) {
+        if (vNode.id === tFather.fatherId || vNode.id === tFather.motherId) {
+            return tNode.gender === "female" ? "孙女" : "孙子";
         }
     }
-    if (targetMother) {
-        if (viewer.id === targetMother.fatherId || viewer.id === targetMother.motherId) {
-            return target.gender === "female" ? "外孙女" : "外孙子";
+    if (tMother) {
+        if (vNode.id === tMother.fatherId || vNode.id === tMother.motherId) {
+            return tNode.gender === "female" ? "外孙女" : "外孙子";
         }
     }
 
     // 5. 兄弟姐妹关系 (同父或同母)
-    if ((viewer.fatherId && viewer.fatherId === target.fatherId) ||
-        (viewer.motherId && viewer.motherId === target.motherId)) {
-        if (target.gender === "female") return "姐妹";
+    if ((vNode.fatherId && vNode.fatherId === tNode.fatherId) ||
+        (vNode.motherId && vNode.motherId === tNode.motherId)) {
+        if (tNode.gender === "female") return "姐妹";
         return "兄弟";
     }
 
     // 6. 配偶关系
-    // 如果 target 是 viewer 孩子的另一个家长
-    const viewerChildren = members.filter(m => m.fatherId === viewer.id || m.motherId === viewer.id);
-    const isSpouse = viewerChildren.some(child =>
-        (child.fatherId === viewer.id && child.motherId === target.id) ||
-        (child.motherId === viewer.id && child.fatherId === target.id)
+    const vChildren = members.filter(m => m.fatherId === vNode.id || m.motherId === vNode.id);
+    const isSpouse = vChildren.some(child =>
+        (child.fatherId === vNode.id && child.motherId === tNode.id) ||
+        (child.motherId === vNode.id && child.fatherId === tNode.id)
     );
-    if (isSpouse) return target.gender === "female" ? "妻子" : "丈夫";
+    if (isSpouse) return tNode.gender === "female" ? "妻子" : "丈夫";
 
-    // 回退到原始 relationship 字段或 standardRole
-    return target.relationship || STANDARD_ROLE_LABELS[target.standardRole] || "家人";
+    // 回退到原始 relationship 字段
+    return tNode.relationship || "家人";
 }
 
 /**

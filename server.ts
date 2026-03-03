@@ -1641,6 +1641,21 @@ export async function createApp() {
       }
     });
 
+    app.get("/api/users/:id", async (req, res) => {
+      try {
+        const { data, error } = await supabase
+          .from("users")
+          .select("id, name, phone_or_email, family_id, member_id, avatar_url, bio, birth_date, gender, created_at")
+          .eq("id", req.params.id)
+          .single();
+
+        if (error) throw error;
+        res.json(data);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     app.put("/api/notifications/:id/read", async (req, res) => {
       try {
         const { error } = await supabase

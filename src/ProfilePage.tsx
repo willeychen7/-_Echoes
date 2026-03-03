@@ -80,78 +80,80 @@ export const ProfilePage: React.FC = () => {
 
   const fetchStatsAndNotifications = async (currentUserInfo: any) => {
     try {
-      const memberId = currentUserInfo.memberId || currentUserInfo.id;
-      if (!memberId) {
+      const memberId = currentUserInfo.memberId;
+      const userId = currentUserInfo.id || currentUserInfo.userId;
+
+      if (!memberId && !userId) {
         setIsLoading(false);
         return;
       }
 
-      // 核心增强：不仅获取统计，还获取最新的档案详情以确保同步
+      // 1. 并发获取统计、通知和用户/档案详情
       const isDemo = isDemoMode(currentUserInfo);
-      const [notifsRes, statsRes, profileRes] = await Promise.all([
-        fetch(`/api/notifications/${memberId}`),
-        fetch(`/api/stats/${memberId}`),
-        !isDemo ? fetch(`/api/family-members/${memberId}`) : Promise.resolve(null)
+      const [notifsRes, statsRes, profileRes, userRes] = await Promise.all([
+        memberId ? fetch(`/api/notifications/${memberId}`) : Promise.resolve(null),
+        memberId ? fetch(`/api/stats/${memberId}`) : Promise.resolve(null),
+        (memberId && !isDemo) ? fetch(`/api/family-members/${memberId}`) : Promise.resolve(null),
+        (userId && !isDemo) ? fetch(`/api/users/${userId}`) : Promise.resolve(null)
       ]);
 
-      const [notifs, stats, freshProfile] = await Promise.all([
-        notifsRes.json(),
-        statsRes.json(),
-        profileRes ? profileRes.json() : Promise.resolve(null)
+      const [notifs, stats, freshProfile, freshUser] = await Promise.all([
+        notifsRes ? notifsRes.json() : Promise.resolve([]),
+        statsRes ? statsRes.json() : Promise.resolve({ memories: 0, likes: 0 }),
+        profileRes ? profileRes.json() : Promise.resolve(null),
+        userRes ? userRes.json() : Promise.resolve(null)
       ]);
 
       const days = Math.max(1, Math.floor((Date.now() - new Date(currentUserInfo.joinDate || Date.now()).getTime()) / 86400000));
 
-      // 如果有最新的云端档案，同步到本地缓存
+      // 2. 优先级：优先使用 freshUser (全局账号) 的名字和头像，因为这代表用户本人意愿
       let finalUserData = {
         ...currentUserInfo,
         bio: currentUserInfo.bio || currentUserInfo.signature || "热爱生活，记录美好。",
         birthday: currentUserInfo.birthday || currentUserInfo.birthDate || ""
       };
+
+      const remoteName = freshUser?.name || freshProfile?.name || finalUserData.name;
+      const remoteAvatar = freshUser?.avatar_url || freshProfile?.avatar_url || freshProfile?.avatarUrl || finalUserData.avatar;
+      const remoteBio = freshUser?.bio || freshProfile?.bio || finalUserData.bio || "热爱生活，记录美好。";
+      const remoteBirthday = freshUser?.birth_date || freshProfile?.birth_date || freshProfile?.birthDate || finalUserData.birthday;
+
+      let hasChanges = false;
+      if (
+        remoteName !== finalUserData.name ||
+        (remoteAvatar && remoteAvatar !== finalUserData.avatar) ||
+        remoteBio !== (finalUserData.bio || "热爱生活，记录美好。") ||
+        remoteBirthday !== finalUserData.birthday
+      ) {
+        finalUserData = {
+          ...finalUserData,
+          name: remoteName,
+          avatar: remoteAvatar,
+          bio: remoteBio,
+          birthday: remoteBirthday
+        };
+        hasChanges = true;
+      }
+
       const statsObj = {
-        memories: stats.memories || 0,
-        likes: stats.likes || 0,
+        memories: stats?.memories || 0,
+        likes: stats?.likes || 0,
         days
       };
 
-      let hasChanges = false;
-      if (freshProfile && freshProfile.id) {
-        const remoteName = freshProfile.name;
-        const remoteAvatar = freshProfile.avatar_url || freshProfile.avatarUrl;
-        const remoteBio = freshProfile.bio || "热爱生活，记录美好。";
-        const remoteBirthday = freshProfile.birth_date || freshProfile.birthDate;
-
-        if (
-          remoteName !== finalUserData.name ||
-          (remoteAvatar && remoteAvatar !== finalUserData.avatar) ||
-          remoteBio !== (finalUserData.bio || "热爱生活，记录美好。") ||
-          remoteBirthday !== finalUserData.birthday
-        ) {
-          finalUserData = {
-            ...finalUserData,
-            name: remoteName,
-            avatar: remoteAvatar || finalUserData.avatar,
-            bio: remoteBio || finalUserData.bio || "热爱生活，记录美好。",
-            birthday: remoteBirthday || finalUserData.birthday
-          };
-          hasChanges = true;
-        }
-      }
-
-      // 无论 profile 是否变化，都要同步最新的 stats 到缓存
+      // 3. 同步到本地缓存
       localStorage.setItem("currentUser", JSON.stringify({
         ...finalUserData,
         stats: statsObj
       }));
 
       setUser(prevUser => {
-        // 检查统计数据是否有变化
         const statsChanged =
-          prevUser.stats.memories !== (stats.memories || 0) ||
-          prevUser.stats.likes !== (stats.likes || 0) ||
-          prevUser.stats.days !== days;
+          prevUser.stats.memories !== statsObj.memories ||
+          prevUser.stats.likes !== statsObj.likes ||
+          prevUser.stats.days !== statsObj.days;
 
-        if (!hasChanges && !statsChanged && prevUser.id === finalUserData.memberId) {
+        if (!hasChanges && !statsChanged && prevUser.id === finalUserData.memberId && prevUser.avatar === finalUserData.avatar) {
           return prevUser;
         }
 
@@ -159,15 +161,9 @@ export const ProfilePage: React.FC = () => {
           ...prevUser,
           ...finalUserData,
           avatar: (finalUserData.avatar && finalUserData.avatar.length > 20) ? finalUserData.avatar : prevUser.avatar,
-          stats: {
-            memories: stats.memories || 0,
-            likes: stats.likes || 0,
-            days
-          }
+          stats: statsObj
         };
       });
-
-      // Removed setEditForm to prevent the signature input from jumping during background API polling.
 
       setNotifications(Array.isArray(notifs) ? notifs : []);
       const unread = (Array.isArray(notifs) ? notifs : []).filter((n: any) => !n.is_read).length;
@@ -179,6 +175,8 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
+  // Removed setEditForm to prevent the signature input from jumping during background API polling.
+
   useEffect(() => {
     const savedUser = localStorage.getItem("currentUser");
     if (!savedUser) {
@@ -186,7 +184,7 @@ export const ProfilePage: React.FC = () => {
       return;
     }
     const parsed = JSON.parse(savedUser);
-    if (!parsed.memberId) {
+    if (!parsed.memberId && !parsed.id) {
       setIsLoading(false);
       return;
     }

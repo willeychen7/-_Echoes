@@ -617,7 +617,12 @@ export const ArchivePage: React.FC = () => {
             <div className="size-28 rounded-full overflow-hidden border-4 border-white shadow-xl">
               <img src={displayAvatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             </div>
-            {member.isRegistered && (
+            {isMeMember && (
+              <div className="absolute bottom-1 right-1 bg-[#eab308] text-black text-[10px] font-bold px-3 py-1 rounded-full border-2 border-white shadow-sm flex items-center gap-1 z-20">
+                我
+              </div>
+            )}
+            {member.isRegistered && !isMeMember && (
               <div className="absolute bottom-1 right-1 bg-emerald-500 text-white p-1 rounded-full border-2 border-white shadow-sm">
                 <CheckCircle size={16} fill="currentColor" className="text-white" />
               </div>
