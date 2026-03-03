@@ -101,11 +101,12 @@ export const ProfilePage: React.FC = () => {
 
       // 1. 并发获取统计、通知和用户/档案详情
       const isDemo = isDemoMode(currentUserInfo);
+      const cb = `?cb=${Date.now()}`;
       const [notifsRes, statsRes, profileRes, userRes] = await Promise.all([
-        memberId ? fetch(`/api/notifications/${memberId}`) : Promise.resolve(null),
-        memberId ? fetch(`/api/stats/${memberId}`) : Promise.resolve(null),
-        (memberId && !isDemo) ? fetch(`/api/family-members/${memberId}`) : Promise.resolve(null),
-        (userId && !isDemo) ? fetch(`/api/users/${userId}`) : Promise.resolve(null)
+        memberId ? fetch(`/api/notifications/${memberId}${cb}`) : Promise.resolve(null),
+        memberId ? fetch(`/api/stats/${memberId}${cb}`) : Promise.resolve(null),
+        (memberId && !isDemo) ? fetch(`/api/family-members/${memberId}${cb}`) : Promise.resolve(null),
+        (userId && !isDemo) ? fetch(`/api/users/${userId}${cb}`) : Promise.resolve(null)
       ]);
 
       const [notifs, stats, freshProfile, freshUser] = await Promise.all([
@@ -138,20 +139,28 @@ export const ProfilePage: React.FC = () => {
       const remoteBirthday = freshUser?.birth_date || freshProfile?.birth_date || freshProfile?.birthDate || finalUserData.birthday;
 
       let hasChanges = false;
-      if (
-        remoteName !== finalUserData.name ||
-        remoteAvatar !== finalUserData.avatar ||
-        remoteBio !== (finalUserData.bio || "热爱生活，记录美好。") ||
-        remoteBirthday !== finalUserData.birthday
-      ) {
-        finalUserData = {
-          ...finalUserData,
-          name: remoteName,
-          avatar: getSafeAvatar(remoteAvatar),
-          bio: remoteBio,
-          birthday: remoteBirthday
-        };
-        hasChanges = true;
+
+      // 核心安全策略：后台轮询(isInitial=false) 绝对不更新个人资料字段，只更新统计数据
+      // 同时，如果本地刚刚修改过资料（2分钟内），即使是初始加载也忽略远程旧数据覆盖
+      const lastMod = parseInt(localStorage.getItem("_profileLastMod") || "0");
+      const cooldownActive = (Date.now() - lastMod) < 120000; // 2分钟冷却期
+
+      if (isInitial && !cooldownActive) {
+        if (
+          remoteName !== finalUserData.name ||
+          remoteAvatar !== finalUserData.avatar ||
+          remoteBio !== (finalUserData.bio || "热爱生活，记录美好。") ||
+          remoteBirthday !== finalUserData.birthday
+        ) {
+          finalUserData = {
+            ...finalUserData,
+            name: remoteName,
+            avatar: getSafeAvatar(remoteAvatar),
+            bio: remoteBio,
+            birthday: remoteBirthday
+          };
+          hasChanges = true;
+        }
       }
 
       const statsObj = {
@@ -167,8 +176,9 @@ export const ProfilePage: React.FC = () => {
           prevUser.stats.likes !== statsObj.likes ||
           prevUser.stats.days !== statsObj.days;
 
-        // 再次兜底：如果 finalUserData 的头像因为任何原因变短了（比如远程延迟覆盖），在此处锁死
-        const mergedAvatar = (finalUserData.avatar && finalUserData.avatar.length > 20)
+        // 构建合并后的最新数据
+        // 关键防护：如果处于冷却期或非初始探测周期，强制信任本地头像
+        const mergedAvatar = (isInitial && !cooldownActive && finalUserData.avatar && finalUserData.avatar.length > 20)
           ? finalUserData.avatar
           : prevUser.avatar;
 
@@ -271,7 +281,8 @@ export const ProfilePage: React.FC = () => {
       localStorage.setItem("currentUser", JSON.stringify({ ...parsed, avatar: url }));
     }
 
-    // NOTE: 更新全局头像缓存，触发所有订阅组件立刻重渲染
+    localStorage.setItem("_profileLastMod", Date.now().toString());
+
     if (user.memberId) {
       updateAvatarCache(user.memberId, url);
     }
@@ -328,6 +339,8 @@ export const ProfilePage: React.FC = () => {
         avatar: user.avatar
       }));
     }
+
+    localStorage.setItem("_profileLastMod", Date.now().toString());
 
     if (user.memberId) {
       await fetch(`/api/family-members/${user.memberId}`, {
