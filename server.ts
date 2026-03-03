@@ -209,12 +209,27 @@ export async function createApp() {
       if (avatarUrl) memoriesFields.author_avatar = avatarUrl;
       if (relationship) memoriesFields.author_relationship = relationship;
 
-      // 1. Update memories (which have author_id column)
+      // 1. Update memories
       if (Object.keys(memoriesFields).length > 0) {
+        // A. Update by ID (Primary)
         await supabase
           .from("memories")
           .update(memoriesFields)
           .eq("author_id", memberId);
+
+        // B. Update by Name fallback (Crucial for orphaned memories like 'test_profile')
+        await supabase
+          .from("memories")
+          .update(memoriesFields)
+          .eq("author_name", name)
+          .is("author_id", null);
+
+        if (oldName && oldName !== name) {
+          await supabase
+            .from("memories")
+            .update(memoriesFields)
+            .eq("author_name", oldName);
+        }
       }
 
       // 2. Update messages (where family_member_id is author, i.e., events)
@@ -224,27 +239,31 @@ export async function createApp() {
       if (relationship) messageFields.author_role = relationship;
 
       if (Object.keys(messageFields).length > 0) {
+        // A. Update by ID
         await supabase
           .from("messages")
           .update(messageFields)
           .eq("family_member_id", memberId)
           .not("event_id", "is", null);
 
-        // 3. Fallback: Update messages by name (for archive comments where ID is wall ID)
-        if (oldName) {
+        // B. Update by Name (fallback for blessing wall where ID is the archive ID)
+        await supabase
+          .from("messages")
+          .update(messageFields)
+          .eq("author_name", name);
+
+        if (oldName && oldName !== name) {
           await supabase
             .from("messages")
             .update(messageFields)
             .eq("author_name", oldName);
+        }
 
-          // NOTE: Robust check: also try name without spaces (for cases like "王小 宝")
-          const nameNoSpace = oldName.replace(/\s+/g, "");
-          if (nameNoSpace !== oldName) {
-            await supabase
-              .from("messages")
-              .update(messageFields)
-              .eq("author_name", nameNoSpace);
-          }
+        // C. Robust check for space issues
+        const nameNoSpace = name.replace(/\s+/g, "");
+        if (nameNoSpace !== name) {
+          await supabase.from("messages").update(messageFields).eq("author_name", nameNoSpace);
+          await supabase.from("memories").update(memoriesFields).eq("author_name", nameNoSpace);
         }
       }
     }
@@ -1744,8 +1763,24 @@ export async function createApp() {
           gender: gender || undefined
         }).eq("user_id", numericUserId).select("id");
 
-        // EXTRA SYNC: If an explicit memberId is provided, update it specifically
-        // This solves issues for 'test_profile' where user_id link might be null but memberId is known
+        // NEW: BEST-EFFORT SYNC BY NAME (For unlinked accounts like 'test_profile')
+        if ((!syncedMembers || syncedMembers.length === 0) && name) {
+          const { data: matchedByName } = await supabase.from("family_members").update({
+            avatar_url: avatarUrl || undefined,
+            bio: bio || undefined,
+            birth_date: birthDate || undefined,
+            gender: gender || undefined
+          }).eq("name", name).is("user_id", null).select("id");
+
+          if (matchedByName && matchedByName.length > 0) {
+            for (const m of matchedByName) {
+              await syncMemberContent(m.id, name, null, avatarUrl, null);
+            }
+          }
+        }
+
+        // EXTRA FALLBACK: If memberId is explicitly passed, update it specifically
+        // This solves issues for 'test_profile' where user_id might be detached/broken
         if (memberId) {
           await supabase.from("family_members").update({
             name: name || undefined,
