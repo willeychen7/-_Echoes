@@ -698,10 +698,9 @@ export async function createApp() {
           phone_or_email: phone,
           password: hashedPassword,
           name,
-          relationship: "我", // Terminology Fix
+          relationship: "我",
           family_id: inviter.family_id,
-          member_id: data.id,
-          avatar_url: avatarUrl // New Column
+          member_id: data.id
         }).select().single();
 
         if (userError) throw userError;
@@ -921,8 +920,7 @@ export async function createApp() {
           name,
           relationship: "我",
           member_id: member.id,
-          family_id: family.id,
-          avatar_url: avatar || ""
+          family_id: family.id
         }).select("id").single();
 
         if (uError) console.error("User info storage error (non-blocking):", uError.message);
