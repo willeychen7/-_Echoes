@@ -155,22 +155,33 @@ export const RegisterPage: React.FC = () => {
       setInviterName(data.inviterName);
       setInviterRole(data.inviterRole);
       setInviterId(data.inviterId);
-      setShowRelationshipModal(true);
-    } catch {
+
+      if (data.targetRole) {
+        // NOTE: if role already filled by inviter, skip the modal
+        await handleCompleteRegistration(data.targetRole, data.targetStandardRole, data.inviterId);
+      } else {
+        setShowRelationshipModal(true);
+      }
+    } catch (err) {
+      console.error("Validation error:", err);
       setInviteError("网络错误，请稍后重试");
     } finally {
       setIsValidatingCode(false);
     }
   };
 
-  const handleCompleteRegistration = async () => {
+  const handleCompleteRegistration = async (overrideRole?: string, overrideStdRole?: string, overrideInviterId?: number) => {
     let currentFamilyId = 1;
     let currentMemberId = null;
+    let currentUserId = null;
+
+    const finalInviterId = overrideInviterId || inviterId;
+    const finalRole = overrideRole || selectedRelationship;
 
     try {
-      if (invitationCode.trim() && inviterId) {
-        // 加入已有家族：告知后端新用户与邀请人的关系
-        const relInfo = allRelationships.find(r => r.label === selectedRelationship);
+      if ((invitationCode.trim() && finalInviterId) || overrideRole) {
+        // 加入已有家族
+        const relInfo = allRelationships.find(r => r.label === finalRole);
         const response = await fetch("/api/register-claim", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -178,8 +189,8 @@ export const RegisterPage: React.FC = () => {
             inviteCode: invitationCode.trim(),
             name,
             avatarUrl: avatar,
-            relationshipToInviter: selectedRelationship,
-            standardRole: relInfo?.value || "other",
+            relationshipToInviter: finalRole,
+            standardRole: overrideStdRole || relInfo?.value || "other",
             phone,
             password
           })
@@ -193,8 +204,9 @@ export const RegisterPage: React.FC = () => {
         const data = await response.json();
         currentFamilyId = data.familyId || 1;
         currentMemberId = data.memberId;
+        currentUserId = data.userId;
       } else {
-        // 创建新家族 (Using unified backend endpoint)
+        // 创建新家族
         const response = await fetch("/api/register-new", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -209,6 +221,7 @@ export const RegisterPage: React.FC = () => {
         const data = await response.json();
         currentFamilyId = data.familyId;
         currentMemberId = data.memberId;
+        currentUserId = data.userId;
       }
     } catch (error: any) {
       console.error("Registration error:", error);
@@ -217,12 +230,13 @@ export const RegisterPage: React.FC = () => {
     }
 
     const userData = {
+      id: currentUserId,
       name,
       phone,
       avatar,
-      relationship: selectedRelationship || "创建者",
-      inviterName: invitationCode ? inviterName : null,
-      inviterId,
+      relationship: overrideRole || selectedRelationship || "创建者",
+      inviterName: (invitationCode || overrideRole) ? inviterName : null,
+      inviterId: finalInviterId,
       inviterRole,
       familyId: currentFamilyId,
       memberId: currentMemberId,
@@ -577,7 +591,7 @@ export const RegisterPage: React.FC = () => {
                   <Button
                     className="flex-1 rounded-2xl py-4 font-bold bg-[#eab308] text-black"
                     disabled={!selectedRelationship}
-                    onClick={handleCompleteRegistration}
+                    onClick={() => handleCompleteRegistration()}
                   >
                     确认加入
                   </Button>

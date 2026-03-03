@@ -194,6 +194,20 @@ export const ProfilePage: React.FC = () => {
     // 初始加载
     fetchStatsAndNotifications(parsed);
 
+    // Sync User ID if missing from localStorage
+    if (!parsed.id && parsed.phone) {
+      fetch(`/api/users/sync?phone=${parsed.phone}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.id) {
+            const latest = JSON.parse(localStorage.getItem("currentUser") || "{}");
+            localStorage.setItem("currentUser", JSON.stringify({ ...latest, id: data.id }));
+            setUser(prev => ({ ...prev, id: data.id }));
+          }
+        })
+        .catch(console.error);
+    }
+
     // NOTE: 30秒轮询兑底 —— 确保断网后重连也能同步
     const pollTimer = setInterval(() => fetchStatsAndNotifications(parsed), 30000);
 
@@ -294,14 +308,23 @@ export const ProfilePage: React.FC = () => {
       }
       const data = await res.json();
       setInviteData(data);
+
+      // NEW: Auto-accept if role is already defined
+      if (data.targetRole) {
+        await handleAcceptInvite(data.targetRole, data.targetStandardRole, data);
+      }
     } catch (e) {
       setInviteError("网络错误");
     }
     setIsValidatingInvite(false);
   };
 
-  const handleAcceptInvite = async () => {
-    if (!selectedRel || !inviteData) return;
+  const handleAcceptInvite = async (overrideRole?: string, overrideStdRole?: string, overrideInviteData?: any) => {
+    const finalInviteData = overrideInviteData || inviteData;
+    const finalRole = overrideRole || selectedRel;
+    const finalStdRole = overrideStdRole || relationships.find(r => r.label === selectedRel)?.value || "other";
+
+    if (!finalRole || !finalInviteData) return;
     try {
       const phone = JSON.parse(localStorage.getItem("currentUser") || "{}").phone;
       const res = await fetch("/api/accept-invite", {
@@ -310,8 +333,8 @@ export const ProfilePage: React.FC = () => {
         body: JSON.stringify({
           phone: phone,
           inviteCode: inviteCodeInput.trim(),
-          relationshipToInviter: selectedRel,
-          standardRole: relationships.find(r => r.label === selectedRel)?.value || "other"
+          relationshipToInviter: finalRole,
+          standardRole: finalStdRole
         })
       });
 
@@ -325,9 +348,11 @@ export const ProfilePage: React.FC = () => {
       const savedUser = JSON.parse(localStorage.getItem("currentUser") || "{}");
       localStorage.setItem("currentUser", JSON.stringify({
         ...savedUser,
-        memberId: data.memberId,
+        id: data.userId,
         familyId: data.familyId,
-        relationship: selectedRel
+        memberId: data.memberId,
+        relationship: finalRole,
+        inviterName: finalInviteData.inviterName
       }));
 
       alert("成功加入家族！");
@@ -373,9 +398,11 @@ export const ProfilePage: React.FC = () => {
       // 清理本地存储中关于家族身份的信息
       localStorage.setItem("currentUser", JSON.stringify({
         ...savedUser,
-        familyId: 1, // 回到默认公共家族或者空的 ID？
+        familyId: 1, // 回到默认公共家族
         memberId: null,
-        relationship: "本人"
+        relationship: "我",
+        role: "我",
+        isRegistered: true // Still registered as a user
       }));
 
       alert("已成功退出家族。");
@@ -882,7 +909,7 @@ export const ProfilePage: React.FC = () => {
                     ))}
                   </div>
                   <button
-                    onClick={handleAcceptInvite}
+                    onClick={() => handleAcceptInvite()}
                     disabled={!selectedRel}
                     className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-xl shadow-[#eab308]/20 disabled:opacity-50 mt-4 active:scale-[0.98] transition-all"
                   >

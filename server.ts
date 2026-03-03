@@ -419,7 +419,9 @@ export async function createApp() {
           inviterRole: inviter.standard_role || inviter.relationship,
           inviterId: inviter.id,
           targetName: target.name,
-          targetId: target.id
+          targetId: target.id,
+          targetRole: target.relationship,
+          targetStandardRole: target.standard_role
         });
       } else {
         // Legacy: FA-XXXX-XXXX
@@ -441,7 +443,9 @@ export async function createApp() {
               inviterRole: inviter.standard_role || inviter.relationship,
               inviterId: inviter.id,
               targetName: target.name,
-              targetId: target.id
+              targetId: target.id,
+              targetRole: target.relationship,
+              targetStandardRole: target.standard_role
             });
           }
         }
@@ -452,7 +456,9 @@ export async function createApp() {
           inviterRole: target.standard_role || target.relationship,
           inviterId: target.id,
           targetName: target.name,
-          targetId: target.id
+          targetId: target.id,
+          targetRole: target.relationship,
+          targetStandardRole: target.standard_role
         });
       }
     });
@@ -625,19 +631,21 @@ export async function createApp() {
 
         // 5. Create user account
         const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
-        await supabase.from("users").upsert({
+        const { data: userData, error: userError } = await supabase.from("users").upsert({
           phone_or_email: phone,
           password: hashedPassword,
           name,
           relationship: relationshipToInviter,
           family_id: inviter.family_id,
           member_id: data.id
-        });
+        }).select("id").single();
+
+        if (userError) throw userError;
 
         // 6. Sync profile changes (especially avatar/name from registration) to past content
         await syncMemberContent(data.id, name, target.name, avatarUrl, relationshipToInviter);
 
-        res.json({ success: true, memberId: data.id, familyId: inviter.family_id });
+        res.json({ success: true, memberId: data.id, familyId: inviter.family_id, userId: userData.id });
       } catch (err: any) {
         console.error("[CLAIM] Error:", err.message);
         res.status(500).json({ error: err.message });
@@ -827,18 +835,18 @@ export async function createApp() {
 
         // 3. 密码哈希后存入 users 表
         const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
-        const { error: uError } = await supabase.from("users").upsert({
+        const { data: userData, error: uError } = await supabase.from("users").upsert({
           phone_or_email: phone,
           password: hashedPassword,
           name,
           relationship: "创建者",
-          member_id: member.id, // 👈 关键修复：关联到档案
+          member_id: member.id,
           family_id: family.id
-        });
+        }).select("id").single();
 
         if (uError) console.error("User info storage error (non-blocking):", uError.message);
 
-        res.json({ success: true, memberId: member.id, familyId: family.id });
+        res.json({ success: true, memberId: member.id, familyId: family.id, userId: userData?.id });
       } catch (err: any) {
         console.error("[REGISTER] Error:", err.message);
         res.status(500).json({ error: err.message });
@@ -1529,6 +1537,18 @@ export async function createApp() {
         res.json({ success: true, message: "已成功退出家族。" });
       } catch (err: any) {
         console.error("[API] Leave family error:", err.message);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.get("/api/users/sync", async (req, res) => {
+      try {
+        const { phone } = req.query;
+        if (!phone) return res.status(400).json({ error: "Missing phone" });
+        const { data, error } = await supabase.from("users").select("id").eq("phone_or_email", phone).single();
+        if (error) throw error;
+        res.json({ id: data.id });
+      } catch (err: any) {
         res.status(500).json({ error: err.message });
       }
     });
