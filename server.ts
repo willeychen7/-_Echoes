@@ -1659,14 +1659,24 @@ export async function createApp() {
           }
         }
 
-        // 6. ENFORCE PERSONAL HUB: If the user now has NO family_id in users table, they need back to their own.
-        // Or if they just left, find if they have ANY other membership.
-        const { data: currentAuth } = await supabase.from("users").select("name, family_id, member_id").eq("id", userId).single();
+        // 6. ENFORCE PERSONAL HUB: If the user now has NO family_id, they return to their personal Archive.
+        const { data: currentAuth } = await supabase.from("users").select("name, family_id").eq("id", userId).single();
+
         if (!currentAuth.family_id) {
-          // Find their own-named family or create one
-          let { data: myOwn } = await supabase.from("family_members").select("id, family_id").eq("name", currentAuth.name).is("is_registered", true).limit(1).maybeSingle();
+          // Find if they ALREADY have a creator-role record in some family (their private one)
+          const { data: existingHub } = await supabase
+            .from("family_members")
+            .select("id, family_id")
+            .eq("name", currentAuth.name)
+            .is("is_registered", true)
+            .eq("standard_role", "creator")
+            .limit(1)
+            .maybeSingle();
+
+          let myOwn = existingHub;
 
           if (!myOwn) {
+            // Create the undeletable personal archive for this user
             const { data: newF } = await supabase.from("families").insert({ name: `${currentAuth.name}的个人空间` }).select().single();
             const { data: newM } = await supabase.from("family_members").insert({
               family_id: newF.id,
@@ -1680,12 +1690,13 @@ export async function createApp() {
 
           await supabase.from("users").update({
             family_id: myOwn.family_id,
-            member_id: myOwn.id
+            member_id: myOwn.id,
+            relationship: "我"
           }).eq("id", userId);
 
           return res.json({
             success: true,
-            message: "已成功退出家族。由于您当前没有其他家族，系统已为您恢复个人档案空间。",
+            message: "已成功退出家族。您已回到个人的记忆档案空间。",
             newFamilyId: myOwn.family_id,
             newMemberId: myOwn.id
           });
