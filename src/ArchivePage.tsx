@@ -112,6 +112,7 @@ export const ArchivePage: React.FC = () => {
       const savedUser = localStorage.getItem("currentUser");
       if (savedUser) setCurrentUser(JSON.parse(savedUser));
     };
+    loadUser(); // Initial load
     window.addEventListener('storage', loadUser);
     window.addEventListener('sync-user', loadUser);
     return () => {
@@ -581,7 +582,10 @@ export const ArchivePage: React.FC = () => {
     );
   }
 
-  const isMeMember = currentUser && (member.id == currentUser.memberId || (member.userId && member.userId === currentUser.id));
+  const isMeMember = currentUser && (
+    (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
+    (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
+  );
   const displayAvatar = isMeMember ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(member.avatarUrl);
   const displayName = isMeMember ? currentUser.name : member.name;
   const displayBio = (isMeMember && currentUser.bio) ? currentUser.bio : (member.bio || "热爱生活，记录美好。");
