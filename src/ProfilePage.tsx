@@ -52,7 +52,7 @@ export const ProfilePage: React.FC = () => {
       memberId: parsed?.memberId || null,        // Family INT ID
       name: parsed?.name || "家人",
       role: parsed?.relationship || "我",
-      avatar: getSafeAvatar(parsed?.avatar || parsed?.avatarUrl, parsed?.gender || "男"),
+      avatar: getSafeAvatar(parsed?.avatar || parsed?.avatarUrl),
       joinDate: parsed?.joinDate || new Date().toISOString(),
       familyId: parsed?.familyId || 1,
       bio: parsed?.bio || parsed?.signature || "热爱生活，记录美好。",
@@ -129,7 +129,7 @@ export const ProfilePage: React.FC = () => {
         finalUserData = {
           ...finalUserData,
           name: remoteName,
-          avatar: getSafeAvatar(remoteAvatar, finalUserData.gender),
+          avatar: getSafeAvatar(remoteAvatar),
           bio: remoteBio,
           birthday: remoteBirthday
         };

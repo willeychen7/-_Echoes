@@ -70,7 +70,7 @@ export const FamilySquare: React.FC = () => {
   const [userAvatar, setUserAvatar] = useState(() => {
     const saved = localStorage.getItem("currentUser");
     const parsed = saved ? JSON.parse(saved) : null;
-    return getSafeAvatar(parsed?.avatar, parsed?.gender || "男");
+    return getSafeAvatar(parsed?.avatar);
   });
   const [currentUser, setCurrentUser] = useState<any>(() => {
     const saved = localStorage.getItem("currentUser");
@@ -571,7 +571,7 @@ export const FamilySquare: React.FC = () => {
                     <div className="size-24 rounded-full border-4 border-white shadow-lg overflow-hidden mb-4 group-hover:scale-105 transition-transform relative">
                       {/* 核心增强：双重校验身份，确保头像同步 */}
                       <img
-                        src={(currentUser && (member.id === currentUser.memberId || (member.userId && member.userId === currentUser.id))) ? getSafeAvatar(currentUser.avatar, currentUser.gender) : getSafeAvatar(member.avatarUrl, member.gender)}
+                        src={(currentUser && (member.id === currentUser.memberId || (member.userId && member.userId === currentUser.id))) ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(member.avatarUrl)}
                         alt={member.name}
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"

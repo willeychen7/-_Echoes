@@ -582,7 +582,7 @@ export const ArchivePage: React.FC = () => {
   }
 
   const isMeMember = currentUser && (member.id == currentUser.memberId || (member.userId && member.userId === currentUser.id));
-  const displayAvatar = isMeMember ? getSafeAvatar(currentUser.avatar, currentUser.gender) : getSafeAvatar(member.avatarUrl, member.gender);
+  const displayAvatar = isMeMember ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(member.avatarUrl);
   const displayName = isMeMember ? currentUser.name : member.name;
   const displayBio = (isMeMember && currentUser.bio) ? currentUser.bio : (member.bio || "热爱生活，记录美好。");
 
