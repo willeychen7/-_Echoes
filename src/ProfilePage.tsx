@@ -252,6 +252,20 @@ export const ProfilePage: React.FC = () => {
       });
     }
 
+    // NEW: Sync to core user record for identity persistence
+    const savedUserRaw = localStorage.getItem("currentUser");
+    if (savedUserRaw) {
+      const parsed = JSON.parse(savedUserRaw);
+      const userId = parsed.id || parsed.userId;
+      if (userId) {
+        await fetch(`/api/users/sync-profile`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, avatarUrl: url })
+        }).catch(console.error);
+      }
+    }
+
     window.dispatchEvent(new Event('storage'));
     window.dispatchEvent(new Event('sync-user'));
   };
@@ -288,6 +302,20 @@ export const ProfilePage: React.FC = () => {
           birthDate: editForm.birthday
         })
       });
+    }
+
+    // NEW: Sync to core user record for identity persistence
+    const savedUserRaw = localStorage.getItem("currentUser");
+    if (savedUserRaw) {
+      const parsed = JSON.parse(savedUserRaw);
+      const userId = parsed.id || parsed.userId;
+      if (userId) {
+        await fetch(`/api/users/sync-profile`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, name: editForm.name, bio: editForm.bio, birthDate: editForm.birthday })
+        }).catch(console.error);
+      }
     }
 
     setShowEditModal(false);

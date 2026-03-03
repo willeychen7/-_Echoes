@@ -41,6 +41,26 @@ export async function createApp() {
     }
 
     const app = express();
+
+    // --- Database Migration ---
+    (async () => {
+      try {
+        if (supabase) {
+          await supabase.rpc('exec_sql', {
+            sql_query: `
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date DATE;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT;
+          ` }).catch((err) => {
+              console.log("Migration RPC check:", err.message);
+            });
+        }
+      } catch (e) {
+        console.warn("Migration error:", e);
+      }
+    })();
+
     // Express middleware
     app.use(express.json({ limit: "10mb" }));
     app.use(express.urlencoded({ limit: "10mb", extended: true }));
@@ -635,15 +655,16 @@ export async function createApp() {
           phone_or_email: phone,
           password: hashedPassword,
           name,
-          relationship: relationshipToInviter,
+          relationship: "我", // Terminology Fix
           family_id: inviter.family_id,
-          member_id: data.id
+          member_id: data.id,
+          avatar_url: avatarUrl // New Column
         }).select("id").single();
 
         if (userError) throw userError;
 
         // 6. Sync profile changes (especially avatar/name from registration) to past content
-        await syncMemberContent(data.id, name, target.name, avatarUrl, relationshipToInviter);
+        await syncMemberContent(data.id, name, target.name, avatarUrl, "我");
 
         res.json({ success: true, memberId: data.id, familyId: inviter.family_id, userId: userData.id });
       } catch (err: any) {
@@ -839,9 +860,10 @@ export async function createApp() {
           phone_or_email: phone,
           password: hashedPassword,
           name,
-          relationship: "创建者",
+          relationship: "我",
           member_id: member.id,
-          family_id: family.id
+          family_id: family.id,
+          avatar_url: avatar || ""
         }).select("id").single();
 
         if (uError) console.error("User info storage error (non-blocking):", uError.message);
@@ -874,43 +896,49 @@ export async function createApp() {
         if (!isMatch) return res.status(401).json({ error: "账号或密码错误" });
 
         // 3. Find the associated family member record accurately by memberId link
-        const { data: member, error: mError } = await supabase
-          .from("family_members")
-          .select("*")
-          .eq("id", user.member_id)
-          .single();
-
-        if (mError || !member) {
-          console.error("[LOGIN] Linked member record not found for user:", user.id);
-          return res.status(401).json({ error: "关联档案丢失，请联系管理员" });
+        let member: any = null;
+        if (user.member_id) {
+          const { data: m, error: mError } = await supabase
+            .from("family_members")
+            .select("*")
+            .eq("id", user.member_id)
+            .single();
+          member = m;
         }
 
-        // 4. 获取用户统计数据
-        const { count: memoriesCount } = await supabase.from("messages").select("*", { count: 'exact', head: true }).eq("family_member_id", member.id);
+        // 4. 获取用户统计数据 (仅当有关联档案时)
+        let memoriesCount = 0;
+        let likesCount = 0;
+        if (member) {
+          const { count: mCount } = await supabase.from("messages").select("*", { count: 'exact', head: true }).eq("family_member_id", member.id);
+          memoriesCount = mCount || 0;
 
-        const { data: memberMessages } = await supabase.from("messages").select("id").eq("family_member_id", member.id);
-        const msgIds = memberMessages?.map(m => m.id) || [];
-        const { count: likesCount } = await supabase.from("likes").select("*", { count: 'exact', head: true }).in("message_id", msgIds);
+          const { data: memberMessages } = await supabase.from("messages").select("id").eq("family_member_id", member.id);
+          if (memberMessages?.length) {
+            const msgIds = memberMessages.map(m => m.id);
+            const { count: lCount } = await supabase.from("likes").select("*", { count: 'exact', head: true }).in("message_id", msgIds);
+            likesCount = lCount || 0;
+          }
+        }
 
         const days = Math.max(1, Math.floor((Date.now() - new Date(user.created_at || Date.now()).getTime()) / 86400000));
 
         // 5. Return user info without password
-        console.log(`[LOGIN] User ${user.phone_or_email} logged in successfully. Avatar present: ${!!member.avatar_url}`);
-
         const safeUser = {
-          name: member.name || user.name,
-          relationship: member.relationship || user.relationship,
+          id: user.id, // Primary ID
+          name: member?.name || user.name || "家人",
+          relationship: member?.relationship || user.relationship || "我",
           phone: user.phone_or_email,
-          memberId: member.id,
-          familyId: member.family_id,
-          avatar: member.avatar_url || "",
-          bio: member.bio || "",
-          birthday: member.birth_date || "",
-          gender: member.gender || "男",
+          memberId: member?.id || null,
+          familyId: member?.family_id || user.family_id || 1,
+          avatar: member?.avatar_url || (user as any).avatar_url || "",
+          bio: member?.bio || (user as any).bio || "",
+          birthday: member?.birth_date || (user as any).birth_date || "",
+          gender: member?.gender || (user as any).gender || "男",
           joinDate: user.created_at || new Date().toISOString(),
           stats: {
-            memories: memoriesCount || 0,
-            likes: likesCount || 0,
+            memories: memoriesCount,
+            likes: likesCount,
             days
           }
         };
@@ -1555,6 +1583,24 @@ export async function createApp() {
         const { data, error } = await supabase.from("users").select("id").eq("phone_or_email", phone).single();
         if (error) throw error;
         res.json({ id: data.id });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post("/api/users/sync-profile", async (req, res) => {
+      try {
+        const { userId, name, bio, birthDate, avatarUrl, gender } = req.body;
+        if (!userId) return res.status(400).json({ error: "Missing userId" });
+        const { error } = await supabase.from("users").update({
+          name,
+          bio,
+          birth_date: birthDate,
+          avatar_url: avatarUrl,
+          gender
+        }).eq("id", userId);
+        if (error) throw error;
+        res.json({ success: true });
       } catch (err: any) {
         res.status(500).json({ error: err.message });
       }
