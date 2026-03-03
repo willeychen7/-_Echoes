@@ -1191,18 +1191,29 @@ export async function createApp() {
       const nameToAvatarMap: Record<string, string> = {};
       familyMembers?.forEach(f => {
         nameToIdMap[f.name] = f.id;
-        nameToIdMap[f.name.replace(/\s+/g, "")] = f.id;
+        // IMPORTANT: Fingerprinting for names like "test_profile"
+        const cleanKey = f.name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, "");
+        if (cleanKey) nameToIdMap[cleanKey] = f.id;
+
         if (f.avatar_url) {
           nameToAvatarMap[f.name] = f.avatar_url;
-          nameToAvatarMap[f.name.replace(/\s+/g, "")] = f.avatar_url;
+          nameToAvatarMap[String(f.id)] = f.avatar_url; // Direct ID index
+          if (cleanKey) nameToAvatarMap[cleanKey] = f.avatar_url;
         }
       });
 
       const formatted = (rawData || []).map((m: any) => {
-        const nameKey = m.author_name?.replace(/\s+/g, "") || "";
-        const authorId = m.event_id ? m.family_member_id : (nameToIdMap[m.author_name] || nameToIdMap[nameKey] || m.author_id || null);
-        // 重要修复：优先从成员表获取最新图片，否则才用旧表中的字段
-        const authorAvatar = (m.author_name ? nameToAvatarMap[m.author_name] : null) || (nameKey ? nameToAvatarMap[nameKey] : null) || m.author_avatar || m.authorAvatar;
+        const nameKey = m.author_name?.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, "") || "";
+        const authorId = m.event_id ? m.family_member_id : (m.author_id || nameToIdMap[m.author_name] || nameToIdMap[nameKey] || null);
+
+        // Priority: ID lookup > Exact Name > Cleaned Name > Stored Fallback
+        const finalId = authorId || m.family_member_id;
+        let authorAvatar = finalId ? nameToAvatarMap[String(finalId)] : null;
+        if (!authorAvatar) {
+          authorAvatar = (m.author_name ? nameToAvatarMap[m.author_name] : null) ||
+            (nameKey ? nameToAvatarMap[nameKey] : null) ||
+            m.author_avatar || m.authorAvatar;
+        }
 
         return {
           id: m.id,
@@ -1308,18 +1319,29 @@ export async function createApp() {
         const nameToAvatarMap: Record<string, string> = {};
         familyMembers?.forEach(f => {
           nameToIdMap[f.name] = f.id;
-          nameToIdMap[f.name.replace(/\s+/g, "")] = f.id;
+          // IMPORTANT: Better finger-printing for names like "test_profile"
+          const cleanKey = f.name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, "");
+          if (cleanKey) nameToIdMap[cleanKey] = f.id;
+
           if (f.avatar_url) {
             nameToAvatarMap[f.name] = f.avatar_url;
-            nameToAvatarMap[f.name.replace(/\s+/g, "")] = f.avatar_url;
+            nameToAvatarMap[String(f.id)] = f.avatar_url; // NEW: Map ID directly to avatar
+            if (cleanKey) nameToAvatarMap[cleanKey] = f.avatar_url;
           }
         });
 
         const formatted = (data || []).map(m => {
-          const nameKey = m.author_name?.replace(/\s+/g, "") || "";
+          const nameKey = m.author_name?.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, "") || "";
+          // Prioritize author_id if present
           const authorId = m.author_id || nameToIdMap[m.author_name] || nameToIdMap[nameKey] || null;
-          // IMPORTANT: 强制覆盖为成员中心当前的头像
-          const authorAvatar = (m.author_name ? nameToAvatarMap[m.author_name] : null) || (nameKey ? nameToAvatarMap[nameKey] : null) || m.author_avatar;
+
+          // IMPORTANT: Resolve latest avatar using ID first, then name map, then fallback to stored
+          let authorAvatar = m.author_id ? nameToAvatarMap[String(m.author_id)] : null;
+          if (!authorAvatar) {
+            authorAvatar = (m.author_name ? nameToAvatarMap[m.author_name] : null) ||
+              (nameKey ? nameToAvatarMap[nameKey] : null) ||
+              m.author_avatar;
+          }
 
           return {
             id: m.id,
@@ -1701,7 +1723,7 @@ export async function createApp() {
 
     app.post("/api/users/sync-profile", async (req, res) => {
       try {
-        const { userId, name, bio, birthDate, avatarUrl, gender } = req.body;
+        const { userId, name, bio, birthDate, avatarUrl, gender, memberId } = req.body;
         if (!userId) return res.status(400).json({ error: "Missing userId" });
         const numericUserId = parseInt(String(userId));
 
@@ -1722,11 +1744,17 @@ export async function createApp() {
           gender: gender || undefined
         }).eq("user_id", numericUserId).select("id");
 
-        // NEW: Also update content (memories/messages) for all matched identities
-        if (syncedMembers && syncedMembers.length > 0) {
-          for (const m of syncedMembers) {
-            await syncMemberContent(m.id, name, null, avatarUrl, null);
-          }
+        // EXTRA SYNC: If an explicit memberId is provided, update it specifically
+        // This solves issues for 'test_profile' where user_id link might be null but memberId is known
+        if (memberId) {
+          await supabase.from("family_members").update({
+            name: name || undefined,
+            bio: bio || undefined,
+            birth_date: birthDate || undefined,
+            avatar_url: avatarUrl || undefined,
+            gender: gender || undefined
+          }).eq("id", memberId);
+          await syncMemberContent(memberId, name, null, avatarUrl, null);
         }
 
         res.json({ success: true });

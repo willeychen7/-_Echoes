@@ -322,6 +322,7 @@ export const ProfilePage: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: targetUserId,
+          memberId: targetMemberId, // CRITICAL: Pass memberId for forced deep sync
           avatarUrl: url,
           name: updatedUser.name,
           bio: updatedUser.bio || "",
@@ -369,6 +370,7 @@ export const ProfilePage: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: targetUserId,
+          memberId: targetMemberId, // CRITICAL: Pass memberId for forced deep sync
           name: updatedUser.name,
           bio: updatedUser.bio,
           birthDate: updatedUser.birthday,
