@@ -570,29 +570,41 @@ export const FamilySquare: React.FC = () => {
                     <div className="size-24 rounded-full border-4 border-white shadow-lg overflow-hidden mb-4 group-hover:scale-105 transition-transform relative">
                       {/* 核心增强：双重校验身份，确保头像同步 */}
                       <img
-                        src={(currentUser && (member.id === currentUser.memberId || (member.userId && member.userId === currentUser.id))) ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(member.avatarUrl)}
+                        src={(currentUser && (
+                          (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
+                          (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
+                        )) ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(member.avatarUrl)}
                         alt={member.name}
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
                       />
 
                       {/* “我” 标识 */}
-                      {(currentUser && (member.id === currentUser.memberId || (member.userId && member.userId === currentUser.id))) && (
-                        <div className="absolute bottom-0 right-0 bg-[#eab308] text-black text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-white shadow-sm z-20">
-                          我
-                        </div>
-                      )}
+                      {(currentUser && (
+                        (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
+                        (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
+                      )) && (
+                          <div className="absolute bottom-0 right-0 bg-[#eab308] text-black text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-white shadow-sm z-20">
+                            我
+                          </div>
+                        )}
 
-                      {member.isRegistered && !(currentUser && (member.id === currentUser.memberId || (member.userId && member.userId === currentUser.id))) && (
-                        <div className="absolute bottom-0 right-0 bg-emerald-500 text-white p-1 rounded-full border-2 border-white shadow-sm">
-                          <CheckCircle size={14} fill="currentColor" className="text-white" />
-                        </div>
-                      )}
+                      {member.isRegistered && !(currentUser && (
+                        (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
+                        (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
+                      )) && (
+                          <div className="absolute bottom-0 right-0 bg-emerald-500 text-white p-1 rounded-full border-2 border-white shadow-sm">
+                            <CheckCircle size={14} fill="currentColor" className="text-white" />
+                          </div>
+                        )}
                     </div>
                     <div className="flex flex-col items-center gap-1.5 mb-2">
                       <div className="flex items-center gap-1.5">
                         <h3 className="text-3xl font-black text-slate-800">
-                          {(currentUser && (member.id === currentUser.memberId || (member.userId && member.userId === currentUser.id))) ? currentUser.name : member.name}
+                          {(currentUser && (
+                            (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
+                            (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
+                          )) ? currentUser.name : member.name}
                         </h3>
                       </div>
                     </div>

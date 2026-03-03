@@ -896,8 +896,8 @@ export const ArchivePage: React.FC = () => {
               };
               const typeInfo = getMsgTypeInfo(msg.type);
               const isAuthor = currentUser && (
-                (msg.authorId && String(msg.authorId) === String(currentUser.id)) ||
-                (msg.familyMemberId && Number(msg.familyMemberId) === Number(currentUser.memberId)) ||
+                (msg.authorId && currentUser.memberId && String(msg.authorId) === String(currentUser.memberId)) ||
+                (msg.familyMemberId && currentUser.memberId && String(msg.familyMemberId) === String(currentUser.memberId)) ||
                 (String(msg.authorName) === String(currentUser.name))
               );
               return (
