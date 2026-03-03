@@ -198,12 +198,6 @@ export async function createApp() {
     async function syncMemberContent(memberId: string | number, name: string, oldName: string | null, avatarUrl: string | null, relationship: string | null) {
       if (!supabase) return;
 
-      const updateFields: any = {};
-      if (avatarUrl) updateFields.author_avatar = avatarUrl;
-      // NOTE: We don't usually sync roles automatically because they vary by wall, 
-      // but if the user changed their global role/relationship, we might want to?
-      // For now, let's focus on name and avatar.
-
       const memoriesFields: any = {};
       if (name) memoriesFields.author_name = name;
       if (avatarUrl) memoriesFields.author_avatar = avatarUrl;
@@ -211,25 +205,12 @@ export async function createApp() {
 
       // 1. Update memories
       if (Object.keys(memoriesFields).length > 0) {
-        // A. Update by ID (Primary)
+        // STRICT: Only update by numeric ID. 
+        // We never use author_name here to avoid duplicate name collisions.
         await supabase
           .from("memories")
           .update(memoriesFields)
           .eq("author_id", memberId);
-
-        // B. Update by Name fallback (Crucial for orphaned memories like 'test_profile')
-        await supabase
-          .from("memories")
-          .update(memoriesFields)
-          .eq("author_name", name)
-          .is("author_id", null);
-
-        if (oldName && oldName !== name) {
-          await supabase
-            .from("memories")
-            .update(memoriesFields)
-            .eq("author_name", oldName);
-        }
       }
 
       // 2. Update messages (where family_member_id is author, i.e., events)
@@ -239,32 +220,12 @@ export async function createApp() {
       if (relationship) messageFields.author_role = relationship;
 
       if (Object.keys(messageFields).length > 0) {
-        // A. Update by ID
+        // STRICT: Update by family_member_id only
         await supabase
           .from("messages")
           .update(messageFields)
           .eq("family_member_id", memberId)
           .not("event_id", "is", null);
-
-        // B. Update by Name (fallback for blessing wall where ID is the archive ID)
-        await supabase
-          .from("messages")
-          .update(messageFields)
-          .eq("author_name", name);
-
-        if (oldName && oldName !== name) {
-          await supabase
-            .from("messages")
-            .update(messageFields)
-            .eq("author_name", oldName);
-        }
-
-        // C. Robust check for space issues
-        const nameNoSpace = name.replace(/\s+/g, "");
-        if (nameNoSpace !== name) {
-          await supabase.from("messages").update(messageFields).eq("author_name", nameNoSpace);
-          await supabase.from("memories").update(memoriesFields).eq("author_name", nameNoSpace);
-        }
       }
     }
 
@@ -1222,17 +1183,9 @@ export async function createApp() {
       });
 
       const formatted = (rawData || []).map((m: any) => {
-        const nameKey = m.author_name?.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, "") || "";
-        const authorId = m.event_id ? m.family_member_id : (m.author_id || nameToIdMap[m.author_name] || nameToIdMap[nameKey] || null);
-
-        // Priority: ID lookup > Exact Name > Cleaned Name > Stored Fallback
-        const finalId = authorId || m.family_member_id;
-        let authorAvatar = finalId ? nameToAvatarMap[String(finalId)] : null;
-        if (!authorAvatar) {
-          authorAvatar = (m.author_name ? nameToAvatarMap[m.author_name] : null) ||
-            (nameKey ? nameToAvatarMap[nameKey] : null) ||
-            m.author_avatar || m.authorAvatar;
-        }
+        // STRICT ID RESOLUTION: Link by ID only
+        const authorId = m.event_id ? m.family_member_id : (m.author_id || null);
+        const authorAvatar = authorId ? nameToAvatarMap[String(authorId)] : (m.author_avatar || m.authorAvatar);
 
         return {
           id: m.id,
@@ -1350,17 +1303,9 @@ export async function createApp() {
         });
 
         const formatted = (data || []).map(m => {
-          const nameKey = m.author_name?.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, "") || "";
-          // Prioritize author_id if present
-          const authorId = m.author_id || nameToIdMap[m.author_name] || nameToIdMap[nameKey] || null;
-
-          // IMPORTANT: Resolve latest avatar using ID first, then name map, then fallback to stored
-          let authorAvatar = m.author_id ? nameToAvatarMap[String(m.author_id)] : null;
-          if (!authorAvatar) {
-            authorAvatar = (m.author_name ? nameToAvatarMap[m.author_name] : null) ||
-              (nameKey ? nameToAvatarMap[nameKey] : null) ||
-              m.author_avatar;
-          }
+          // STRICT ID RESOLUTION: Only link to latest profile if author_id is explicitly present
+          const authorId = m.author_id || null;
+          const authorAvatar = authorId ? nameToAvatarMap[String(authorId)] : m.author_avatar;
 
           return {
             id: m.id,
@@ -1722,6 +1667,14 @@ export async function createApp() {
         await supabase.from("users").update({ member_id: member.id, family_id: member.family_id }).eq("id", userId);
         await supabase.from("family_members").update({ user_id: userId, is_registered: true }).eq("id", member.id);
 
+        // DATA PATCH: Backfill author_id for legacy orphaned memories in this archive
+        // This ensures old 'test_profile' memories get the correct ID once claimed
+        await supabase.from("memories")
+          .update({ author_id: member.id })
+          .eq("member_id", member.id)
+          .eq("author_name", name)
+          .is("author_id", null);
+
         res.json({ success: true, memberId: member.id });
       } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -1764,30 +1717,25 @@ export async function createApp() {
         }).eq("user_id", numericUserId).select("id");
 
         // NEW: BEST-EFFORT SYNC BY NAME (For unlinked accounts like 'test_profile')
-        if ((!syncedMembers || syncedMembers.length === 0) && name) {
-          const { data: matchedByName } = await supabase.from("family_members").update({
-            avatar_url: avatarUrl || undefined,
-            bio: bio || undefined,
-            birth_date: birthDate || undefined,
-            gender: gender || undefined
-          }).eq("name", name).is("user_id", null).select("id");
-
-          if (matchedByName && matchedByName.length > 0) {
-            for (const m of matchedByName) {
-              await syncMemberContent(m.id, name, null, avatarUrl, null);
-            }
+        // DETACHMENT LOGIC: If a user has no linked family members
+        if ((!syncedMembers || syncedMembers.length === 0) && !memberId) {
+          // Clear residual stale data in users table
+          await supabase.from("users").update({
+            member_id: null,
+            family_id: null
+          }).eq("id", numericUserId);
+        } else if (syncedMembers && syncedMembers.length > 0) {
+          // Proactively sync all linked archive records
+          for (const m of syncedMembers) {
+            await syncMemberContent(m.id, name, null, avatarUrl, null);
           }
         }
 
-        // EXTRA FALLBACK: If memberId is explicitly passed, update it specifically
-        // This solves issues for 'test_profile' where user_id might be detached/broken
+        // EXTRA FALLBACK: For manual sync (from Profile page Save)
         if (memberId) {
           await supabase.from("family_members").update({
             name: name || undefined,
-            bio: bio || undefined,
-            birth_date: birthDate || undefined,
-            avatar_url: avatarUrl || undefined,
-            gender: gender || undefined
+            avatar_url: avatarUrl || undefined
           }).eq("id", memberId);
           await syncMemberContent(memberId, name, null, avatarUrl, null);
         }
