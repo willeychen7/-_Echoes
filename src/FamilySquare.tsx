@@ -9,7 +9,7 @@ import { getRigorousRelationship } from "./lib/relationships";
 import confetti from "canvas-confetti";
 import { DEMO_MEMBERS, DEMO_EVENTS, DEMO_DEFAULT_USER, isDemoMode } from "./demo-data";
 import { supabase } from "./lib/supabase";
-import { DEFAULT_AVATAR } from "./constants";
+import { DEFAULT_AVATAR, getSafeAvatar } from "./constants";
 import { AudioBar, WallMessages, InlineBlessingPanel } from "./components/FamilyEvents";
 import { updateAvatarCache } from "./lib/useAvatarCache";
 
@@ -70,7 +70,7 @@ export const FamilySquare: React.FC = () => {
   const [userAvatar, setUserAvatar] = useState(() => {
     const saved = localStorage.getItem("currentUser");
     const parsed = saved ? JSON.parse(saved) : null;
-    return (parsed && parsed.avatar && parsed.avatar.length > 20) ? parsed.avatar : DEFAULT_AVATAR;
+    return getSafeAvatar(parsed?.avatar, parsed?.gender || "男");
   });
   const [currentUser, setCurrentUser] = useState<any>(() => {
     const saved = localStorage.getItem("currentUser");
@@ -571,7 +571,7 @@ export const FamilySquare: React.FC = () => {
                     <div className="size-24 rounded-full border-4 border-white shadow-lg overflow-hidden mb-4 group-hover:scale-105 transition-transform relative">
                       {/* 核心增强：双重校验身份，确保头像同步 */}
                       <img
-                        src={(currentUser && (member.id === currentUser.memberId || (member.userId && member.userId === currentUser.id))) ? (currentUser.avatar || member.avatarUrl) : member.avatarUrl}
+                        src={(currentUser && (member.id === currentUser.memberId || (member.userId && member.userId === currentUser.id))) ? getSafeAvatar(currentUser.avatar, currentUser.gender) : getSafeAvatar(member.avatarUrl, member.gender)}
                         alt={member.name}
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"

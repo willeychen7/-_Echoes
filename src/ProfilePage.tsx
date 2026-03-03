@@ -7,7 +7,7 @@ import { cn } from "./lib/utils";
 import { updateAvatarCache } from "./lib/useAvatarCache";
 import { ImageCropper } from "./components/ImageCropper";
 import { DEMO_PERSONAS, isDemoMode } from "./demo-data";
-import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
+import { DEFAULT_AVATAR, SYSTEM_AVATARS, getSafeAvatar } from "./constants";
 
 /** 相对时间转换 */
 const getRelativeTime = (dateStr: string) => {
@@ -52,7 +52,7 @@ export const ProfilePage: React.FC = () => {
       memberId: parsed?.memberId || null,        // Family INT ID
       name: parsed?.name || "家人",
       role: parsed?.relationship || "我",
-      avatar: parsed?.avatar || parsed?.avatarUrl || DEFAULT_AVATAR,
+      avatar: getSafeAvatar(parsed?.avatar || parsed?.avatarUrl, parsed?.gender || "男"),
       joinDate: parsed?.joinDate || new Date().toISOString(),
       familyId: parsed?.familyId || 1,
       bio: parsed?.bio || parsed?.signature || "热爱生活，记录美好。",
@@ -122,14 +122,14 @@ export const ProfilePage: React.FC = () => {
       let hasChanges = false;
       if (
         remoteName !== finalUserData.name ||
-        (remoteAvatar && remoteAvatar !== finalUserData.avatar) ||
+        remoteAvatar !== finalUserData.avatar ||
         remoteBio !== (finalUserData.bio || "热爱生活，记录美好。") ||
         remoteBirthday !== finalUserData.birthday
       ) {
         finalUserData = {
           ...finalUserData,
           name: remoteName,
-          avatar: remoteAvatar,
+          avatar: getSafeAvatar(remoteAvatar, finalUserData.gender),
           bio: remoteBio,
           birthday: remoteBirthday
         };

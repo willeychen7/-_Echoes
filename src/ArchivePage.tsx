@@ -12,6 +12,7 @@ import confetti from "canvas-confetti";
 import { DEMO_MEMBERS, isDemoMode } from "./demo-data";
 import { supabase } from "./lib/supabase";
 import { AudioBar } from "./components/FamilyEvents";
+import { getSafeAvatar } from "./constants";
 
 interface MemoryArchive {
   title: string;
@@ -581,7 +582,7 @@ export const ArchivePage: React.FC = () => {
   }
 
   const isMeMember = currentUser && (member.id == currentUser.memberId || (member.userId && member.userId === currentUser.id));
-  const displayAvatar = isMeMember ? currentUser.avatar : member.avatarUrl;
+  const displayAvatar = isMeMember ? getSafeAvatar(currentUser.avatar, currentUser.gender) : getSafeAvatar(member.avatarUrl, member.gender);
   const displayName = isMeMember ? currentUser.name : member.name;
   const displayBio = (isMeMember && currentUser.bio) ? currentUser.bio : (member.bio || "热爱生活，记录美好。");
 

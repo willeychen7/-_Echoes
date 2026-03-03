@@ -12,3 +12,15 @@ export const SYSTEM_AVATARS = [
     "https://api.dicebear.com/7.x/lorelei/png?seed=Jasper",// 9. 阳光男性
     "https://api.dicebear.com/7.x/lorelei/png?seed=Lucy",  // 10. 阳光女性
 ];
+
+/**
+ * 统一头像获取逻辑：
+ * 1. 如果有有效的 URL，直接返回。
+ * 2. 如果没有，根据性别返回对应的默认头像（男：Jasper，女：Felix）。
+ */
+export const getSafeAvatar = (url?: string, gender?: string) => {
+    if (url && url.length > 20) return url;
+    if (gender === "女" || gender === "female") return "https://api.dicebear.com/7.x/lorelei/png?seed=Felix";
+    return "https://api.dicebear.com/7.x/lorelei/png?seed=Jasper";
+};
+
