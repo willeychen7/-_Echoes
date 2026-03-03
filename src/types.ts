@@ -26,6 +26,7 @@ export interface FamilyMember {
   motherId?: number;
   gender?: string;
   createdByMemberId?: number;
+  userId?: number | string;
 }
 
 export interface FamilyEvent {

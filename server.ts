@@ -62,8 +62,8 @@ export async function createApp() {
     })();
 
     // Express middleware
-    app.use(express.json({ limit: "10mb" }));
-    app.use(express.urlencoded({ limit: "10mb", extended: true }));
+    app.use(express.json({ limit: "50mb" }));
+    app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
     // Logging middleware
     app.use((req, res, next) => {
@@ -268,23 +268,48 @@ export async function createApp() {
     });
 
     app.get("/api/family-members/:id", async (req, res) => {
-      const { data, error } = await supabase
-        .from("family_members")
-        .select("*")
-        .eq("id", req.params.id)
-        .single();
+      try {
+        const { data, error } = await supabase
+          .from("family_members")
+          .select("*")
+          .eq("id", req.params.id)
+          .single();
 
-      if (error) return res.status(500).json({ error: error.message });
+        if (error) return res.status(500).json({ error: error.message });
 
-      const member = {
-        ...data,
-        isRegistered: data.is_registered,
-        inviteCode: data.invite_code,
-        avatarUrl: data.avatar_url,
-        birthDate: data.birth_date,
-        standardRole: data.standard_role
-      };
-      res.json(member);
+        let member = {
+          ...data,
+          isRegistered: data.is_registered,
+          inviteCode: data.invite_code,
+          avatarUrl: data.avatar_url,
+          birthDate: data.birth_date,
+          standardRole: data.standard_role
+        };
+
+        // NEW: If registered, try to fetch the latest profile from users table for persistence
+        if (data.is_registered) {
+          const { data: userData } = await supabase
+            .from("users")
+            .select("id, name, avatar_url, bio, birth_date, gender")
+            .eq("member_id", data.id)
+            .maybeSingle();
+
+          if (userData) {
+            member = {
+              ...member,
+              name: userData.name || member.name,
+              avatarUrl: userData.avatar_url || member.avatarUrl,
+              bio: userData.bio || member.bio,
+              birthDate: userData.birth_date || member.birthDate,
+              gender: userData.gender || member.gender,
+              userId: userData.id
+            };
+          }
+        }
+        res.json(member);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
     });
 
     app.put("/api/family-members/:id", async (req, res) => {
@@ -803,16 +828,26 @@ export async function createApp() {
           await supabase.from("family_members").update(rest).eq("id", id);
         }
 
-        // 5. Update the User record
-        const { error: uError } = await supabase.from("users").update({
-          relationship: relationshipToInviter,
-          family_id: inviter.family_id,
-          member_id: data.id
-        }).eq("phone_or_email", phone);
+        // 5. Update the User record and sync profile back to the new family member
+        const { data: userData } = await supabase.from("users").select("*").eq("phone_or_email", phone).single();
+        if (userData) {
+          // Sync global profile to the member record
+          await supabase.from("family_members").update({
+            name: userData.name || target.name,
+            avatar_url: (userData as any).avatar_url || target.avatar_url,
+            bio: (userData as any).bio || target.bio,
+            birth_date: (userData as any).birth_date || target.birth_date,
+            gender: (userData as any).gender || target.gender
+          }).eq("id", target.id);
 
-        if (uError) console.error("Update user rel error:", uError.message);
+          await supabase.from("users").update({
+            relationship: relationshipToInviter,
+            family_id: inviter.family_id,
+            member_id: data.id
+          }).eq("id", userData.id);
+        }
 
-        res.json({ success: true, memberId: data.id, familyId: inviter.family_id });
+        res.json({ success: true, memberId: data.id, familyId: inviter.family_id, userId: userData?.id });
       } catch (err: any) {
         console.error("[ACCEPT-INVITE] Error:", err.message);
         res.status(500).json({ error: err.message });

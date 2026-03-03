@@ -580,10 +580,10 @@ export const ArchivePage: React.FC = () => {
     );
   }
 
-  const isMeMember = currentUser && member.id == currentUser.memberId;
+  const isMeMember = currentUser && (member.id == currentUser.memberId || (member.userId && member.userId === currentUser.id));
   const displayAvatar = isMeMember ? currentUser.avatar : member.avatarUrl;
   const displayName = isMeMember ? currentUser.name : member.name;
-  const displayBio = (isMeMember && currentUser.bio) ? currentUser.bio : (member.bio || "");
+  const displayBio = (isMeMember && currentUser.bio) ? currentUser.bio : (member.bio || "热爱生活，记录美好。");
 
   // 只有非演示模式下的未注册成员（或符合演示 ID 逻辑的演示成员），且当前用户是创建者或无创建者信息时，才允许删除
   const canDelete = !member.isRegistered &&
@@ -647,7 +647,7 @@ export const ArchivePage: React.FC = () => {
 
           {creatorName && (
             <div className="mt-4 px-3 py-1 bg-amber-50/50 rounded-full text-[10px] font-black text-amber-600/60 flex items-center gap-1.5 ring-1 ring-amber-100 italic">
-              {creatorName === (currentUser?.name || "") ? "由 我 为自己开启了记忆档案" : `由 ${creatorName} 为 TA 开启了记忆档案`}
+              {isMeMember ? "由 我 为自己开启了记忆档案" : `由 ${creatorName || "系统"} 为 TA 开启了记忆档案`}
             </div>
           )}
         </div>
