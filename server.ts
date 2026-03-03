@@ -913,7 +913,7 @@ export async function createApp() {
 
         if (mError) throw new Error(`Member creation failed: ${mError.message}`);
 
-        // 3. 密码哈希后存入 users 表
+        // 3. User account
         const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
         const { data: userData, error: uError } = await supabase.from("users").upsert({
           phone_or_email: phone,
@@ -925,7 +925,12 @@ export async function createApp() {
           avatar_url: avatar || ""
         }).select("id").single();
 
-        if (uError) console.error("User info storage error (non-blocking):", uError.message);
+        if (uError) throw uError;
+
+        // 4. BIND FAMILY TO CREATOR (Ownership Link)
+        if (userData?.id) {
+          await supabase.from("families").update({ creator_id: userData.id }).eq("id", family.id);
+        }
 
         res.json({ success: true, memberId: member.id, familyId: family.id, userId: userData?.id });
       } catch (err: any) {
