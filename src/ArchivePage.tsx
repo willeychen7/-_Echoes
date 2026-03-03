@@ -584,8 +584,7 @@ export const ArchivePage: React.FC = () => {
 
   const isMeMember = currentUser && (
     (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
-    (member.userId && currentUser.id && String(member.userId) === String(currentUser.id)) ||
-    (member.name === currentUser.name && member.isRegistered) // Fallback for name matching
+    (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
   );
   const displayAvatar = isMeMember ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(member.avatarUrl);
   const displayName = isMeMember ? currentUser.name : member.name;

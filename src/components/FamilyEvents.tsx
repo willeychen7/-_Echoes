@@ -143,8 +143,7 @@ export const WallMessages: React.FC<{
                 const typeInfo = getMsgTypeInfo(msg.type);
                 const isAuthor = currentUser && (
                     (msg.authorId && currentUser.memberId && String(msg.authorId) === String(currentUser.memberId)) ||
-                    (msg.familyMemberId && currentUser.memberId && String(msg.familyMemberId) === String(currentUser.memberId)) ||
-                    (String(msg.authorName) === String(currentUser.name))
+                    (msg.familyMemberId && currentUser.memberId && String(msg.familyMemberId) === String(currentUser.memberId))
                 );
                 const isPlaying = playingId === msg.id;
 

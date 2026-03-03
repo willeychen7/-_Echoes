@@ -307,8 +307,7 @@ export const CalendarPage: React.FC = () => {
                                 linkedMembers.slice(0, 3).map((m, idx) => {
                                   const isMee = currentUser && (
                                     (m.id && currentUser.memberId && String(m.id) === String(currentUser.memberId)) ||
-                                    (m.userId && currentUser.id && String(m.userId) === String(currentUser.id)) ||
-                                    (m.name === currentUser.name && m.isRegistered)
+                                    (m.userId && currentUser.id && String(m.userId) === String(currentUser.id))
                                   );
                                   const mAvatar = isMee ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(m.avatarUrl);
                                   return (
