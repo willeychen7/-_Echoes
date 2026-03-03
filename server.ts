@@ -837,13 +837,42 @@ export async function createApp() {
           return { updateData, invUpdate };
         };
 
-        const { updateData, invUpdate } = await resolveRigorousRel(standardRole, inviter, target.id);
+        // 1.5 DATA PERSISTENCE: Check if this user had a previous record in this family
+        const { data: currentUser } = await supabase.from("users").select("id, name, avatar_url, bio, birth_date, gender").eq("phone_or_email", phone).maybeSingle();
+        let finalTargetId = target.id;
 
-        const finalTargetData = { ...updateData, is_registered: true };
+        if (currentUser) {
+          const { data: legacyRecord } = await supabase
+            .from("family_members")
+            .select("id")
+            .eq("family_id", inviter.family_id)
+            .eq("user_id", currentUser.id)
+            .neq("id", target.id) // Don't match the one we're currently claiming
+            .maybeSingle();
 
-        // 3. Update the targeted family member
-        const { data, error } = await supabase.from("family_members").update(finalTargetData).eq("id", target.id).select().single();
-        if (error) throw error;
+          if (legacyRecord) {
+            console.log(`[REJOIN] Detected legacy record ${legacyRecord.id} for user ${currentUser.id}. Merging/Re-linking...`);
+            // If the inviter invited a fresh record (target.id), but we have a better legacy record (legacyRecord.id)
+            // We'll prioritize the legacy one because it holds the history (memories/messages)
+
+            // Delete the "empty" new record that was just for the invite
+            await supabase.from("family_members").delete().eq("id", target.id);
+            finalTargetId = legacyRecord.id;
+          }
+        }
+
+        // 2. Perform rigorous relationship calculation
+        const { updateData, invUpdate } = await resolveRigorousRel(standardRole, inviter, finalTargetId);
+
+        const finalTargetData: any = { ...updateData, is_registered: true, user_id: currentUser?.id };
+        if (currentUser) {
+          if (currentUser.name) finalTargetData.name = currentUser.name;
+          if (currentUser.avatar_url) finalTargetData.avatar_url = currentUser.avatar_url;
+        }
+
+        // 3. Update the targeted (legacy or new) family member
+        const { data: finalMember, error: mErr } = await supabase.from("family_members").update(finalTargetData).eq("id", finalTargetId).select().single();
+        if (mErr) throw mErr;
 
         // 4. Update inviter back-link
         if (Object.keys(invUpdate).length > 1) {
@@ -862,16 +891,16 @@ export async function createApp() {
             birth_date: (userData as any).birth_date || target.birth_date,
             gender: (userData as any).gender || target.gender,
             user_id: userData.id // PERSISTENT LINK
-          }).eq("id", target.id);
+          }).eq("id", finalTargetId);
 
           await supabase.from("users").update({
             relationship: relationshipToInviter,
             family_id: inviter.family_id,
-            member_id: data.id
+            member_id: finalMember.id
           }).eq("id", userData.id);
         }
 
-        res.json({ success: true, memberId: data.id, familyId: inviter.family_id, userId: userData?.id });
+        res.json({ success: true, memberId: finalMember.id, familyId: inviter.family_id, userId: userData?.id });
       } catch (err: any) {
         console.error("[ACCEPT-INVITE] Error:", err.message);
         res.status(500).json({ error: err.message });
@@ -1673,11 +1702,11 @@ export async function createApp() {
           await supabase.from("family_members").delete().eq("id", memberId);
           await supabase.from("families").delete().eq("id", familyToCleanup);
         } else if (memberId) {
-          // Just unregister the departing member
+          // Just unregister the departing member but KEEP user_id for future re-linking
           await supabase.from("family_members").update({
             is_registered: false,
-            invite_code: null,
-            user_id: null
+            invite_code: null
+            // DO NOT NULL user_id - maintains the "Ghost" link for historical data
           }).eq("id", memberId);
         }
 
