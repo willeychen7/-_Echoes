@@ -837,40 +837,58 @@ export async function createApp() {
           return { updateData, invUpdate };
         };
 
-        // 1.5 DATA PERSISTENCE: Check if this user had a previous record in this family
+        // 1.5 IDENTITY GUARD & DATA MIGRATION
         const { data: currentUser } = await supabase.from("users").select("id, name, avatar_url, bio, birth_date, gender").eq("phone_or_email", phone).maybeSingle();
-        let finalTargetId = target.id;
+        if (!currentUser) throw new Error("用户未在系统注册");
 
-        if (currentUser) {
-          const { data: legacyRecord } = await supabase
-            .from("family_members")
-            .select("id")
-            .eq("family_id", inviter.family_id)
-            .eq("user_id", currentUser.id)
-            .neq("id", target.id) // Don't match the one we're currently claiming
-            .maybeSingle();
-
-          if (legacyRecord) {
-            console.log(`[REJOIN] Detected legacy record ${legacyRecord.id} for user ${currentUser.id}. Merging/Re-linking...`);
-            // If the inviter invited a fresh record (target.id), but we have a better legacy record (legacyRecord.id)
-            // We'll prioritize the legacy one because it holds the history (memories/messages)
-
-            // Delete the "empty" new record that was just for the invite
-            await supabase.from("family_members").delete().eq("id", target.id);
-            finalTargetId = legacyRecord.id;
-          }
+        // SECURITY: Check if the profile (target.id) is already "owned" by someone else
+        if (target.user_id && target.user_id !== currentUser.id) {
+          return res.status(403).json({
+            error: "身份不匹配：该档案曾属于另一位用户，您无法认领此档案。",
+            code: "IDENTITY_MISMATCH"
+          });
         }
+
+        // MIGRATION: Check if THIS user had a DIFFERENT legacy record (ID 123) in this family
+        const { data: legacyRecord } = await supabase
+          .from("family_members")
+          .select("id")
+          .eq("family_id", inviter.family_id)
+          .eq("user_id", currentUser.id)
+          .neq("id", target.id) // Must be a different record
+          .maybeSingle();
+
+        if (legacyRecord) {
+          console.log(`[MIGRATION] Transferring memories/messages from OLD ID ${legacyRecord.id} to NEW ID ${target.id}`);
+
+          // Move memories (both as owner and author)
+          await supabase.from("memories").update({ member_id: target.id }).eq("member_id", legacyRecord.id);
+          await supabase.from("memories").update({ author_id: target.id }).eq("author_id", legacyRecord.id);
+
+          // Move messages
+          await supabase.from("messages").update({ family_member_id: target.id }).eq("family_member_id", legacyRecord.id);
+
+          // Move notifications
+          await supabase.from("notifications").update({ member_id: target.id }).eq("member_id", legacyRecord.id);
+
+          // Move ownership records
+          await supabase.from("archive_memory_creators").update({ member_id: target.id }).eq("member_id", legacyRecord.id);
+          await supabase.from("archive_memory_creators").update({ creator_member_id: target.id }).eq("creator_member_id", legacyRecord.id);
+
+          // FINALLY: Delete the legacy skeleton record
+          await supabase.from("family_members").delete().eq("id", legacyRecord.id);
+        }
+
+        const finalTargetId = target.id;
 
         // 2. Perform rigorous relationship calculation
         const { updateData, invUpdate } = await resolveRigorousRel(standardRole, inviter, finalTargetId);
 
-        const finalTargetData: any = { ...updateData, is_registered: true, user_id: currentUser?.id };
-        if (currentUser) {
-          if (currentUser.name) finalTargetData.name = currentUser.name;
-          if (currentUser.avatar_url) finalTargetData.avatar_url = currentUser.avatar_url;
-        }
+        const finalTargetData: any = { ...updateData, is_registered: true, user_id: currentUser.id };
+        if (currentUser.name) finalTargetData.name = currentUser.name;
+        if (currentUser.avatar_url) finalTargetData.avatar_url = currentUser.avatar_url;
 
-        // 3. Update the targeted (legacy or new) family member
+        // 3. Update active family member (ID 456)
         const { data: finalMember, error: mErr } = await supabase.from("family_members").update(finalTargetData).eq("id", finalTargetId).select().single();
         if (mErr) throw mErr;
 
@@ -880,19 +898,9 @@ export async function createApp() {
           await supabase.from("family_members").update(rest).eq("id", id);
         }
 
-        // 5. Update the User record and sync profile back to the new family member
-        const { data: userData } = await supabase.from("users").select("*").eq("phone_or_email", phone).single();
+        // 5. Update the User record and synchronize
+        const { data: userData } = await supabase.from("users").select("*").eq("id", currentUser.id).single();
         if (userData) {
-          // Sync global profile AND persistent link to the member record
-          await supabase.from("family_members").update({
-            name: userData.name || target.name,
-            avatar_url: (userData as any).avatar_url || target.avatar_url,
-            bio: (userData as any).bio || target.bio,
-            birth_date: (userData as any).birth_date || target.birth_date,
-            gender: (userData as any).gender || target.gender,
-            user_id: userData.id // PERSISTENT LINK
-          }).eq("id", finalTargetId);
-
           await supabase.from("users").update({
             relationship: relationshipToInviter,
             family_id: inviter.family_id,
