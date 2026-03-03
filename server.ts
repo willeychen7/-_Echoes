@@ -657,7 +657,14 @@ export async function createApp() {
           targetId = parseInt(parts[1]);
           inviterId = parseInt(parts[2]);
         } else {
-          return res.status(400).json({ error: "Invalid invite code format" });
+          // Fallback: lookup by invite_code (Legacy FA- format)
+          const { data: legacyTarget } = await supabase.from("family_members").select("*").eq("invite_code", inviteCode).single();
+          if (!legacyTarget) return res.status(400).json({ error: "邀请码无效或格式不匹配" });
+
+          targetId = legacyTarget.id;
+          // Find who created this profile
+          const { data: creatorLink } = await supabase.from("archive_memory_creators").select("creator_member_id").eq("member_id", targetId).maybeSingle();
+          inviterId = creatorLink ? creatorLink.creator_member_id : targetId;
         }
 
         // 1. Get inviter and target
