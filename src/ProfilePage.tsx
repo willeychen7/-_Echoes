@@ -79,8 +79,18 @@ export const ProfilePage: React.FC = () => {
     }
   }, []);
 
-  const fetchStatsAndNotifications = async (currentUserInfo: any) => {
+  const fetchStatsAndNotifications = async (isInitial = false) => {
     try {
+      // 核心修复：每次请求都读取最实时的本地存储，避免闭包过时
+      const savedUser = localStorage.getItem("currentUser");
+      const currentUserInfo = savedUser ? JSON.parse(savedUser) : null;
+
+      if (!currentUserInfo) {
+        if (!isInitial) return;
+        setIsLoading(false);
+        return;
+      }
+
       const memberId = currentUserInfo.memberId;
       const userId = currentUserInfo.id || currentUserInfo.userId;
 
@@ -107,7 +117,7 @@ export const ProfilePage: React.FC = () => {
 
       const days = Math.max(1, Math.floor((Date.now() - new Date(currentUserInfo.joinDate || Date.now()).getTime()) / 86400000));
 
-      // 2. 优先级：优先使用 freshUser (全局账号) 的名字和头像，因为这代表用户本人意愿
+      // 2. 判定逻辑：只有当远程数据确实“新”且“有效”时才进行覆盖
       let finalUserData = {
         ...currentUserInfo,
         bio: currentUserInfo.bio || currentUserInfo.signature || "热爱生活，记录美好。",
@@ -115,7 +125,15 @@ export const ProfilePage: React.FC = () => {
       };
 
       const remoteName = freshUser?.name || freshProfile?.name || finalUserData.name;
-      const remoteAvatar = freshUser?.avatar_url || freshProfile?.avatar_url || freshProfile?.avatarUrl || finalUserData.avatar;
+      // 关键：如果远程返回的是占位图，或者本地已经有自定的长字符串头像，优先保住本地
+      let remoteAvatar = freshUser?.avatar_url || freshProfile?.avatar_url || freshProfile?.avatarUrl;
+      const currentAvatar = currentUserInfo.avatar || "";
+
+      // 如果远程没头像，或者远程头像是默认图而本地已经是修改过的图，则忽略远程
+      if (!remoteAvatar || (remoteAvatar.length < 20 && currentAvatar.length > 20)) {
+        remoteAvatar = currentAvatar;
+      }
+
       const remoteBio = freshUser?.bio || freshProfile?.bio || finalUserData.bio || "热爱生活，记录美好。";
       const remoteBirthday = freshUser?.birth_date || freshProfile?.birth_date || freshProfile?.birthDate || finalUserData.birthday;
 
@@ -142,16 +160,14 @@ export const ProfilePage: React.FC = () => {
         days
       };
 
-      // 3. 核心修复：更新本地用户状态，但永远不要用“空白”或“旧”的远程数据覆盖本地刚刚修改过的头像/资料
+      // 3. 最终状态合并
       setUser(prevUser => {
         const statsChanged =
           prevUser.stats.memories !== statsObj.memories ||
           prevUser.stats.likes !== statsObj.likes ||
           prevUser.stats.days !== statsObj.days;
 
-        // 构建合并后的最新数据
-        // 关键：如果远程返回了有效的头像且与本地不同且本地不是由于刚刚修改产生的（这里通过 logic 锁死，或者直接信任本地为准直到下一次登录）
-        // 这里采用更激进的方案：在 fetch 过程中，如果本地已经有头像，且远程返回的头像无效或较短，则保持本地。
+        // 再次兜底：如果 finalUserData 的头像因为任何原因变短了（比如远程延迟覆盖），在此处锁死
         const mergedAvatar = (finalUserData.avatar && finalUserData.avatar.length > 20)
           ? finalUserData.avatar
           : prevUser.avatar;
@@ -163,14 +179,12 @@ export const ProfilePage: React.FC = () => {
           stats: statsObj
         };
 
-        // 同步回 localStorage 确保持久化
+        // 持久化到 localStorage
         localStorage.setItem("currentUser", JSON.stringify(mergedUser));
 
-        // 如果内容没变，跳过更新
         if (!hasChanges && !statsChanged && prevUser.avatar === mergedAvatar) {
           return prevUser;
         }
-
         return mergedUser;
       });
 
@@ -199,9 +213,9 @@ export const ProfilePage: React.FC = () => {
     }
 
     // 初始加载
-    fetchStatsAndNotifications(parsed);
+    fetchStatsAndNotifications(true);
 
-    // Identity Healing: 如果用户没有关联档案（比如刚退出或旧数据），尝试通过名字“认领”同名孤儿档案
+    // Identity Healing
     if (!parsed.memberId && parsed.id && parsed.name) {
       fetch("/api/users/claim-orphan", {
         method: "POST",
@@ -211,18 +225,15 @@ export const ProfilePage: React.FC = () => {
         .then(r => r.json())
         .then(data => {
           if (data.success && data.memberId) {
-            console.log("[Identity] Automatically healed orphaned archive link:", data.memberId);
             const latest = JSON.parse(localStorage.getItem("currentUser") || "{}");
             localStorage.setItem("currentUser", JSON.stringify({ ...latest, memberId: data.memberId }));
             setUser(prev => ({ ...prev, memberId: data.memberId }));
-            // 重新触发拉取以确保头像/资料同步
-            fetchStatsAndNotifications({ ...latest, memberId: data.memberId });
+            fetchStatsAndNotifications();
           }
-        })
-        .catch(console.error);
+        });
     }
 
-    // Sync User ID if missing from localStorage
+    // Sync User ID
     if (!parsed.id && parsed.phone) {
       fetch(`/api/users/sync?phone=${parsed.phone}`)
         .then(r => r.json())
@@ -232,12 +243,11 @@ export const ProfilePage: React.FC = () => {
             localStorage.setItem("currentUser", JSON.stringify({ ...latest, id: data.id }));
             setUser(prev => ({ ...prev, id: data.id }));
           }
-        })
-        .catch(console.error);
+        });
     }
 
-    // NOTE: 30秒轮询兑底 —— 确保断网后重连也能同步
-    const pollTimer = setInterval(() => fetchStatsAndNotifications(parsed), 30000);
+    // NOTE: 定时轮询不再传递闭包内的 parsed，而是动态读取
+    const pollTimer = setInterval(() => fetchStatsAndNotifications(), 30000);
 
     return () => clearInterval(pollTimer);
   }, []);
