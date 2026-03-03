@@ -389,7 +389,13 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
-  const hasJoinedFamily = user.isRegistered && user.familyId && user.familyId !== 0 && user.id;
+  // NOTE: hasJoinedFamily only true if user joined via invite (exclude creator/default roles)
+  const hasJoinedFamily = user.isRegistered &&
+    user.familyId &&
+    user.familyId !== 0 &&
+    user.id &&
+    user.role !== "创建者" &&
+    user.role !== "本人";
 
   const handleSwitchPersona = (persona: any) => {
     localStorage.setItem("currentUser", JSON.stringify(persona));

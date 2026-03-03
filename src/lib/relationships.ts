@@ -106,7 +106,7 @@ export function getRigorousRelationship(
     members: any[]
 ): string {
     if (!viewerId || !targetId) return "家人";
-    if (viewerId === targetId) return "本人";
+    if (viewerId == targetId) return "我";
 
     const viewer = members.find(m => m.id === viewerId);
     const target = members.find(m => m.id === targetId);

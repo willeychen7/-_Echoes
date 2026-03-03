@@ -623,7 +623,9 @@ export const ArchivePage: React.FC = () => {
               </div>
             )}
           </div>
-          <h1 className="text-3xl font-black text-slate-800">{displayName}的记忆档案</h1>
+          <h1 className="text-3xl font-black text-slate-800">
+            {isMeMember ? "我的记忆档案" : `${displayName}的记忆档案`}
+          </h1>
           {displayBio && displayBio.trim() !== "" && (
             <p className="text-sm text-slate-400 italic mt-3 mb-2">“{displayBio}”</p>
           )}
@@ -645,7 +647,7 @@ export const ArchivePage: React.FC = () => {
 
           {creatorName && (
             <div className="mt-4 px-3 py-1 bg-amber-50/50 rounded-full text-[10px] font-black text-amber-600/60 flex items-center gap-1.5 ring-1 ring-amber-100 italic">
-              由 {creatorName} 为 TA 开启了记忆档案
+              {creatorName === (currentUser?.name || "") ? "由 我 为自己开启了记忆档案" : `由 ${creatorName} 为 TA 开启了记忆档案`}
             </div>
           )}
         </div>
@@ -657,7 +659,7 @@ export const ArchivePage: React.FC = () => {
               onClick={() => setTab("say")}
               className={cn("flex-1 py-5 text-xl font-black border-b-4 transition-all", tab === "say" ? "text-[#eab308] border-[#eab308]" : "text-slate-400 border-transparent")}
             >
-              我想对他/她说...
+              {isMeMember ? "我想对自己说..." : "我想对他/她说..."}
             </button>
             <button
               onClick={() => setTab("questions")}
