@@ -700,7 +700,8 @@ export async function createApp() {
           name,
           relationship: "我",
           family_id: inviter.family_id,
-          member_id: data.id
+          member_id: data.id,
+          avatar_url: avatarUrl
         }).select().single();
 
         if (userError) throw userError;
@@ -920,7 +921,8 @@ export async function createApp() {
           name,
           relationship: "我",
           member_id: member.id,
-          family_id: family.id
+          family_id: family.id,
+          avatar_url: avatar || ""
         }).select("id").single();
 
         if (uError) console.error("User info storage error (non-blocking):", uError.message);
@@ -1759,12 +1761,14 @@ export async function createApp() {
         if (!userId) return res.status(400).json({ error: "Missing userId" });
         const numericUserId = parseInt(String(userId));
 
-        // Only update 'name' in users table if name is provided
-        if (name) {
-          const { error } = await supabase.from("users").update({
-            name
-          }).eq("id", numericUserId);
-          if (error) console.warn("User name update warning:", error.message);
+        // Only update 'name' and 'avatar_url' in users table if provided
+        const userUpdate: any = {};
+        if (name) userUpdate.name = name;
+        if (avatarUrl) userUpdate.avatar_url = avatarUrl;
+
+        if (Object.keys(userUpdate).length > 0) {
+          const { error } = await supabase.from("users").update(userUpdate).eq("id", numericUserId);
+          if (error) console.warn("User profile sync warning:", error.message);
         }
 
         // SYNC: Also update ALL family_member records that belong to this user
