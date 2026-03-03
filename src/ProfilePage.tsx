@@ -295,18 +295,15 @@ export const ProfilePage: React.FC = () => {
   const handleAvatarChange = async (url: string) => {
     const updatedUser = { ...user, avatar: url };
     setUser(updatedUser);
-
-    const savedUser = localStorage.getItem("currentUser");
-    if (savedUser) {
-      const parsed = JSON.parse(savedUser);
-      localStorage.setItem("currentUser", JSON.stringify({ ...parsed, avatar: url }));
-    }
-
+    localStorage.setItem("currentUser", JSON.stringify(updatedUser));
     localStorage.setItem("_profileLastMod", Date.now().toString());
 
-    if (updatedUser.memberId) {
-      updateAvatarCache(updatedUser.memberId, url);
-      await fetch(`/api/family-members/${updatedUser.memberId}`, {
+    const targetMemberId = updatedUser.memberId;
+    const targetUserId = updatedUser.id;
+
+    if (targetMemberId) {
+      updateAvatarCache(targetMemberId, url);
+      await fetch(`/api/family-members/${targetMemberId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -319,25 +316,19 @@ export const ProfilePage: React.FC = () => {
       });
     }
 
-    // NEW: Sync to core user record for identity persistence
-    const savedUserRaw = localStorage.getItem("currentUser");
-    if (savedUserRaw) {
-      const parsed = JSON.parse(savedUserRaw);
-      const userId = parsed.id || parsed.userId;
-      if (userId) {
-        await fetch(`/api/users/sync-profile`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId,
-            avatarUrl: url,
-            name: updatedUser.name,
-            bio: updatedUser.bio || "",
-            birthDate: updatedUser.birthday || "",
-            gender: updatedUser.gender || "男"
-          })
-        }).catch(console.error);
-      }
+    if (targetUserId) {
+      await fetch(`/api/users/sync-profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: targetUserId,
+          avatarUrl: url,
+          name: updatedUser.name,
+          bio: updatedUser.bio || "",
+          birthDate: updatedUser.birthday || "",
+          gender: updatedUser.gender || "男"
+        })
+      }).catch(console.error);
     }
 
     window.dispatchEvent(new Event('storage'));
@@ -353,22 +344,14 @@ export const ProfilePage: React.FC = () => {
     };
     setUser(updatedUser);
 
-    const savedUser = localStorage.getItem("currentUser");
-    if (savedUser) {
-      const parsed = JSON.parse(savedUser);
-      localStorage.setItem("currentUser", JSON.stringify({
-        ...parsed,
-        name: editForm.name,
-        bio: editForm.bio,
-        birthday: editForm.birthday,
-        avatar: user.avatar
-      }));
-    }
-
+    localStorage.setItem("currentUser", JSON.stringify(updatedUser)); // Use updatedUser object directly
     localStorage.setItem("_profileLastMod", Date.now().toString());
 
-    if (updatedUser.memberId) {
-      await fetch(`/api/family-members/${updatedUser.memberId}`, {
+    const targetMemberId = updatedUser.memberId;
+    const targetUserId = updatedUser.id;
+
+    if (targetMemberId) {
+      await fetch(`/api/family-members/${targetMemberId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -380,25 +363,19 @@ export const ProfilePage: React.FC = () => {
       });
     }
 
-    // NEW: Sync to core user record for identity persistence
-    const savedUserRaw = localStorage.getItem("currentUser");
-    if (savedUserRaw) {
-      const parsed = JSON.parse(savedUserRaw);
-      const userId = parsed.id || parsed.userId;
-      if (userId) {
-        await fetch(`/api/users/sync-profile`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId,
-            name: updatedUser.name,
-            bio: updatedUser.bio,
-            birthDate: updatedUser.birthday,
-            avatarUrl: updatedUser.avatar,
-            gender: updatedUser.gender || "男"
-          })
-        }).catch(console.error);
-      }
+    if (targetUserId) {
+      await fetch(`/api/users/sync-profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: targetUserId,
+          name: updatedUser.name,
+          bio: updatedUser.bio,
+          birthDate: updatedUser.birthday,
+          avatarUrl: updatedUser.avatar,
+          gender: updatedUser.gender || "男"
+        })
+      }).catch(console.error);
     }
 
     setShowEditModal(false);

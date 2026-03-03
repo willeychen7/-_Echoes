@@ -361,15 +361,18 @@ export async function createApp() {
       const { error } = await supabase
         .from("family_members")
         .update({
-          name,
-          relationship,
-          avatar_url: avatarUrl,
-          bio,
-          birth_date: birthDate
+          name: name || undefined,
+          relationship: relationship || undefined,
+          avatar_url: avatarUrl || undefined,
+          bio: bio || undefined,
+          birth_date: birthDate || undefined
         })
         .eq("id", req.params.id);
 
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) {
+        console.error("[API] PUT family-member error:", error.message);
+        return res.status(500).json({ error: error.message });
+      }
 
       // 3. 核心同步逻辑：更新关联的 users 表
       await supabase.from("users").update({ name, relationship }).eq("member_id", req.params.id);
@@ -1700,21 +1703,24 @@ export async function createApp() {
       try {
         const { userId, name, bio, birthDate, avatarUrl, gender } = req.body;
         if (!userId) return res.status(400).json({ error: "Missing userId" });
+        const numericUserId = parseInt(String(userId));
 
-        // Only update 'name' in users table (other fields like avatar_url might not exist yet)
-        const { error } = await supabase.from("users").update({
-          name
-        }).eq("id", userId);
-        if (error) console.warn("User name update warning (ignorable if partial):", error.message);
+        // Only update 'name' in users table if name is provided
+        if (name) {
+          const { error } = await supabase.from("users").update({
+            name
+          }).eq("id", numericUserId);
+          if (error) console.warn("User name update warning:", error.message);
+        }
 
         // SYNC: Also update ALL family_member records that belong to this user
         const { data: syncedMembers } = await supabase.from("family_members").update({
-          name,
-          bio,
-          birth_date: birthDate,
-          avatar_url: avatarUrl,
-          gender
-        }).eq("user_id", userId).select("id");
+          name: name || undefined,
+          bio: bio || undefined,
+          birth_date: birthDate || undefined,
+          avatar_url: avatarUrl || undefined,
+          gender: gender || undefined
+        }).eq("user_id", numericUserId).select("id");
 
         // NEW: Also update content (memories/messages) for all matched identities
         if (syncedMembers && syncedMembers.length > 0) {
