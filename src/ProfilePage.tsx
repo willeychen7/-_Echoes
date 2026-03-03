@@ -142,31 +142,36 @@ export const ProfilePage: React.FC = () => {
         days
       };
 
-      // 3. 增强：保存到 localStorage 时，确保不会被没有头像的远程数据冲掉
-      const updatedLocalUser = {
-        ...finalUserData,
-        avatar: (finalUserData.avatar && finalUserData.avatar.length > 20) ? finalUserData.avatar : currentUserInfo.avatar,
-        stats: statsObj
-      };
-      localStorage.setItem("currentUser", JSON.stringify(updatedLocalUser));
-
+      // 3. 核心修复：更新本地用户状态，但永远不要用“空白”或“旧”的远程数据覆盖本地刚刚修改过的头像/资料
       setUser(prevUser => {
         const statsChanged =
           prevUser.stats.memories !== statsObj.memories ||
           prevUser.stats.likes !== statsObj.likes ||
           prevUser.stats.days !== statsObj.days;
 
-        // 如果内容完全一致，避免触发 re-render
-        if (!hasChanges && !statsChanged && prevUser.avatar === updatedLocalUser.avatar) {
+        // 构建合并后的最新数据
+        // 关键：如果远程返回了有效的头像且与本地不同且本地不是由于刚刚修改产生的（这里通过 logic 锁死，或者直接信任本地为准直到下一次登录）
+        // 这里采用更激进的方案：在 fetch 过程中，如果本地已经有头像，且远程返回的头像无效或较短，则保持本地。
+        const mergedAvatar = (finalUserData.avatar && finalUserData.avatar.length > 20)
+          ? finalUserData.avatar
+          : prevUser.avatar;
+
+        const mergedUser = {
+          ...prevUser,
+          ...finalUserData,
+          avatar: mergedAvatar,
+          stats: statsObj
+        };
+
+        // 同步回 localStorage 确保持久化
+        localStorage.setItem("currentUser", JSON.stringify(mergedUser));
+
+        // 如果内容没变，跳过更新
+        if (!hasChanges && !statsChanged && prevUser.avatar === mergedAvatar) {
           return prevUser;
         }
 
-        return {
-          ...prevUser,
-          ...finalUserData,
-          avatar: updatedLocalUser.avatar,
-          stats: statsObj
-        };
+        return mergedUser;
       });
 
       setNotifications(Array.isArray(notifs) ? notifs : []);
