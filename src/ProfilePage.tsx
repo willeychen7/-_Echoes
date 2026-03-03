@@ -142,11 +142,13 @@ export const ProfilePage: React.FC = () => {
         days
       };
 
-      // 3. 同步到本地缓存
-      localStorage.setItem("currentUser", JSON.stringify({
+      // 3. 增强：保存到 localStorage 时，确保不会被没有头像的远程数据冲掉
+      const updatedLocalUser = {
         ...finalUserData,
+        avatar: (finalUserData.avatar && finalUserData.avatar.length > 20) ? finalUserData.avatar : currentUserInfo.avatar,
         stats: statsObj
-      }));
+      };
+      localStorage.setItem("currentUser", JSON.stringify(updatedLocalUser));
 
       setUser(prevUser => {
         const statsChanged =
@@ -154,14 +156,15 @@ export const ProfilePage: React.FC = () => {
           prevUser.stats.likes !== statsObj.likes ||
           prevUser.stats.days !== statsObj.days;
 
-        if (!hasChanges && !statsChanged && prevUser.id === finalUserData.memberId && prevUser.avatar === finalUserData.avatar) {
+        // 如果内容完全一致，避免触发 re-render
+        if (!hasChanges && !statsChanged && prevUser.avatar === updatedLocalUser.avatar) {
           return prevUser;
         }
 
         return {
           ...prevUser,
           ...finalUserData,
-          avatar: (finalUserData.avatar && finalUserData.avatar.length > 20) ? finalUserData.avatar : prevUser.avatar,
+          avatar: updatedLocalUser.avatar,
           stats: statsObj
         };
       });
