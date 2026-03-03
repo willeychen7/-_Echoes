@@ -104,28 +104,28 @@ export const FamilySquare: React.FC = () => {
     const parsed = savedUser ? JSON.parse(savedUser) : null;
 
     const loadUser = () => {
-      if (parsed) {
-        setCurrentUser(parsed);
-        if (parsed.avatar) setUserAvatar(parsed.avatar);
+      const currentSavedUser = localStorage.getItem("currentUser");
+      const currentParsed = currentSavedUser ? JSON.parse(currentSavedUser) : null;
+
+      if (currentParsed) {
+        setCurrentUser(currentParsed);
+        setUserAvatar(getSafeAvatar(currentParsed.avatar));
       } else {
-        // NOTE: 未登录时使用 Demo 默认用户
         setCurrentUser(DEMO_DEFAULT_USER);
-        setUserAvatar(DEMO_DEFAULT_USER.avatar);
+        setUserAvatar(getSafeAvatar(DEMO_DEFAULT_USER.avatar));
       }
 
-      // NOTE: 核心分支 —— Demo 模式用本地数据，注册用户走 API
-      if (isDemoMode(parsed)) {
+      const modeParsed = currentParsed || parsed;
+      if (isDemoMode(modeParsed)) {
         const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
         setMembers([...DEMO_MEMBERS, ...customMembers]);
-        // 合并静态演示数据 + 用户在 Demo 模式下新增的事件
         const customEvents = JSON.parse(localStorage.getItem("demoCustomEvents") || "[]");
         setEvents([...DEMO_EVENTS, ...customEvents]);
-      } else {
-        const familyId = parseInt(String(parsed.familyId));
+      } else if (modeParsed && modeParsed.familyId) {
+        const familyId = parseInt(String(modeParsed.familyId));
         fetch(`/api/family-members?familyId=${familyId}`).then(res => res.json()).then(data => {
           if (Array.isArray(data)) {
             setMembers(data);
-            // NOTE: 同步全局头像缓存
             data.forEach((m: any) => {
               if (m.id && (m.avatar_url || m.avatarUrl)) {
                 updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
@@ -136,11 +136,10 @@ export const FamilySquare: React.FC = () => {
             if (Array.isArray(data)) setEvents(data);
           }).catch(console.error);
 
-          // Fetch messages to see which events I've addressed
           fetch(`/api/messages`).then(res => res.json()).then(data => {
             if (Array.isArray(data)) {
               const mySentIds = data
-                .filter((m: any) => m.authorName === parsed.name && m.eventId)
+                .filter((m: any) => m.authorName === (currentParsed?.name || parsed?.name) && m.eventId)
                 .map((m: any) => m.eventId);
               setSentEventIds(mySentIds);
             }
