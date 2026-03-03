@@ -859,23 +859,31 @@ export async function createApp() {
           .maybeSingle();
 
         if (legacyRecord) {
-          console.log(`[MIGRATION] Transferring memories/messages from OLD ID ${legacyRecord.id} to NEW ID ${target.id}`);
+          console.log(`[MIGRATION] Transferring all assets from OLD ID ${legacyRecord.id} to NEW ID ${target.id}`);
 
-          // Move memories (both as owner and author)
+          // 1. Move memories (as owner and author)
           await supabase.from("memories").update({ member_id: target.id }).eq("member_id", legacyRecord.id);
           await supabase.from("memories").update({ author_id: target.id }).eq("author_id", legacyRecord.id);
 
-          // Move messages
+          // 2. Move messages
           await supabase.from("messages").update({ family_member_id: target.id }).eq("family_member_id", legacyRecord.id);
 
-          // Move notifications
+          // 3. Move notifications
           await supabase.from("notifications").update({ member_id: target.id }).eq("member_id", legacyRecord.id);
 
-          // Move ownership records
+          // 4. Move ownership records
           await supabase.from("archive_memory_creators").update({ member_id: target.id }).eq("member_id", legacyRecord.id);
           await supabase.from("archive_memory_creators").update({ creator_member_id: target.id }).eq("creator_member_id", legacyRecord.id);
 
-          // FINALLY: Delete the legacy skeleton record
+          // 5. Move Events Participation
+          await supabase.from("events").update({ member_id: target.id }).eq("member_id", legacyRecord.id);
+
+          // 6. KINSHIP REPAIR: If anyone had legacyRecord as their relative, update to target.id
+          await supabase.from("family_members").update({ father_id: target.id }).eq("father_id", legacyRecord.id);
+          await supabase.from("family_members").update({ mother_id: target.id }).eq("mother_id", legacyRecord.id);
+          await supabase.from("family_members").update({ spouse_id: target.id }).eq("spouse_id", legacyRecord.id);
+
+          // FINALLY: Delete the legacy skeleton record (ID 123 is now fully drained of value)
           await supabase.from("family_members").delete().eq("id", legacyRecord.id);
         }
 
@@ -1710,11 +1718,10 @@ export async function createApp() {
           await supabase.from("family_members").delete().eq("id", memberId);
           await supabase.from("families").delete().eq("id", familyToCleanup);
         } else if (memberId) {
-          // Just unregister the departing member but KEEP user_id for future re-linking
+          // Just unregister the departing member but KEEP user_id AND invite_code for re-entry
           await supabase.from("family_members").update({
-            is_registered: false,
-            invite_code: null
-            // DO NOT NULL user_id - maintains the "Ghost" link for historical data
+            is_registered: false
+            // NOTE: We keep invite_code and user_id to ensure the identity is persistent
           }).eq("id", memberId);
         }
 
