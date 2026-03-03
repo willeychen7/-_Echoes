@@ -193,6 +193,27 @@ export const ProfilePage: React.FC = () => {
     // 初始加载
     fetchStatsAndNotifications(parsed);
 
+    // Identity Healing: 如果用户没有关联档案（比如刚退出或旧数据），尝试通过名字“认领”同名孤儿档案
+    if (!parsed.memberId && parsed.id && parsed.name) {
+      fetch("/api/users/claim-orphan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: parsed.id, name: parsed.name })
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success && data.memberId) {
+            console.log("[Identity] Automatically healed orphaned archive link:", data.memberId);
+            const latest = JSON.parse(localStorage.getItem("currentUser") || "{}");
+            localStorage.setItem("currentUser", JSON.stringify({ ...latest, memberId: data.memberId }));
+            setUser(prev => ({ ...prev, memberId: data.memberId }));
+            // 重新触发拉取以确保头像/资料同步
+            fetchStatsAndNotifications({ ...latest, memberId: data.memberId });
+          }
+        })
+        .catch(console.error);
+    }
+
     // Sync User ID if missing from localStorage
     if (!parsed.id && parsed.phone) {
       fetch(`/api/users/sync?phone=${parsed.phone}`)

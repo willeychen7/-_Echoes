@@ -957,6 +957,11 @@ export async function createApp() {
             .eq("id", user.member_id)
             .single();
           member = m;
+
+          // HEAL: If user is linked but persistent user_id is missing, fix it now
+          if (member && !member.user_id) {
+            await supabase.from("family_members").update({ user_id: user.id }).eq("id", member.id);
+          }
         }
 
         // 4. 获取用户统计数据 (仅当有关联档案时)
@@ -1611,13 +1616,14 @@ export async function createApp() {
 
         if (uError) throw uError;
 
-        // 2. If it was a registered member, mark as unregistered so they can join again/newly
+        // 2. If it was a registered member, mark as unregistered but KEEP the user_id link for persistence
         if (memberId) {
           await supabase
             .from("family_members")
             .update({
               is_registered: false,
-              invite_code: null // Reset invite code to allow reuse or regeneration
+              invite_code: null, // Reset invite code to allow reuse or regeneration
+              user_id: userId    // ENSURE persistent ownership
             })
             .eq("id", memberId);
         }
@@ -1653,6 +1659,16 @@ export async function createApp() {
           gender
         }).eq("id", userId);
         if (error) throw error;
+
+        // SYNC: Also update ALL family_member records that belong to this user
+        await supabase.from("family_members").update({
+          name,
+          bio,
+          birth_date: birthDate,
+          avatar_url: avatarUrl,
+          gender
+        }).eq("user_id", userId);
+
         res.json({ success: true });
       } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -1669,6 +1685,44 @@ export async function createApp() {
 
         if (error) throw error;
         res.json(data);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post("/api/users/claim-orphan", async (req, res) => {
+      try {
+        const { userId, name } = req.body;
+        if (!userId || !name) return res.status(400).json({ error: "Missing identity info" });
+
+        // 查找同名且没有被占用的、非注册的档案
+        const { data: orphans } = await supabase
+          .from("family_members")
+          .select("*")
+          .eq("name", name)
+          .eq("is_registered", false)
+          .is("user_id", null);
+
+        if (orphans && orphans.length > 0) {
+          // 如果只有一个匹配，自动认领；如果有多个，保守起见认领第一个创建的
+          const target = orphans[0];
+
+          // 获取当前用户信息来同步
+          const { data: user } = await supabase.from("users").select("*").eq("id", userId).single();
+
+          if (user) {
+            await supabase.from("family_members").update({
+              user_id: userId,
+              avatar_url: user.avatar_url,
+              bio: user.bio,
+              birth_date: user.birth_date,
+              gender: user.gender
+            }).eq("id", target.id);
+
+            return res.json({ success: true, memberId: target.id });
+          }
+        }
+        res.json({ success: false });
       } catch (err: any) {
         res.status(500).json({ error: err.message });
       }
