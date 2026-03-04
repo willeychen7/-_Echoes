@@ -186,8 +186,25 @@ export function getRigorousRelationship(
         }
     }
 
+    // 8. 侄子/外甥 (兄弟姐妹的孩子)
+    const mySiblings = members.filter(m =>
+        m.id !== vId &&
+        ((vNode.fatherId && m.fatherId === vNode.fatherId) || (vNode.motherId && m.motherId === vNode.motherId))
+    );
+    if (mySiblings.some(s => tNode.fatherId === s.id || tNode.motherId === s.id)) {
+        return tNode.gender === "female" ? "侄女/外甥女" : "侄子/外甥";
+    }
+
     // 回退：如果没有任何树状连边，尝试显示数据库存的原始称呼
-    return tNode.relationship || "家人";
+    // 特殊逻辑：如果是自定义名称且有创建者，显示 "A的猪小宝" 这种格式
+    const baseRel = tNode.relationship || "家人";
+    if (tNode.createdByMemberId && tNode.createdByMemberId !== vId) {
+        const creator = members.find(m => m.id === tNode.createdByMemberId);
+        if (creator && !["爸爸", "妈妈", "爷爷", "奶奶", "外公", "外婆"].includes(baseRel)) {
+            return `${creator.name}的${baseRel}`;
+        }
+    }
+    return baseRel;
 }
 
 /**

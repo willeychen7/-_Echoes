@@ -1,15 +1,15 @@
 import React, { useEffect, useState, useLayoutEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Share2, Mic, Camera, Video, MessageSquare, Play, Sparkles, RotateCcw, CheckCircle, Send, X, Heart, Trash2, Copy } from "lucide-react";
+import { ArrowLeft, Share2, Mic, Camera, Video, MessageSquare, Play, Sparkles, RotateCcw, CheckCircle, Send, X, Heart, Trash2, Copy, Edit2 } from "lucide-react";
 import { FamilyMember, Message, MessageType } from "./types";
 import { Button } from "./components/Button";
 import { Card } from "./components/Card";
 import { getRelativeTime, cn } from "./lib/utils";
 import { useAvatarCache, resolveAvatar, updateAvatarCache } from "./lib/useAvatarCache";
-import { getRelativeRelationship } from "./lib/relationships";
+import { getRelativeRelationship, getRigorousRelationship } from "./lib/relationships";
 import confetti from "canvas-confetti";
-import { DEMO_MEMBERS, isDemoMode } from "./demo-data";
+import { DEMO_MEMBERS, DEMO_EVENTS, isDemoMode } from "./demo-data";
 import { supabase } from "./lib/supabase";
 import { AudioBar } from "./components/FamilyEvents";
 import { getSafeAvatar } from "./constants";
@@ -29,6 +29,7 @@ export const ArchivePage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [member, setMember] = useState<FamilyMember | null>(null);
+  const [members, setMembers] = useState<FamilyMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [tab, setTab] = useState<"say" | "questions">("say");
@@ -45,6 +46,8 @@ export const ArchivePage: React.FC = () => {
   const [archiveData, setArchiveData] = useState<MemoryArchive | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const [isEditingRelation, setIsEditingRelation] = useState(false);
+  const [tempRelation, setTempRelation] = useState("");
   const [showShareModal, setShowShareModal] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(() => {
     const saved = localStorage.getItem("currentUser");
@@ -153,8 +156,10 @@ export const ArchivePage: React.FC = () => {
           // 1. 获取成员信息请求
           if (isDemo) {
             const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
-            const found = [...DEMO_MEMBERS, ...customMembers].find(m => m.id === Number(id));
+            const allDemo = [...DEMO_MEMBERS, ...customMembers];
+            const found = allDemo.find(m => m.id === Number(id));
             if (found) setMember(found);
+            setMembers(allDemo);
           } else {
             promises.push(
               fetch(`/api/family-members/${id}`).then(res => res.ok ? res.json() : null).then(data => {
@@ -167,9 +172,10 @@ export const ArchivePage: React.FC = () => {
               })
             );
 
-            // 2. 预热家庭头像 (改为并行但非阻塞后续主逻辑)
+            // 2. 预热家庭头像并存储成员列表
             fetch(`/api/family-members?familyId=${familyId}`).then(res => res.ok ? res.json() : []).then(allMembers => {
               if (Array.isArray(allMembers)) {
+                setMembers(allMembers);
                 allMembers.forEach((m: any) => {
                   if (m.id && (m.avatar_url || m.avatarUrl)) updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
                 });
@@ -512,6 +518,32 @@ export const ArchivePage: React.FC = () => {
     }
   };
 
+  const handleUpdateRelation = async () => {
+    if (!tempRelation.trim()) return;
+    if (isDemoMode(currentUser)) {
+      setMember(prev => prev ? { ...prev, relationship: tempRelation } : null);
+      setIsEditingRelation(false);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/family-members/${id}/relationship`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relationship: tempRelation })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMember(prev => prev ? { ...prev, relationship: data.relationship } : null);
+        setIsEditingRelation(false);
+        // Update member lists to ensure UI consistency
+        setMembers(prev => prev.map(m => String(m.id) === String(id) ? { ...m, relationship: data.relationship } : m));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("更新失败");
+    }
+  };
+
   const handleDeleteMember = async () => {
     if (window.confirm("确定要删除这位亲人档案吗？此操作不可恢复。")) {
       const savedUser = localStorage.getItem("currentUser");
@@ -664,6 +696,35 @@ export const ArchivePage: React.FC = () => {
           <h1 className="text-3xl font-black text-slate-800">
             {isMeMember ? "我的记忆档案" : `${displayName}的记忆档案`}
           </h1>
+          {!isMeMember && (
+            <div className="flex items-center gap-2 mt-1">
+              {isEditingRelation ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    autoFocus
+                    className="text-sm font-bold text-[#eab308] bg-[#eab308]/5 px-3 py-1 rounded-full border border-[#eab308] outline-none w-32"
+                    value={tempRelation}
+                    onChange={(e) => setTempRelation(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleUpdateRelation()}
+                    placeholder="输入称呼"
+                  />
+                  <button onClick={handleUpdateRelation} className="p-1 text-emerald-500"><CheckCircle size={18} /></button>
+                  <button onClick={() => setIsEditingRelation(false)} className="p-1 text-slate-300"><X size={18} /></button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setIsEditingRelation(true);
+                    setTempRelation(getRigorousRelationship(currentUser, member, members));
+                  }}
+                  className="text-sm font-bold text-[#eab308] bg-[#eab308]/5 px-3 py-1 rounded-full border border-[#eab308]/10 tracking-widest flex items-center gap-1.5 hover:bg-[#eab308]/10 transition-colors group"
+                >
+                  <Sparkles size={12} fill="currentColor" /> {getRigorousRelationship(currentUser, member, members)}
+                  <Edit2 size={10} className="opacity-0 group-hover:opacity-50 transition-opacity ml-1" />
+                </button>
+              )}
+            </div>
+          )}
           {displayBio && displayBio.trim() !== "" && (
             <p className="text-sm text-slate-400 italic mt-3 mb-2">“{displayBio}”</p>
           )}

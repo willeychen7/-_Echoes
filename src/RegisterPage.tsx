@@ -20,6 +20,7 @@ export const RegisterPage: React.FC = () => {
   const [isAvatarUploaded, setIsAvatarUploaded] = useState(false);
   const [showDefaultAvatars, setShowDefaultAvatars] = useState(false);
   const [avatar, setAvatar] = useState(DEFAULT_AVATAR);
+  const [gender, setGender] = useState<"male" | "female" | null>(null);
   const [showModalAvatarPicker, setShowModalAvatarPicker] = useState(false);
 
   const [invitationCode, setInvitationCode] = useState("");
@@ -206,7 +207,8 @@ export const RegisterPage: React.FC = () => {
             relationshipToInviter: finalRole,
             standardRole: overrideStdRole || relInfo?.value || "other",
             phone,
-            password
+            password,
+            gender: gender // Pass gender to claim
           })
         });
 
@@ -224,7 +226,7 @@ export const RegisterPage: React.FC = () => {
         const response = await fetch("/api/register-new", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: finalName, phone, password, avatar: finalAvatar })
+          body: JSON.stringify({ name: finalName, phone, password, avatar: finalAvatar, gender })
         });
 
         if (!response.ok) {
@@ -604,6 +606,32 @@ export const RegisterPage: React.FC = () => {
                               </button>
                             </div>
                           )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 text-left w-full">
+                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">性别 (用于精准关系推导)</label>
+                        <div className="grid grid-cols-2 gap-3 mt-1">
+                          <button
+                            type="button"
+                            onClick={() => setGender("male")}
+                            className={cn(
+                              "h-12 rounded-2xl font-bold transition-all border-2",
+                              gender === "male" ? "bg-blue-50 border-blue-200 text-blue-600 shadow-sm" : "bg-white border-slate-100 text-slate-400"
+                            )}
+                          >
+                            男
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setGender("female")}
+                            className={cn(
+                              "h-12 rounded-2xl font-bold transition-all border-2",
+                              gender === "female" ? "bg-pink-50 border-pink-200 text-pink-600 shadow-sm" : "bg-white border-slate-100 text-slate-400"
+                            )}
+                          >
+                            女
+                          </button>
                         </div>
                       </div>
 

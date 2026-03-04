@@ -514,7 +514,7 @@ export const ProfilePage: React.FC = () => {
     { label: "其他", value: "other" }
   ];
 
-  const handleLeaveFamily = async () => {
+  const handleLeaveFamily = async (overrideTakeArchives: boolean = false) => {
     if (isDemoMode(user)) {
       alert("演示用户不可退出家族。");
       return;
@@ -528,7 +528,8 @@ export const ProfilePage: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: savedUser.id,
-          memberId: savedUser.memberId
+          memberId: savedUser.memberId,
+          takeArchives: overrideTakeArchives // Use passed boolean
         })
       });
 
@@ -979,19 +980,28 @@ export const ProfilePage: React.FC = () => {
                       <h3 className="text-2xl font-black text-slate-800">最后一次确认</h3>
                       <p className="text-sm text-slate-500 leading-relaxed">此操作不可撤销，您确定要在此时退出家族吗？</p>
                     </div>
-                    <div className="flex flex-col gap-3">
+                    <div className="space-y-3">
                       <button
-                        onClick={handleLeaveFamily}
+                        onClick={() => handleLeaveFamily(true)}
                         disabled={isLeaving}
-                        className="w-full py-4 bg-red-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-transform disabled:opacity-50"
+                        className="w-full py-4 bg-[#eab308] text-black font-black rounded-2xl shadow-lg active:scale-95 transition-transform disabled:opacity-50 flex flex-col items-center"
                       >
-                        {isLeaving ? "正在处理..." : "确定退出"}
+                        <span className="text-lg">带走我的随行档案</span>
+                        <span className="text-[10px] opacity-60 font-medium">迁出我创建的未注册成员</span>
+                      </button>
+                      <button
+                        onClick={() => handleLeaveFamily(false)}
+                        disabled={isLeaving}
+                        className="w-full py-4 bg-red-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-transform disabled:opacity-50 flex flex-col items-center"
+                      >
+                        <span className="text-lg">仅自己退出</span>
+                        <span className="text-[10px] opacity-60 font-medium">将档案留在原家族中</span>
                       </button>
                       <button
                         onClick={() => { setShowLeaveConfirm(false); setShowLeaveDoubleConfirm(false); }}
-                        className="w-full py-4 bg-slate-100 text-slate-500 font-black rounded-2xl active:scale-95 transition-transform"
+                        className="w-full py-3 bg-slate-100 text-slate-500 font-bold rounded-2xl active:scale-95 transition-transform"
                       >
-                        点错了，返回
+                        取消
                       </button>
                     </div>
                   </>

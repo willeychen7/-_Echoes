@@ -243,12 +243,15 @@ export async function createApp() {
       // Map snake_case to camelCase for frontend compatibility if needed
       const members = (data || []).map(m => ({
         ...m,
-        userId: m.user_id, // CRITICAL: Map database user_id to frontend userId
+        userId: m.user_id,
         isRegistered: m.is_registered,
         inviteCode: m.invite_code,
         avatarUrl: m.avatar_url,
         birthDate: m.birth_date,
-        standardRole: m.standard_role
+        standardRole: m.standard_role,
+        fatherId: m.father_id,
+        motherId: m.mother_id,
+        spouseId: m.spouse_id
       }));
       res.json(members);
     });
@@ -276,7 +279,10 @@ export async function createApp() {
           inviteCode: data.invite_code,
           avatarUrl: data.avatar_url,
           birthDate: data.birth_date,
-          standardRole: data.standard_role
+          standardRole: data.standard_role,
+          fatherId: data.father_id,
+          motherId: data.mother_id,
+          spouseId: data.spouse_id
         };
 
         if (targetUserId) {
@@ -298,6 +304,41 @@ export async function createApp() {
       } catch (err: any) {
         res.status(500).json({ error: err.message });
       }
+    });
+
+    // 新增：手动修正关系称谓，帮助系统学习
+    app.post("/api/family-members/:id/relationship", async (req, res) => {
+      const { id } = req.params;
+      const { relationship } = req.body;
+      if (!relationship) return res.status(400).json({ error: "关系称谓不能为空" });
+
+      // 学习逻辑：如果输入的是常用标准称呼，自动同步 standard_role
+      const commonMappings: Record<string, string> = {
+        "爸爸": "father", "父亲": "father", "爸": "father",
+        "妈妈": "mother", "母亲": "mother", "妈": "mother",
+        "儿子": "son", "女儿": "daughter",
+        "哥哥": "brother", "弟弟": "brother", "兄": "brother", "弟": "brother",
+        "姐姐": "sister", "妹妹": "sister", "姊": "sister", "妹": "sister",
+        "老婆": "spouse", "老公": "spouse", "妻子": "spouse", "丈夫": "spouse", "爱人": "spouse",
+        "爷爷": "grandfather", "外公": "grandfather", "姥爷": "grandfather",
+        "奶奶": "grandmother", "外婆": "grandmother", "姥姥": "grandmother",
+        "孙子": "grandson", "孙女": "granddaughter", "外孙": "grandson", "外孙女": "granddaughter"
+      };
+
+      const updatePayload: any = { relationship };
+      if (commonMappings[relationship]) {
+        updatePayload.standard_role = commonMappings[relationship];
+      }
+
+      const { data, error } = await supabase
+        .from("family_members")
+        .update(updatePayload)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) return res.status(500).json({ error: error.message });
+      res.json(data);
     });
 
     app.post("/api/users/bind-member", async (req, res) => {
@@ -596,8 +637,8 @@ export async function createApp() {
         if (!inviter) return res.status(404).json({ error: "Inviter not found" });
 
         // 2. Perform Relationship Mapping (Atomic Logic)
-        const resolveRigorousRel = async (role: string, inviter: any, targetId: number) => {
-          let updateData: any = { id: targetId };
+        const resolveRigorousRel = async (role: string, inviter: any, targetId: number, explicitGender?: "male" | "female" | null) => {
+          let updateData: any = { id: targetId, gender: explicitGender || undefined };
           let invUpdate: any = { id: inviter.id };
 
           const ensureParent = async (memberId: number, gender: 'male' | 'female') => {
@@ -747,13 +788,29 @@ export async function createApp() {
           userData = created;
         }
 
-        // Persistence link
+        // 5. Persistence link
         if (userData) {
-          await supabase.from("family_members").update({ user_id: userData.id }).eq("id", data.id);
+          await supabase.from("family_members").update({ user_id: userData.id }).eq("id", targetId);
         }
 
-        // 6. Sync profile changes
-        await syncMemberContent(data.id, name, target.name, avatarUrl, "我");
+        // 6. Perform rigorous relationship calculation & tree update
+        const resolvedRel = await resolveRigorousRel(standardRole, inviter, targetId, req.body.gender);
+
+        // Update Target (B)
+        const finalTargetUpdate: any = { ...resolvedRel.updateData, is_registered: true, user_id: userData.id };
+        if (avatarUrl) finalTargetUpdate.avatar_url = avatarUrl;
+        if (name) finalTargetUpdate.name = name;
+
+        await supabase.from("family_members").update(finalTargetUpdate).eq("id", targetId);
+
+        // Update Inviter (A)
+        if (Object.keys(resolvedRel.invUpdate).length > 1) {
+          const { id, ...rest } = resolvedRel.invUpdate;
+          await supabase.from("family_members").update(rest).eq("id", id);
+        }
+
+        // 7. Sync profile changes
+        await syncMemberContent(targetId, name, target.name, avatarUrl, "我");
 
         console.log("[CLAIM] Success:", { memberId: data.id, familyId: inviter.family_id, userId: userData?.id });
         res.json({ success: true, memberId: data.id, familyId: inviter.family_id, userId: userData?.id });
@@ -1134,6 +1191,7 @@ export async function createApp() {
             family_id: family.id,
             relationship: "创建者",
             avatar_url: avatar || "",
+            gender: req.body.gender,
             is_registered: true,
             standard_role: "creator"
           })
@@ -1866,7 +1924,7 @@ export async function createApp() {
 
     app.post("/api/leave-family", async (req, res) => {
       try {
-        let { userId, memberId, familyId } = req.body;
+        let { userId, memberId, familyId, takeArchives } = req.body;
 
         // Enhanced: Resolve userId from memberId if missing (backward compatibility)
         if (!userId && memberId) {
@@ -1969,8 +2027,8 @@ export async function createApp() {
           }).eq("id", userId);
 
           // --- 核心增强：反向迁移行李 (Reverse Migration) ---
-          // 当用户搬家离开时，把在这个家族里曾经创建过的“随行档案”（未注册成员）和对应的大事记一并带走
-          if (memberId && myArchive.family_id) {
+          // 当用户搬家离开时，根据用户选择(takeArchives)，把在这个家族里曾经创建过的“随行档案”（未注册成员）和对应的大事记一并带走
+          if (takeArchives && memberId && myArchive.family_id) {
             console.log(`[LEAVE-FAMILY:REVERSE-MIGRATE] Moving assets for user ${userId} to new space ${myArchive.family_id}`);
 
             // 1. 找到所有由我创建的、且尚未注册（随行状态）的成员
@@ -2015,7 +2073,7 @@ export async function createApp() {
 
           return res.json({
             success: true,
-            message: "已成功退出家族。您已回到个人的记忆档案空间。",
+            message: takeArchives ? "已带着您的档案成功退出家族。" : "已成功退出家族。",
             newFamilyId: myArchive.family_id,
             newMemberId: myArchive.id
           });
