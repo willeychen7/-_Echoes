@@ -22,7 +22,6 @@ export const RegisterPage: React.FC = () => {
 
   const [invitationCode, setInvitationCode] = useState("");
   const [hasUrlCode, setHasUrlCode] = useState(false);
-  const [showRelationshipModal, setShowRelationshipModal] = useState(false);
   const [selectedRelationship, setSelectedRelationship] = useState("");
   const [inviterName, setInviterName] = useState("");
   const [inviterId, setInviterId] = useState<number | null>(null);
@@ -504,98 +503,6 @@ export const RegisterPage: React.FC = () => {
             {isValidatingCode ? "验证中..." : "下一步"}
           </Button>
         </div>
-
-        {/* Relationship Modal */}
-        <AnimatePresence>
-          {showRelationshipModal && (
-            <div className="fixed inset-0 bg-black/50 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6">
-              <motion.div
-                initial={{ opacity: 0, y: 100 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 100 }}
-                className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl"
-              >
-                <div className="text-center space-y-4 mb-8">
-                  <div className="w-16 h-16 bg-[#eab308]/10 rounded-full flex items-center justify-center mx-auto text-[#eab308]">
-                    <Plus size={32} />
-                  </div>
-                  <h3 className="text-2xl font-bold text-slate-800">确认您的身份</h3>
-                  <p className="text-slate-500">
-                    您是通过 <span className="font-bold text-[#eab308]">{inviterName}</span> 的邀请码加入的。<br />
-                    请问您是 <span className="font-bold text-slate-800">{inviterName}</span> 的谁？
-                  </p>
-                </div>
-
-                <div className="space-y-4 mb-8">
-                  <div className="grid grid-cols-2 gap-3">
-                    {topRelationships.map((rel) => (
-                      <button
-                        key={rel.label}
-                        onClick={() => setSelectedRelationship(rel.label)}
-                        className={cn(
-                          "py-4 px-2 rounded-2xl border-2 font-bold transition-all text-sm",
-                          selectedRelationship === rel.label
-                            ? "bg-[#eab308] border-[#eab308] text-black shadow-lg shadow-[#eab308]/20"
-                            : "bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100"
-                        )}
-                      >
-                        {rel.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="relative">
-                    <p className="text-xs text-slate-400 font-bold mb-2 ml-1">更多称呼</p>
-                    <select
-                      className="w-full h-14 rounded-2xl bg-slate-50 border-2 border-transparent px-4 font-bold text-slate-600 focus:border-[#eab308] focus:bg-white outline-none transition-all appearance-none"
-                      value={topRelationships.some(r => r.label === selectedRelationship) ? "" : selectedRelationship}
-                      onChange={(e) => setSelectedRelationship(e.target.value)}
-                    >
-                      <option value="" disabled>请选择其他关系...</option>
-                      {otherRelationships.map((rel) => (
-                        <option key={rel.label} value={rel.label}>{rel.label}</option>
-                      ))}
-                    </select>
-                    <div className="absolute right-4 top-[2.4rem] pointer-events-none text-slate-400">
-                      <ChevronDown size={20} />
-                    </div>
-                  </div>
-                </div>
-
-                {selectedRelationship && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    className="mb-8 p-4 bg-amber-50 rounded-2xl border border-amber-100"
-                  >
-                    <p className="text-sm text-amber-700 text-center font-medium">
-                      您选择的身份是 <span className="font-bold">{inviterName}</span> 的
-                      <span className="font-bold underline mx-1">{selectedRelationship}</span>，
-                      系统将根据此关系自动建立您与家族各成员的关系网。
-                    </p>
-                  </motion.div>
-                )}
-
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    className="flex-1 rounded-2xl py-4 font-bold"
-                    onClick={() => setShowRelationshipModal(false)}
-                  >
-                    返回
-                  </Button>
-                  <Button
-                    className="flex-1 rounded-2xl py-4 font-bold bg-[#eab308] text-black"
-                    disabled={!selectedRelationship}
-                    onClick={() => handleCompleteRegistration()}
-                  >
-                    确认加入
-                  </Button>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
 
         {/* Footer */}
         <div className="text-center">
