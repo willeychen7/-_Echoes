@@ -114,8 +114,14 @@ export function getRigorousRelationship(
     target: any,
     members: any[]
 ): string {
-    const vId = viewer?.memberId ? Number(viewer.memberId) : (viewer?.id ? Number(viewer.id) : null);
+    let vId = viewer?.memberId ? Number(viewer.memberId) : (viewer?.id ? Number(viewer.id) : null);
     const tId = target?.id ? Number(target.id) : null;
+
+    // NOTE: 关键修正 - 如果 vId 是 userId，需要在 members 中找到对应的 memberId
+    if (vId && !members.some(m => Number(m.id) === vId)) {
+        const boundMember = members.find(m => Number(m.userId) === vId);
+        if (boundMember) vId = Number(boundMember.id);
+    }
 
     if (tId === null || vId === null) return target?.relationship || "家人";
     if (vId === tId) return "我";
@@ -291,15 +297,17 @@ export function getRigorousRelationship(
             // 1. 获取中间人相对于观察者的实时称法 (可能是 "妈妈", 也可能是用户刚才改的 "舅妈")
             const cRel = getRigorousRelationship(viewer, creator, members);
 
-            // 2. 获取目标人物相对于其创建者的角色 (增加对孙辈的识别)
+            // 2. 获取目标人物相对于其中间人的角色 (多维度识别: 备注/标准角色/英文字符串)
             const rawT = (tNode.relationship || "").replace(/\s+/g, "").toLowerCase();
-            const tRel = (rawT.includes("女儿") || tNode.standardRole === "daughter" || rawT === "daughter") ? "女儿" :
-                (rawT.includes("儿子") || tNode.standardRole === "son" || rawT === "son") ? "儿子" :
-                    (rawT.includes("孙女") || tNode.standardRole === "granddaughter" || rawT === "granddaughter" || rawT === "granddaughter") ? "孙女" :
-                        (rawT.includes("孙子") || tNode.standardRole === "grandson" || rawT === "grandson" || rawT === "grandson") ? "孙子" :
+            const sRole = (tNode.standardRole || tNode.standard_role || "").toLowerCase();
+
+            const tRel = (rawT.includes("女儿") || sRole === "daughter" || rawT === "daughter") ? "女儿" :
+                (rawT.includes("儿子") || sRole === "son" || rawT === "son") ? "儿子" :
+                    (rawT.includes("孙女") || sRole === "granddaughter" || rawT === "granddaughter") ? "孙女" :
+                        (rawT.includes("孙子") || sRole === "grandson" || rawT === "grandson") ? "孙子" :
                             (tNode.relationship || "");
 
-            // 3. 增强版万能桥接表：[中间人对我称呼][TA对中间人备注] -> [TA对我称呼]
+            // 3. 级联推算映射表 (基于 cRel 的显示称谓进行二次映射)
             const bridgeMap: Record<string, Record<string, string>> = {
                 "妈妈": { "儿子": "兄弟", "女儿": "姐妹", "孙子": "侄子/外甥", "孙女": "侄女/外甥女" },
                 "爸爸": { "儿子": "兄弟", "女儿": "姐妹", "孙子": "侄子/外甥", "孙女": "侄女/外甥女" },
@@ -307,16 +315,17 @@ export function getRigorousRelationship(
                 "舅妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "孙子": "表侄", "孙女": "表侄女" },
                 "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹", "孙子": "表外甥", "孙女": "表外甥女" },
                 "姨妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "孙子": "表外甥", "孙女": "表外甥女" },
+                "姨婆": { "儿子": "表舅", "女儿": "表姨" },
                 "叔叔": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "孙子": "堂侄", "孙女": "堂侄女" },
                 "伯伯": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "孙子": "堂侄", "孙女": "堂侄女" },
                 "姑姑": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "孙子": "堂侄", "孙女": "堂侄女" },
                 "婶婶": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "孙子": "堂侄", "孙女": "堂侄女" },
                 "伯母": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "孙子": "堂侄", "孙女": "堂侄女" },
                 "姑父": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "孙子": "堂侄", "孙女": "堂侄女" },
-                "姐姐": { "儿子": "外甥", "女儿": "外甥女" },
-                "妹妹": { "儿子": "外甥", "女儿": "外甥女" },
                 "哥哥": { "儿子": "侄子", "女儿": "侄女" },
-                "弟弟": { "儿子": "侄子", "女儿": "侄女" }
+                "弟弟": { "儿子": "侄子", "女儿": "侄女" },
+                "姐姐": { "儿子": "外甥", "女儿": "外甥女" },
+                "妹妹": { "儿子": "外甥", "女儿": "外甥女" }
             };
 
             // 4. 执行匹配
