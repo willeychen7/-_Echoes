@@ -258,16 +258,8 @@ export const RegisterPage: React.FC = () => {
     };
     localStorage.setItem("currentUser", JSON.stringify(userData));
 
-    if (currentFamilyId) {
-      // 加入了家族（通过邀请码）
-      alert("档案确认成功！欢迎加入家族。");
-      navigate("/family-square");
-    } else {
-      // 独立用户注册成功，引导去个人页面加入家族
-      alert("注册成功！您可以在【我的】页面输入邀请码加入家族，或者邀请家人一起加入。");
-      navigate("/profile");
-    }
-    window.location.reload();
+    // 导向到注册成功页面（小树页面），保持原有优雅的体验
+    navigate("/register-success");
   };
 
   const defaultAvatars = SYSTEM_AVATARS;
