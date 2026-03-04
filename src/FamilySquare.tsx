@@ -90,10 +90,12 @@ export const FamilySquare: React.FC = () => {
   const [activeActivityIndex, setActiveActivityIndex] = useState(0);
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<"events" | "archive">(() => {
-    return window.location.hash === "#archive" ? "archive" : "events";
+    try {
+      const hash = typeof window !== 'undefined' ? window.location.hash : '';
+      return hash === "#archive" ? "archive" : "events";
+    } catch { return "events"; }
   });
   const [eventRange, setEventRange] = useState<"week" | "month" | "year">("month");
-  // NOTE: 记录当前展开祝福面板的事件 ID，null 表示全部收起
   const [openBlessingEventId, setOpenBlessingEventId] = useState<number | null>(null);
   const [invitingMember, setInvitingMember] = useState<FamilyMember | null>(null);
   const [eventsSummary, setEventsSummary] = useState<string | null>(null);
@@ -101,7 +103,6 @@ export const FamilySquare: React.FC = () => {
   const [sentEventIds, setSentEventIds] = useState<number[]>([]);
   const [expandedNoteIds, setExpandedNoteIds] = useState<number[]>([]);
   const navigate = useNavigate();
-  // const location = useLocation(); // Already declared above at line 86
 
   useEffect(() => {
     const timer = setInterval(() => setActiveActivityIndex(prev => (prev + 1) % activities.length), 4000);
@@ -212,37 +213,13 @@ export const FamilySquare: React.FC = () => {
     };
   }, []);
 
-  // NOTE: 核心刷新优化 - 捕获首次加载，禁止刷新时的视觉跳动
-  const [isFirstRender, setIsFirstRender] = useState(true);
-
   useEffect(() => {
     if (location.hash === "#archive") {
       setActiveTab("archive");
-      const target = document.getElementById("archive-section");
-      if (target) {
-        // 关键：如果是首次进入（刷新），使用 instant 模式，杜绝跳动感
-        // 如果是后续点击，才使用 smooth
-        if (isFirstRender) {
-          target.scrollIntoView({ behavior: "auto" });
-          setIsFirstRender(false);
-        } else {
-          target.scrollIntoView({ behavior: "smooth" });
-        }
-      } else if (isFirstRender) {
-        // 如果 DOM 还没准备好，再给一次极短的补偿定位
-        setTimeout(() => {
-          document.getElementById("archive-section")?.scrollIntoView({ behavior: "auto" });
-          setIsFirstRender(false);
-        }, 0);
-      }
-    } else if (location.pathname === "/square") {
-      // 只有在真正切换回广场首页且没有锚点时才重置
-      if (!isFirstRender) {
-        setActiveTab("events");
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }
+    } else {
+      setActiveTab("events");
     }
-  }, [location.hash, location.pathname]); // 只在锚点或路径真正变化时响应
+  }, [location.hash]);
 
   const generateEventsSummary = async () => {
     setSummaryLoading(true);
