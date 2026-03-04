@@ -113,10 +113,10 @@ export function getRigorousRelationship(
     target: any,
     members: any[]
 ): string {
-    const vId = viewer?.memberId || viewer?.id;
-    const tId = target?.id;
+    const vId = viewer?.memberId ? Number(viewer.memberId) : (viewer?.id ? Number(viewer.id) : null);
+    const tId = target?.id ? Number(target.id) : null;
 
-    if (!tId || !vId) return target?.relationship || "家人";
+    if (tId === null || vId === null) return target?.relationship || "家人";
     if (vId === tId) return "我";
 
     const vNode = members.find(m => m.id === vId);
