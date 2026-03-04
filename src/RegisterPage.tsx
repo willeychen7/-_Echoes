@@ -120,6 +120,7 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
+    setIsEditingInvite(false); // 关键修复：确保每次点击“下一步”时，弹窗都是先进入“确认”视图，而不是直接跳到“选择关系”
     setIsValidatingCode(true);
     setInviteError("");
     setVerificationError("");
@@ -510,6 +511,7 @@ export const RegisterPage: React.FC = () => {
           >
             {isValidatingCode ? "验证中..." : "下一步"}
           </Button>
+          <p className="text-center text-[10px] text-slate-300 mt-2 font-mono">v1.2.9-ConfirmFlow</p>
         </div>
 
         {/* 身份确认与修改弹窗 */}
