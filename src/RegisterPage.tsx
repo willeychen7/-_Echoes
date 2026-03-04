@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "./components/Button";
-import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown, Sparkles, Edit2, X, Camera } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown, Sparkles, Edit2, X, Camera, Check } from "lucide-react";
 import { Card } from "./components/Card";
 import { cn } from "./lib/utils";
 import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
@@ -517,45 +517,46 @@ export const RegisterPage: React.FC = () => {
                 exit={{ opacity: 0, y: 100 }}
                 className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl overflow-y-auto max-h-[90vh]"
               >
-                {!isEditingInvite ? (
-                  <div className="space-y-8">
-                    <div className="text-center space-y-4">
-                      <div className="w-16 h-16 bg-[#eab308]/10 rounded-full flex items-center justify-center mx-auto text-[#eab308]">
-                        <Sparkles size={32} />
+                <div className="space-y-6">
+                  <div className="text-center space-y-4">
+                    <div className="w-16 h-16 bg-[#eab308]/10 rounded-full flex items-center justify-center mx-auto text-[#eab308]">
+                      <Sparkles size={32} />
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-800 tracking-tight">确认您的身份</h3>
+                    <p className="text-slate-500 font-medium text-sm">
+                      <span className="font-bold text-[#eab308]">{inviterName}</span> 邀请您加入家族。您可以直接点击下方修改档案：
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-slate-100/50 flex flex-col items-center gap-4 relative">
+                    <div
+                      className="w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-white relative group cursor-pointer shrink-0"
+                      onClick={() => setShowModalAvatarPicker(!showModalAvatarPicker)}
+                    >
+                      <img
+                        src={avatar || inviteData.targetAvatar}
+                        alt="Avatar"
+                        className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                      />
+                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Camera className="text-white" size={20} />
                       </div>
-                      <h3 className="text-2xl font-black text-slate-800 tracking-tight">确认您的身份</h3>
-                      <p className="text-slate-500 font-medium">
-                        <span className="font-bold text-[#eab308]">{inviterName}</span> 为您预设了档案，请确认是否为您本人：
-                      </p>
                     </div>
 
-                    <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-slate-100/50 flex flex-col items-center gap-4 relative">
-                      <div
-                        className="w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-white relative group cursor-pointer shrink-0"
-                        onClick={() => setShowModalAvatarPicker(!showModalAvatarPicker)}
-                      >
-                        <img
-                          src={avatar || inviteData.targetAvatar}
-                          alt="Avatar"
-                          className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                        />
-                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <Camera className="text-white" size={20} />
-                        </div>
-                      </div>
-
-                      {/* Inline Modal Avatar Selection */}
+                    {/* Inline Modal Avatar Selection */}
+                    <AnimatePresence>
                       {showModalAvatarPicker && (
                         <motion.div
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: "auto" }}
-                          className="w-full"
+                          exit={{ opacity: 0, height: 0 }}
+                          className="w-full overflow-hidden"
                         >
                           <div className="grid grid-cols-4 gap-2 bg-slate-100/50 p-3 rounded-[1.5rem] mt-2 mb-4">
                             {defaultAvatars.map((url, i) => (
                               <button
                                 key={i}
-                                onClick={(e) => { e.stopPropagation(); selectDefaultAvatar(url); setShowModalAvatarPicker(false); }}
+                                onClick={(e) => { e.stopPropagation(); setAvatar(url); setIsAvatarUploaded(true); setShowModalAvatarPicker(false); }}
                                 className={cn(
                                   "aspect-square rounded-full border-2 overflow-hidden transition-all",
                                   avatar === url ? "border-[#eab308] scale-90" : "border-white"
@@ -573,160 +574,67 @@ export const RegisterPage: React.FC = () => {
                           </div>
                         </motion.div>
                       )}
+                    </AnimatePresence>
 
-                      <div className="text-center relative">
-                        <p className="text-2xl font-black text-slate-800">{inviteData.targetName}</p>
-                        <p className="text-[#eab308] font-bold text-sm tracking-widest mt-1 uppercase">
-                          关系：{selectedRelationship || inviteData.targetRole}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-4 pt-4 px-2">
-                      <Button
-                        size="xl"
-                        className="w-full h-16 rounded-2xl bg-[#eab308] text-black font-black shadow-lg shadow-[#eab308]/20 active:scale-[0.98] transition-all"
-                        onClick={() => {
-                          // 核心修正：用户手动上传的 avatar (如果存在) 必须覆盖 A 的预设
-                          const finalName = inviteData.targetName;
-                          const finalAvatar = avatar || inviteData.targetAvatar;
-
-                          setName(finalName);
-                          setAvatar(finalAvatar);
-                          setIsAvatarUploaded(true);
-
-                          handleCompleteRegistration(
-                            inviteData.targetRole,
-                            inviteData.targetStandardRole,
-                            undefined,
-                            finalName,
-                            finalAvatar
-                          );
-                        }}
-                      >
-                        是的，这是我
-                      </Button>
-                      <div className="flex gap-3">
-                        <button
-                          className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
-                          onClick={() => setIsEditingInvite(true)}
-                        >
-                          <Edit2 size={16} /> 信息有误
-                        </button>
-                        <button
-                          className="flex-1 py-4 bg-red-50 text-red-500 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
-                          onClick={() => {
-                            setInvitationCode("");
-                            setInviteData(null);
-                            setShowVerificationModal(false);
-                          }}
-                        >
-                          <X size={16} /> 这不是我
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="text-center">
-                      <h3 className="text-2xl font-black text-slate-800">修改我的身份</h3>
-                      <p className="text-slate-500 text-sm mt-1 font-medium">您可以更正邀请人填错的信息</p>
-                    </div>
-
-                    <div className="space-y-5 py-4">
-                      <div className="flex flex-col items-center mb-4">
-                        <div
-                          onClick={() => setShowModalAvatarPicker(!showModalAvatarPicker)}
-                          className="w-24 h-24 rounded-full border-4 border-slate-100 shadow-sm overflow-hidden relative group cursor-pointer"
-                        >
-                          <img src={avatar} alt="Avatar" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Camera size={20} className="text-white" />
-                          </div>
-                        </div>
-
-                        {/* Edit View Inline Avatar Selection */}
-                        {showModalAvatarPicker && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            className="w-full"
-                          >
-                            <div className="grid grid-cols-4 gap-2 bg-slate-100/50 p-3 rounded-[1.5rem] mt-2 mb-2">
-                              {defaultAvatars.map((url, i) => (
-                                <button
-                                  key={i}
-                                  onClick={(e) => { e.stopPropagation(); selectDefaultAvatar(url); setShowModalAvatarPicker(false); }}
-                                  className={cn(
-                                    "aspect-square rounded-full border-2 overflow-hidden transition-all",
-                                    avatar === url ? "border-[#eab308] scale-90" : "border-white"
-                                  )}
-                                >
-                                  <img src={url} alt={`Default ${i}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                </button>
-                              ))}
-                              <button
-                                onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); setShowModalAvatarPicker(false); }}
-                                className="aspect-square rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308] transition-all bg-white"
-                              >
-                                <Camera size={20} />
-                              </button>
-                            </div>
-                          </motion.div>
-                        )}
-                      </div>
-
-                      <label className="block space-y-2">
-                        <span className="text-slate-700 font-bold ml-1">真实姓名</span>
+                    <div className="w-full flex flex-col gap-3">
+                      <label className="flex items-center gap-3 bg-white px-5 py-4 rounded-2xl border border-slate-200 focus-within:border-[#eab308] focus-within:ring-2 focus-within:ring-[#eab308]/20 transition-all shadow-sm">
+                        <span className="text-slate-400 font-bold text-sm whitespace-nowrap">真实姓名</span>
                         <input
                           type="text"
-                          className="w-full h-14 rounded-2xl bg-slate-50 border-none px-5 font-bold"
+                          className="flex-1 bg-transparent border-none outline-none font-black text-slate-800 placeholder:text-slate-300 text-right md:text-left"
                           value={name}
                           onChange={(e) => setName(e.target.value)}
+                          placeholder="您的姓名"
                         />
+                        <Edit2 size={16} className="text-[#eab308] shrink-0" />
                       </label>
 
-                      <label className="block space-y-2">
-                        <span className="text-slate-700 font-bold ml-1">我是 {inviterName} 的...</span>
-                        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-2 pb-2">
+                      <label className="flex items-center gap-3 bg-white px-5 py-4 rounded-2xl border border-slate-200 focus-within:border-[#eab308] focus-within:ring-2 focus-within:ring-[#eab308]/20 transition-all shadow-sm relative">
+                        <span className="text-slate-400 font-bold text-sm whitespace-nowrap">您的身份</span>
+                        <select
+                          className="flex-1 bg-transparent border-none outline-none font-black text-slate-800 appearance-none cursor-pointer pr-6 text-right md:text-left"
+                          value={selectedRelationship}
+                          onChange={(e) => setSelectedRelationship(e.target.value)}
+                        >
+                          <option value="" disabled>选择关系</option>
                           {allRelationships.map(rel => (
-                            <button
-                              key={rel.label}
-                              onClick={() => setSelectedRelationship(rel.label)}
-                              className={cn(
-                                "py-3 rounded-xl border-2 font-black text-sm",
-                                selectedRelationship === rel.label
-                                  ? "bg-[#eab308] border-[#eab308] text-black shadow-sm"
-                                  : "bg-white border-slate-50 text-slate-400"
-                              )}
-                            >
-                              {rel.label}
-                            </button>
+                            <option key={rel.label} value={rel.label}>{rel.label}</option>
                           ))}
-                        </div>
+                        </select>
+                        <ChevronDown size={16} className="text-[#eab308] pointer-events-none absolute right-5" />
                       </label>
-                    </div>
-
-                    <div className="flex gap-3 pt-4">
-                      <Button
-                        variant="outline"
-                        className="flex-1 h-14 rounded-xl font-bold"
-                        onClick={() => setIsEditingInvite(false)}
-                      >
-                        返回上一步
-                      </Button>
-                      <Button
-                        className="flex-1 h-14 rounded-xl bg-[#eab308] text-black font-black"
-                        onClick={() => {
-                          const stdRole = allRelationships.find(r => r.label === selectedRelationship)?.value || "other";
-                          handleCompleteRegistration(selectedRelationship, stdRole, undefined, name, avatar);
-                        }}
-                      >
-                        确认加入
-                      </Button>
                     </div>
                   </div>
-                )}
+
+                  <div className="grid gap-4 pt-2 px-2">
+                    <Button
+                      size="xl"
+                      className="w-full h-16 rounded-2xl bg-[#eab308] text-black font-black shadow-lg shadow-[#eab308]/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                      onClick={() => {
+                        const stdRole = allRelationships.find(r => r.label === selectedRelationship)?.value || "other";
+                        const finalName = name || inviteData.targetName;
+                        const finalAvatar = avatar || inviteData.targetAvatar;
+
+                        setName(finalName);
+                        setAvatar(finalAvatar);
+
+                        handleCompleteRegistration(selectedRelationship || inviteData.targetRole, stdRole, undefined, finalName, finalAvatar);
+                      }}
+                    >
+                      <Check size={20} /> 是的，确认加入
+                    </Button>
+                    <button
+                      className="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                      onClick={() => {
+                        setInvitationCode("");
+                        setInviteData(null);
+                        setShowVerificationModal(false);
+                      }}
+                    >
+                      <X size={16} /> 这不是我，返回重新输入
+                    </button>
+                  </div>
+                </div>
               </motion.div>
             </div>
           )}
