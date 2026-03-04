@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "./components/Button";
-import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown, Sparkles } from "lucide-react";
 import { Card } from "./components/Card";
 import { cn } from "./lib/utils";
 import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
@@ -28,6 +28,9 @@ export const RegisterPage: React.FC = () => {
   const [inviterRole, setInviterRole] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [isValidatingCode, setIsValidatingCode] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [inviteData, setInviteData] = useState<any>(null);
+  const [isEditingInvite, setIsEditingInvite] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
   const [countdown, setCountdown] = useState(0);
   const [isCodeSent, setIsCodeSent] = useState(false);
@@ -154,9 +157,11 @@ export const RegisterPage: React.FC = () => {
       setInviterName(data.inviterName);
       setInviterRole(data.inviterRole);
       setInviterId(data.inviterId);
+      setInviteData(data);
 
-      // 核心修复：既然邀请人已经填写过关系，加入时不再重复弹窗询问，直接采用后端返回的关系进行实名关联
-      await handleCompleteRegistration(data.targetRole || "家族成员", data.targetStandardRole || "other", data.inviterId);
+      // 进入确认环节：展示 A 创建的信息供 B 确认或修改
+      setSelectedRelationship(data.targetRole || "");
+      setShowVerificationModal(true);
     } catch (err) {
       console.error("Validation error:", err);
       setInviteError("网络错误，请稍后重试");
@@ -165,13 +170,15 @@ export const RegisterPage: React.FC = () => {
     }
   };
 
-  const handleCompleteRegistration = async (overrideRole?: string, overrideStdRole?: string, overrideInviterId?: number) => {
+  const handleCompleteRegistration = async (overrideRole?: string, overrideStdRole?: string, overrideInviterId?: number, overrideName?: string, overrideAvatar?: string) => {
     let currentFamilyId = 1;
     let currentMemberId = null;
     let currentUserId = null;
 
     const finalInviterId = overrideInviterId || inviterId;
     const finalRole = overrideRole || selectedRelationship;
+    const finalName = overrideName || name;
+    const finalAvatar = overrideAvatar || avatar;
 
     try {
       if ((invitationCode.trim() && finalInviterId) || overrideRole) {
@@ -182,8 +189,8 @@ export const RegisterPage: React.FC = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             inviteCode: invitationCode.trim(),
-            name,
-            avatarUrl: avatar,
+            name: finalName,
+            avatarUrl: finalAvatar,
             relationshipToInviter: finalRole,
             standardRole: overrideStdRole || relInfo?.value || "other",
             phone,
@@ -192,31 +199,31 @@ export const RegisterPage: React.FC = () => {
         });
 
         if (!response.ok) {
-          const data = await response.json();
-          alert(data.error || "注册失败");
+          const resData = await response.json();
+          alert(resData.error || "注册失败");
           return;
         }
-        const data = await response.json();
-        currentFamilyId = data.familyId || null;
-        currentMemberId = data.memberId;
-        currentUserId = data.userId;
+        const resData = await response.json();
+        currentFamilyId = resData.familyId || null;
+        currentMemberId = resData.memberId;
+        currentUserId = resData.userId;
       } else {
         // 创建新家族
         const response = await fetch("/api/register-new", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, phone, password, avatar })
+          body: JSON.stringify({ name: finalName, phone, password, avatar: finalAvatar })
         });
 
         if (!response.ok) {
-          const data = await response.json();
-          alert(data.error || "注册失败");
+          const resData = await response.json();
+          alert(resData.error || "注册失败");
           return;
         }
-        const data = await response.json();
-        currentFamilyId = data.familyId;
-        currentMemberId = data.memberId;
-        currentUserId = data.userId;
+        const resData = await response.json();
+        currentFamilyId = resData.familyId;
+        currentMemberId = resData.memberId;
+        currentUserId = resData.userId;
       }
     } catch (error: any) {
       console.error("Registration error:", error);
@@ -226,9 +233,9 @@ export const RegisterPage: React.FC = () => {
 
     const userData = {
       id: currentUserId,
-      name,
+      name: finalName,
       phone,
-      avatar,
+      avatar: finalAvatar,
       relationship: overrideRole || selectedRelationship || "创建者",
       inviterName: (invitationCode || overrideRole) ? inviterName : null,
       inviterId: finalInviterId,
@@ -503,6 +510,146 @@ export const RegisterPage: React.FC = () => {
             {isValidatingCode ? "验证中..." : "下一步"}
           </Button>
         </div>
+
+        {/* 身份确认与修改弹窗 */}
+        <AnimatePresence>
+          {showVerificationModal && inviteData && (
+            <div className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, y: 100 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 100 }}
+                className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl overflow-y-auto max-h-[90vh]"
+              >
+                {!isEditingInvite ? (
+                  <div className="space-y-8">
+                    <div className="text-center space-y-4">
+                      <div className="w-16 h-16 bg-[#eab308]/10 rounded-full flex items-center justify-center mx-auto text-[#eab308]">
+                        <Sparkles size={32} />
+                      </div>
+                      <h3 className="text-2xl font-black text-slate-800 tracking-tight">确认您的身份</h3>
+                      <p className="text-slate-500 font-medium">
+                        <span className="font-bold text-[#eab308]">{inviterName}</span> 为您预设了档案，请确认是否为您本人：
+                      </p>
+                    </div>
+
+                    <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-slate-100/50 flex flex-col items-center gap-4">
+                      <div className="w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-white">
+                        <img
+                          src={inviteData.targetAvatar || avatar}
+                          alt="Avatar"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-black text-slate-800">{inviteData.targetName}</p>
+                        <p className="text-[#eab308] font-bold text-sm tracking-widest mt-1 uppercase">
+                          关系：{selectedRelationship || inviteData.targetRole}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 pt-4">
+                      <Button
+                        size="xl"
+                        className="w-full h-16 rounded-2xl bg-[#eab308] text-black font-black shadow-lg shadow-[#eab308]/20"
+                        onClick={() => {
+                          // 接受 A 的预设
+                          // 同步设置到 state 便于跳转后显示，但注册接口直接传 override 值确保实时性
+                          setName(inviteData.targetName);
+                          setAvatar(inviteData.targetAvatar || avatar);
+                          setIsAvatarUploaded(true);
+                          handleCompleteRegistration(
+                            inviteData.targetRole,
+                            inviteData.targetStandardRole,
+                            undefined, // inviterId already in state
+                            inviteData.targetName,
+                            inviteData.targetAvatar || avatar
+                          );
+                        }}
+                      >
+                        是的，这是我
+                      </Button>
+                      <button
+                        className="py-4 text-slate-400 font-bold hover:text-slate-600 transition-colors text-center w-full"
+                        onClick={() => setIsEditingInvite(true)}
+                      >
+                        信息有误，我要修改
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="text-center">
+                      <h3 className="text-2xl font-black text-slate-800">修改我的身份</h3>
+                      <p className="text-slate-500 text-sm mt-1 font-medium">您可以更正邀请人填错的信息</p>
+                    </div>
+
+                    <div className="space-y-5 py-4">
+                      <div className="flex flex-col items-center mb-4">
+                        <div
+                          onClick={handleAvatarClick}
+                          className="w-24 h-24 rounded-full border-4 border-slate-100 shadow-sm overflow-hidden relative group cursor-pointer"
+                        >
+                          <img src={avatar} alt="Avatar" className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <ImagePlus size={20} className="text-white" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <label className="block space-y-2">
+                        <span className="text-slate-700 font-bold ml-1">真实姓名</span>
+                        <input
+                          type="text"
+                          className="w-full h-14 rounded-2xl bg-slate-50 border-none px-5 font-bold"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                        />
+                      </label>
+
+                      <label className="block space-y-2">
+                        <span className="text-slate-700 font-bold ml-1">我是 {inviterName} 的...</span>
+                        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-2 pb-2">
+                          {allRelationships.map(rel => (
+                            <button
+                              key={rel.label}
+                              onClick={() => setSelectedRelationship(rel.label)}
+                              className={cn(
+                                "py-3 rounded-xl border-2 font-black text-sm",
+                                selectedRelationship === rel.label
+                                  ? "bg-[#eab308] border-[#eab308] text-black shadow-sm"
+                                  : "bg-white border-slate-50 text-slate-400"
+                              )}
+                            >
+                              {rel.label}
+                            </button>
+                          ))}
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="flex gap-3 pt-4">
+                      <Button
+                        variant="outline"
+                        className="flex-1 h-14 rounded-xl font-bold"
+                        onClick={() => setIsEditingInvite(false)}
+                      >
+                        返回上一步
+                      </Button>
+                      <Button
+                        className="flex-1 h-14 rounded-xl bg-[#eab308] text-black font-black"
+                        onClick={() => handleCompleteRegistration()}
+                      >
+                        确认加入
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* Footer */}
         <div className="text-center">

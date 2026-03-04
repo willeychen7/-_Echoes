@@ -484,7 +484,8 @@ export async function createApp() {
           targetName: target.name,
           targetId: target.id,
           targetRole: target.relationship,
-          targetStandardRole: target.standard_role
+          targetStandardRole: target.standard_role,
+          targetAvatar: target.avatar_url
         });
       } else {
         // Legacy: FA-XXXX-XXXX
@@ -508,7 +509,8 @@ export async function createApp() {
               targetName: target.name,
               targetId: target.id,
               targetRole: target.relationship,
-              targetStandardRole: target.standard_role
+              targetStandardRole: target.standard_role,
+              targetAvatar: target.avatar_url
             });
           }
         }
