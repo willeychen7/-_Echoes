@@ -545,38 +545,37 @@ export const RegisterPage: React.FC = () => {
                           className="w-full h-full object-cover transition-transform group-hover:scale-110"
                         />
                         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <ImagePlus className="text-white" size={20} />
+                          <Camera className="text-white" size={20} />
                         </div>
                       </div>
 
-                      {/* Modal Avatar Selection Popover */}
-                      {showDefaultAvatars && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          className="absolute top-[80%] z-[110] bg-white p-4 rounded-3xl shadow-2xl border border-slate-100 min-w-[280px]"
-                        >
-                          <div className="grid grid-cols-4 gap-3">
-                            {defaultAvatars.map((url, i) => (
+                      <div className="text-center relative">
+                        {/* Modal Avatar Selection Popover */}
+                        {showDefaultAvatars && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 z-[110] bg-white p-4 rounded-3xl shadow-2xl border border-slate-100 min-w-[280px]"
+                          >
+                            <div className="grid grid-cols-4 gap-3">
+                              {defaultAvatars.map((url, i) => (
+                                <button
+                                  key={i}
+                                  onClick={(e) => { e.stopPropagation(); selectDefaultAvatar(url); }}
+                                  className="w-12 h-12 rounded-full border-2 border-slate-100 hover:border-[#eab308] overflow-hidden transition-all"
+                                >
+                                  <img src={url} alt={`Default ${i}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                </button>
+                              ))}
                               <button
-                                key={i}
-                                onClick={(e) => { e.stopPropagation(); selectDefaultAvatar(url); }}
-                                className="w-12 h-12 rounded-full border-2 border-slate-100 hover:border-[#eab308] overflow-hidden transition-all"
+                                onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                                className="w-12 h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308] transition-all"
                               >
-                                <img src={url} alt={`Default ${i}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                <Camera size={24} />
                               </button>
-                            ))}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                              className="w-12 h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308] transition-all"
-                            >
-                              <Camera size={24} />
-                            </button>
-                          </div>
-                        </motion.div>
-                      )}
-
-                      <div className="text-center">
+                            </div>
+                          </motion.div>
+                        )}
                         <p className="text-2xl font-black text-slate-800">{inviteData.targetName}</p>
                         <p className="text-[#eab308] font-bold text-sm tracking-widest mt-1 uppercase">
                           关系：{selectedRelationship || inviteData.targetRole}
@@ -643,9 +642,36 @@ export const RegisterPage: React.FC = () => {
                         >
                           <img src={avatar} alt="Avatar" className="w-full h-full object-cover" />
                           <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <ImagePlus size={20} className="text-white" />
+                            <Camera size={20} className="text-white" />
                           </div>
                         </div>
+
+                        {/* Edit View Avatar Selection Popover */}
+                        {showDefaultAvatars && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            className="absolute top-24 z-[110] bg-white p-4 rounded-3xl shadow-2xl border border-slate-100 min-w-[280px]"
+                          >
+                            <div className="grid grid-cols-4 gap-3">
+                              {defaultAvatars.map((url, i) => (
+                                <button
+                                  key={i}
+                                  onClick={(e) => { e.stopPropagation(); selectDefaultAvatar(url); }}
+                                  className="w-12 h-12 rounded-full border-2 border-slate-100 hover:border-[#eab308] overflow-hidden transition-all"
+                                >
+                                  <img src={url} alt={`Default ${i}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                </button>
+                              ))}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                                className="w-12 h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308] transition-all"
+                              >
+                                <Camera size={24} />
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
                       </div>
 
                       <label className="block space-y-2">
