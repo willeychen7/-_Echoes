@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Card } from "./components/Card";
-import { Calendar as CalendarIcon, Phone, Gift, Plus, FolderOpen, Home, CheckCircle, Trash2, Mic, MessageSquare, Camera, Video, Send, X, Heart, Play, Sparkles, ChevronDown, ChevronUp, Share2 } from "lucide-react";
+import { Calendar as CalendarIcon, Phone, Gift, Plus, FolderOpen, Home, CheckCircle, Trash2, Mic, MessageSquare, Camera, Video, Send, X, Heart, Play, Sparkles, ChevronDown, ChevronUp, Share2, Copy } from "lucide-react";
 import { FamilyMember, FamilyEvent, Message, MessageType } from "./types";
 import { useNavigate, useLocation } from "react-router-dom";
 import { cn, getRelativeTime } from "./lib/utils";
@@ -670,16 +670,27 @@ export const FamilySquare: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="text-2xl font-black text-slate-800">关于 {invitingMember.name}</h3>
-                  <p className="text-sm text-slate-500">{invitingMember.name} 目前为随行档案状态。您也可以随时分享邀请码让 TA 正式加入家族。</p>
+                  <h3 className="text-2xl font-black text-slate-800">邀请档案注册加盟</h3>
+                  <p className="text-sm text-slate-500">让 {invitingMember.name} 扫码或输入邀请码开启数字化记忆档案。</p>
+                </div>
+
+                {/* QR Code Section */}
+                <div className="bg-white p-4 rounded-3xl shadow-md border border-slate-100 flex flex-col items-center gap-3">
+                  <div className="size-40 bg-slate-50 rounded-2xl flex items-center justify-center p-2 border-2 border-dashed border-slate-200">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/register?code=INV-${invitingMember.id}-${currentUser?.memberId}`)}`}
+                      alt="Join QR Code"
+                      className="w-full h-full object-contain mix-blend-multiply"
+                    />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest leading-none">扫码直接注册</span>
                 </div>
 
                 <div className="bg-slate-50 rounded-2xl p-6 border-2 border-dashed border-slate-200">
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">专属邀请码</p>
-                  <p className="text-4xl font-black text-[#eab308] tracking-wider mb-2">
+                  <p className="text-4xl font-black text-[#eab308] tracking-wider mb-2 leading-none">
                     INV-{invitingMember.id}-{currentUser?.memberId}
                   </p>
-                  <p className="text-[10px] text-slate-400 line-clamp-2">此码包含了您与 {invitingMember.name} 的关联信息，注册时系统将自动排布辈分。</p>
                 </div>
 
                 <button
@@ -689,7 +700,7 @@ export const FamilySquare: React.FC = () => {
                   }}
                   className="w-full py-4 bg-[#eab308] text-black rounded-2xl font-black shadow-lg shadow-[#eab308]/20 flex items-center justify-center gap-2 active:scale-95 transition-transform"
                 >
-                  <Share2 size={18} /> 复制并去发送
+                  <Copy size={18} /> 仅复制邀请码
                 </button>
               </div>
             </motion.div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useLayoutEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Share2, Mic, Camera, Video, MessageSquare, Play, Sparkles, RotateCcw, CheckCircle, Send, X, Heart, Trash2 } from "lucide-react";
+import { ArrowLeft, Share2, Mic, Camera, Video, MessageSquare, Play, Sparkles, RotateCcw, CheckCircle, Send, X, Heart, Trash2, Copy } from "lucide-react";
 import { FamilyMember, Message, MessageType } from "./types";
 import { Button } from "./components/Button";
 import { Card } from "./components/Card";
@@ -674,12 +674,15 @@ export const ArchivePage: React.FC = () => {
             </span>
           ) : (
             !isMeMember && (
-              <button
-                onClick={() => setShowShareModal(true)}
-                className="px-4 py-1.5 bg-slate-50 border border-slate-100 text-slate-400 rounded-full text-[10px] shadow-sm font-black inline-flex items-center gap-1.5 hover:bg-[#eab308]/10 hover:text-[#eab308] hover:border-[#eab308]/20 transition-colors"
-              >
-                随行档案 <Share2 size={12} />
-              </button>
+              <div className="flex flex-col items-center gap-2 mt-2">
+                <span className="text-[9px] font-black text-slate-300 tracking-[0.2em] uppercase px-2 py-0.5 bg-slate-50 rounded border border-slate-100">随行档案</span>
+                <button
+                  onClick={() => setShowShareModal(true)}
+                  className="px-6 py-2 bg-[#eab308] text-black rounded-full text-[11px] font-black inline-flex items-center gap-2 hover:bg-[#d9a306] transition-all shadow-lg shadow-[#eab308]/20 active:scale-95"
+                >
+                  邀请注册 <Share2 size={14} />
+                </button>
+              </div>
             )
           )}
 
@@ -1057,13 +1060,25 @@ export const ArchivePage: React.FC = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <h3 className="text-2xl font-black text-slate-800">关于 {member.name}</h3>
-                    <p className="text-sm text-slate-500">{member.name} 目前为随行档案状态。若 TA 有使用手机，您可发送邀请码让 TA 正式加入接管档案。</p>
+                    <h3 className="text-2xl font-black text-slate-800">邀请档案正式注册</h3>
+                    <p className="text-sm text-slate-500">您可以复制邀请码发送，或让 {member.name} 直接扫码加盟。</p>
+                  </div>
+
+                  {/* QR Code Section */}
+                  <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center gap-3">
+                    <div className="size-40 bg-slate-50 rounded-2xl flex items-center justify-center p-2 border-2 border-dashed border-slate-200">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/register?code=INV-${member.id}-${currentUser?.memberId}`)}`}
+                        alt="Join QR Code"
+                        className="w-full h-full object-contain mix-blend-multiply"
+                      />
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest leading-none">扫一扫直接注册</span>
                   </div>
 
                   <div className="bg-slate-50 rounded-2xl p-6 border-2 border-dashed border-slate-200">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">专属邀请码</p>
-                    <p className="text-4xl font-mono font-black text-[#eab308] tracking-wider mb-2 select-all">
+                    <p className="text-4xl font-mono font-black text-[#eab308] tracking-wider mb-2 select-all leading-none">
                       INV-{member.id}-{currentUser?.memberId}
                     </p>
                   </div>
@@ -1078,7 +1093,7 @@ export const ArchivePage: React.FC = () => {
                     }}
                     className="w-full py-4 bg-[#eab308] text-black rounded-2xl font-black shadow-lg shadow-[#eab308]/20 flex items-center justify-center gap-2 active:scale-95 transition-transform"
                   >
-                    <Share2 size={18} /> 复制并去发送
+                    <Copy size={18} /> 仅复制邀请码
                   </button>
                 </div>
               </motion.div>
