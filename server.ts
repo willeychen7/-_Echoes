@@ -486,7 +486,8 @@ export async function createApp() {
           targetId: target.id,
           targetRole: target.relationship,
           targetStandardRole: target.standard_role,
-          targetAvatar: target.avatar_url
+          targetAvatar: target.avatar_url,
+          inviterFamilyId: inviter.family_id
         });
       } else {
         // Legacy: FA-XXXX-XXXX
@@ -511,7 +512,8 @@ export async function createApp() {
               targetId: target.id,
               targetRole: target.relationship,
               targetStandardRole: target.standard_role,
-              targetAvatar: target.avatar_url
+              targetAvatar: target.avatar_url,
+              inviterFamilyId: inviter.family_id
             });
           }
         }
@@ -524,7 +526,8 @@ export async function createApp() {
           targetName: target.name,
           targetId: target.id,
           targetRole: target.relationship,
-          targetStandardRole: target.standard_role
+          targetStandardRole: target.standard_role,
+          inviterFamilyId: target.family_id // If self-claim, target's family is the inviter's family
         });
       }
     });
@@ -760,9 +763,61 @@ export async function createApp() {
       }
     });
 
+    // 预检：先查询用户当前家族情况，为迁移对话框提供数据
+    app.get("/api/check-migration", async (req, res) => {
+      const phone = req.query.phone as string;
+      const targetFamilyId = parseInt(req.query.targetFamilyId as string);
+      if (!phone || !targetFamilyId) return res.status(400).json({ error: "Missing params" });
+
+      try {
+        const { data: currentUser } = await supabase.from("users")
+          .select("id, name, family_id, member_id")
+          .eq("phone_or_email", phone).maybeSingle();
+
+        if (!currentUser || !currentUser.family_id) {
+          return res.json({ needsMigration: false });
+        }
+        if (currentUser.family_id === targetFamilyId) {
+          return res.json({ needsMigration: false });
+        }
+
+        // 家族1里共有多少成员？多少是真实注册用户？
+        const { data: allMembers } = await supabase.from("family_members")
+          .select("id, name, is_registered, user_id").eq("family_id", currentUser.family_id);
+
+        const totalMembers = allMembers?.length || 0;
+        const registeredOthers = (allMembers || []).filter(
+          (m: any) => m.is_registered && m.user_id && m.user_id !== currentUser.id
+        ).length;
+
+        // 用户自己的内容量：记忆、留言
+        const { count: memoryCount } = await supabase.from("memories")
+          .select("id", { count: "exact", head: true })
+          .eq("member_id", currentUser.member_id);
+        const { count: messageCount } = await supabase.from("messages")
+          .select("id", { count: "exact", head: true })
+          .eq("family_member_id", currentUser.member_id);
+
+        const willFamilyBeDeleted = registeredOthers === 0; // 走后家族1将无真实用户
+
+        res.json({
+          needsMigration: true,
+          currentFamilyId: currentUser.family_id,
+          totalMembers,
+          registeredOthers,
+          willFamilyBeDeleted,
+          contentCount: (memoryCount || 0) + (messageCount || 0)
+        });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     app.post("/api/accept-invite", async (req, res) => {
       try {
-        const { phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl } = req.body;
+        const { phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl, mode } = req.body;
+        // mode: "migrate" 迁移内容 | "clear" 清空内容 | "direct" 默认直接加入
+        let effectiveMode: string = mode || "direct";
         if (!phone || !inviteCode) return res.status(400).json({ error: "Required fields missing" });
 
         let targetId: number | null = null;
@@ -888,29 +943,64 @@ export async function createApp() {
           });
         }
 
-        // HANDLE: 如果用户已有家族（不是目标家族），检查是否允许切换
+        // HANDLE: 如果用户已有家族（不是目标家族），根据 mode 参数决定策略
         if (currentUser.family_id && currentUser.family_id !== inviter.family_id) {
-          // 查看这个家族里有多少成员
-          const { data: existingMembers } = await supabase
+          // 查询旧家族成员情况
+          const { data: oldMembers } = await supabase
             .from("family_members")
-            .select("id")
+            .select("id, name, is_registered, user_id")
             .eq("family_id", currentUser.family_id);
 
-          const memberCount = existingMembers?.length || 0;
-          if (memberCount > 1) {
-            // 已有其他成员的家族，不能自动切换
-            return res.status(409).json({
-              error: `您已经属于一个有 ${memberCount} 位成员的家族。如需加入新家族，请先在“我的”页面退出当前家族。`,
-              code: "ALREADY_IN_FAMILY"
-            });
+          const registeredOthers = (oldMembers || []).filter(
+            (m: any) => m.is_registered && m.user_id && m.user_id !== currentUser.id
+          ).length;
+
+          if (!mode || mode === "direct") {
+            // 没有指定 mode，说明前端没有检查迁移情况，返回需要确认的状态
+            if (registeredOthers > 0) {
+              return res.status(409).json({
+                error: `您已经属于另一个有 ${registeredOthers} 位注册用户的家族，无法直接切换。`,
+                code: "ALREADY_IN_FAMILY"
+              });
+            }
+            // 没有其他注册用户，可以直接切换（清理空家族）
+            effectiveMode = "clear";
           }
 
-          // 独立家族（只有自己），可以直接切换——删除旧的空家族和家族成员档案
-          console.log(`[ACCEPT-INVITE] User ${currentUser.id} switching from solo family ${currentUser.family_id} to family ${inviter.family_id}`);
-          if (currentUser.member_id) {
-            await supabase.from("family_members").delete().eq("id", currentUser.member_id);
+          if (effectiveMode === "migrate") {
+            // 迁移模式：把旧家族里用户自己的内容重定向到新 member 档案
+            const oldMemberId = currentUser.member_id;
+            if (oldMemberId) {
+              console.log(`[ACCEPT-INVITE:MIGRATE] Moving content from old member ${oldMemberId} to target ${target.id}`);
+              await supabase.from("memories").update({ member_id: target.id }).eq("member_id", oldMemberId);
+              await supabase.from("memories").update({ author_id: target.id }).eq("author_id", oldMemberId);
+              await supabase.from("messages").update({ family_member_id: target.id }).eq("family_member_id", oldMemberId);
+              await supabase.from("notifications").update({ member_id: target.id }).eq("member_id", oldMemberId);
+              await supabase.from("archive_memory_creators").update({ member_id: target.id }).eq("member_id", oldMemberId);
+              await supabase.from("archive_memory_creators").update({ creator_member_id: target.id }).eq("creator_member_id", oldMemberId);
+            }
           }
-          await supabase.from("families").delete().eq("id", currentUser.family_id);
+
+          if (effectiveMode === "clear") {
+            // 清空模式：删除旧家族里用户自己的内容
+            const oldMemberId = currentUser.member_id;
+            if (oldMemberId) {
+              console.log(`[ACCEPT-INVITE:CLEAR] Deleting content of old member ${oldMemberId}`);
+              await supabase.from("memories").delete().eq("member_id", oldMemberId);
+              await supabase.from("messages").delete().eq("family_member_id", oldMemberId);
+              await supabase.from("notifications").delete().eq("member_id", oldMemberId);
+              await supabase.from("archive_memory_creators").delete().eq("member_id", oldMemberId);
+            }
+          }
+
+          // 如果旧家族没有其他注册用户，删除旧家族和旧成员档案
+          if (registeredOthers === 0) {
+            console.log(`[ACCEPT-INVITE] Cleaning up old solo family ${currentUser.family_id}`);
+            if (currentUser.member_id) {
+              await supabase.from("family_members").delete().eq("id", currentUser.member_id);
+            }
+            await supabase.from("families").delete().eq("id", currentUser.family_id);
+          }
         }
 
         // MIGRATION: Check if THIS user had a DIFFERENT legacy record (ID 123) in this family
@@ -991,19 +1081,15 @@ export async function createApp() {
       }
     });
 
-    // Generic registration (standalone user - NO family created)
+    // Generic registration (creates family for standalone user)
     app.post("/api/register-new", async (req, res) => {
       if (!supabase) return res.status(500).json({ error: "服务器初始化失败：数据库未连接" });
-      console.log("[REGISTER-NEW] Creating standalone user:", req.body.phone);
+      console.log("[REGISTER-NEW] Start registration for:", req.body.phone);
       try {
         const { name, phone, password, avatar } = req.body;
         if (!name || !phone || !password) {
           return res.status(400).json({ error: "Missing required fields" });
         }
-
-        // 只创建用户账号，不自动建家族
-        // 家族只有当用户邀请山人或接受山请时才创建
-        const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 
         // 先检查是否已存在
         const { data: existingUser } = await supabase
@@ -1011,24 +1097,54 @@ export async function createApp() {
           .select("id")
           .eq("phone_or_email", phone)
           .maybeSingle();
-
         if (existingUser) {
           return res.status(400).json({ error: "该手机号或邮箱已被注册，请返回直接登录。" });
         }
 
+        // 1. 创建家族
+        const { data: family, error: fError } = await supabase
+          .from("families")
+          .insert({ name: `${name}的家族` })
+          .select()
+          .single();
+        if (fError) throw new Error(`Family creation failed: ${fError.message}`);
+
+        // 2. 创建家族成员档案
+        const { data: member, error: mError } = await supabase
+          .from("family_members")
+          .insert({
+            name,
+            family_id: family.id,
+            relationship: "创建者",
+            avatar_url: avatar || "",
+            is_registered: true,
+            standard_role: "creator"
+          })
+          .select()
+          .single();
+        if (mError) throw new Error(`Member creation failed: ${mError.message}`);
+
+        // 3. 创建用户账号
+        const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
         const { data: userData, error: uError } = await supabase.from("users").insert({
           phone_or_email: phone,
           password: hashedPassword,
           name,
+          relationship: "我",
+          member_id: member.id,
+          family_id: family.id,
           avatar_url: avatar || ""
-          // NOTE: family_id 和 member_id 暂不设置，用户加入家族时再写入
         }).select("id").single();
-
         if (uError) throw uError;
 
-        console.log("[REGISTER-NEW] Created standalone user:", userData?.id);
-        // 返回的 familyId 和 memberId 为 null ，前端需要处理此情况
-        res.json({ success: true, memberId: null, familyId: null, userId: userData?.id });
+        // 4. 绑定家族创建者
+        if (userData?.id) {
+          await supabase.from("families").update({ creator_id: userData.id }).eq("id", family.id);
+          await supabase.from("family_members").update({ user_id: userData.id }).eq("id", member.id);
+        }
+
+        console.log("[REGISTER-NEW] Created user with family:", { userId: userData?.id, familyId: family.id });
+        res.json({ success: true, memberId: member.id, familyId: family.id, userId: userData?.id });
       } catch (err: any) {
         console.error("[REGISTER] Error:", err.message);
         res.status(500).json({ error: err.message });

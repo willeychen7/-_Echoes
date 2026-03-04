@@ -47,8 +47,11 @@ export const ProfilePage: React.FC = () => {
   const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
   const [showInviteAvatarPicker, setShowInviteAvatarPicker] = useState(false);
   const [isCroppingForInvite, setIsCroppingForInvite] = useState(false);
-  const [isEditingTempName, setIsEditingTempName] = useState(false); // 点笔才能编辑名字
-  const [customRelText, setCustomRelText] = useState(""); // 选"其他"时自由输入
+  const [isEditingTempName, setIsEditingTempName] = useState(false);
+  const [customRelText, setCustomRelText] = useState("");
+  // 迁移对话框
+  const [migrationInfo, setMigrationInfo] = useState<any>(null); // null = 不需要迁移，{} = 需要确认
+  const [pendingAcceptParams, setPendingAcceptParams] = useState<any>(null);
 
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem("currentUser");
@@ -432,7 +435,7 @@ export const ProfilePage: React.FC = () => {
     setIsValidatingInvite(false);
   };
 
-  const handleAcceptInvite = async (overrideRole?: string, overrideStdRole?: string, overrideInviteData?: any, overrideName?: string, overrideAvatar?: string) => {
+  const handleAcceptInvite = async (overrideRole?: string, overrideStdRole?: string, overrideInviteData?: any, overrideName?: string, overrideAvatar?: string, mode?: string) => {
     const finalInviteData = overrideInviteData || inviteData;
     const finalRole = overrideRole || selectedRel;
     const finalStdRole = overrideStdRole || relationships.find(r => r.label === finalRole)?.value || "other";
@@ -444,6 +447,20 @@ export const ProfilePage: React.FC = () => {
       const savedUserBefore = JSON.parse(localStorage.getItem("currentUser") || "{}");
       const phone = savedUserBefore.phone;
 
+      // 如果没有指定 mode，先检查是否需要迁移
+      if (!mode && finalInviteData.inviterFamilyId) {
+        const migRes = await fetch(`/api/check-migration?phone=${encodeURIComponent(phone)}&targetFamilyId=${finalInviteData.inviterFamilyId}`);
+        if (migRes.ok) {
+          const migData = await migRes.json();
+          if (migData.needsMigration) {
+            // 需要用户确认，展示迁移对话框
+            setMigrationInfo(migData);
+            setPendingAcceptParams({ overrideRole, overrideStdRole, overrideInviteData, overrideName, overrideAvatar });
+            return;
+          }
+        }
+      }
+
       const res = await fetch("/api/accept-invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -453,7 +470,8 @@ export const ProfilePage: React.FC = () => {
           relationshipToInviter: finalRole,
           standardRole: finalStdRole,
           name: finalName,
-          avatarUrl: finalAvatar
+          avatarUrl: finalAvatar,
+          mode: mode || "direct"
         })
       });
 
@@ -476,6 +494,8 @@ export const ProfilePage: React.FC = () => {
         inviterName: finalInviteData.inviterName
       }));
 
+      setMigrationInfo(null);
+      setPendingAcceptParams(null);
       alert("成功加入家族！");
       window.location.reload();
     } catch (e) {
@@ -1196,6 +1216,66 @@ export const ProfilePage: React.FC = () => {
                   </div>
                 </div>
               )}
+            </motion.div>
+          </div>
+        )}
+
+        {/* 迁移确认弹窗 */}
+        {migrationInfo && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative"
+            >
+              <div className="p-6 text-center space-y-4">
+                <div className="w-16 h-16 bg-[#eab308]/10 text-[#eab308] rounded-full flex items-center justify-center mx-auto mb-2">
+                  <Check size={32} />
+                </div>
+                <h3 className="text-xl font-black text-slate-800">切换家族确认</h3>
+
+                <div className="text-left bg-slate-50 p-4 rounded-2xl text-sm text-slate-600 space-y-2">
+                  <p>您当前已经有一个独立的家族。</p>
+                  {migrationInfo.contentCount > 0 ? (
+                    <p>您在这个家族中创建了 <b>{migrationInfo.contentCount}</b> 条记忆/留言内容。</p>
+                  ) : (
+                    <p>当前家族中没有内容。</p>
+                  )}
+                  {migrationInfo.willFamilyBeDeleted && (
+                    <p className="text-red-500 font-bold">由于您是该家族唯一的注册用户，如果您离开，当前家族将会被解散并自动清理。</p>
+                  )}
+                </div>
+
+                <div className="space-y-3 pt-4">
+                  <button
+                    onClick={() => {
+                      const { overrideRole, overrideStdRole, overrideInviteData, overrideName, overrideAvatar } = pendingAcceptParams;
+                      handleAcceptInvite(overrideRole, overrideStdRole, overrideInviteData, overrideName, overrideAvatar, "migrate");
+                    }}
+                    className="w-full py-4 bg-[#eab308] text-black rounded-2xl font-black active:scale-95 transition-transform"
+                  >
+                    迁移所有档案并加入新家族
+                  </button>
+                  <button
+                    onClick={() => {
+                      const { overrideRole, overrideStdRole, overrideInviteData, overrideName, overrideAvatar } = pendingAcceptParams;
+                      handleAcceptInvite(overrideRole, overrideStdRole, overrideInviteData, overrideName, overrideAvatar, "clear");
+                    }}
+                    className="w-full py-3 bg-red-50 text-red-600 rounded-2xl font-bold active:scale-95 transition-transform"
+                  >
+                    清空旧档案并加入新家族
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMigrationInfo(null);
+                      setPendingAcceptParams(null);
+                    }}
+                    className="w-full py-3 text-slate-400 font-medium active:scale-95 transition-transform"
+                  >
+                    取消，留在当前家族
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
