@@ -55,6 +55,12 @@ export const ArchivePage: React.FC = () => {
   const [playingId, setPlayingId] = useState<number | null>(null);
   // NOTE: 全局头像缓存，用户改头像后全局同步
   const avatarCache = useAvatarCache();
+  const canSend = !isRecording && (
+    (inputMode === "voice" && !!recordedAudioUrl) ||
+    (inputMode === "text" && transcription.trim().length > 0) ||
+    (inputMode === "photo" && !!selectedImage) ||
+    (inputMode === "video" && !!selectedVideo)
+  );
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const audioChunksRef = React.useRef<Blob[]>([]);
@@ -847,8 +853,14 @@ export const ArchivePage: React.FC = () => {
             </div>
 
             <Button
-              className="w-full py-5 text-xl font-black rounded-2xl bg-[#eab308] hover:bg-[#d9a306] text-black shadow-lg shadow-[#eab308]/20 flex items-center justify-center gap-2 transition-all active:scale-95"
+              className={cn(
+                "w-full py-5 text-xl font-black rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg",
+                canSend
+                  ? "bg-[#eab308] hover:bg-[#d9a306] text-black shadow-[#eab308]/20"
+                  : "bg-slate-200 text-slate-400 shadow-none cursor-not-allowed"
+              )}
               onClick={handleWarmResponse}
+              disabled={!canSend}
             >
               <Send size={24} /> 温暖回应
             </Button>
