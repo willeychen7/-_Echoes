@@ -725,7 +725,7 @@ export async function createApp() {
 
     app.post("/api/accept-invite", async (req, res) => {
       try {
-        const { phone, inviteCode, relationshipToInviter, standardRole } = req.body;
+        const { phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl } = req.body;
         if (!phone || !inviteCode) return res.status(400).json({ error: "Required fields missing" });
 
         let targetId: number | null = null;
@@ -895,8 +895,9 @@ export async function createApp() {
         const { updateData, invUpdate } = await resolveRigorousRel(standardRole, inviter, finalTargetId);
 
         const finalTargetData: any = { ...updateData, is_registered: true, user_id: currentUser.id };
-        if (currentUser.name) finalTargetData.name = currentUser.name;
-        if (currentUser.avatar_url) finalTargetData.avatar_url = currentUser.avatar_url;
+        // 核心逻辑：如果前端传了确认/修改后的姓名和头像，优先使用；否则保留用户当前资料
+        finalTargetData.name = name || currentUser.name || target.name;
+        finalTargetData.avatar_url = avatarUrl || currentUser.avatar_url || target.avatar_url;
 
         // 3. Update active family member (ID 456)
         const { data: finalMember, error: mErr } = await supabase.from("family_members").update(finalTargetData).eq("id", finalTargetId).select().single();
@@ -914,7 +915,10 @@ export async function createApp() {
           await supabase.from("users").update({
             relationship: relationshipToInviter,
             family_id: inviter.family_id,
-            member_id: finalMember.id
+            member_id: finalMember.id,
+            // 同步更新全球用户资料（如用户在加入时确认了 A 建的头像更精美）
+            name: finalTargetData.name,
+            avatar_url: finalTargetData.avatar_url
           }).eq("id", userData.id);
         }
 

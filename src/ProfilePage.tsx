@@ -1,7 +1,7 @@
 // Force deployment sync - Vercel build trigger
 import React, { useState, useEffect, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Edit2, Share2, LogOut, Heart, MessageSquare, Clock, X, Check, CheckCircle, Camera, Gift, Users, Bell, ChevronRight, Plus } from "lucide-react";
+import { ArrowLeft, Edit2, Share2, LogOut, Heart, MessageSquare, Clock, X, Check, CheckCircle, Camera, Gift, Users, Bell, ChevronRight, Plus, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "./lib/utils";
 import { updateAvatarCache } from "./lib/useAvatarCache";
@@ -34,6 +34,9 @@ export const ProfilePage: React.FC = () => {
   const [isValidatingInvite, setIsValidatingInvite] = useState(false);
   const [inviteData, setInviteData] = useState<any>(null);
   const [selectedRel, setSelectedRel] = useState("");
+  const [isEditingInvite, setIsEditingInvite] = useState(false);
+  const [tempName, setTempName] = useState("");
+  const [tempAvatar, setTempAvatar] = useState("");
   const [tempImage, setTempImage] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -411,24 +414,29 @@ export const ProfilePage: React.FC = () => {
       const data = await res.json();
       setInviteData(data);
 
-      // NEW: Auto-accept if role is already defined
-      if (data.targetRole) {
-        await handleAcceptInvite(data.targetRole, data.targetStandardRole, data);
-      }
+      // 预设确认为 A 填写的资料
+      setTempName(data.targetName || user.name);
+      setTempAvatar(data.targetAvatar || user.avatar);
+      setSelectedRel(data.targetRole || "");
+      setIsEditingInvite(false);
     } catch (e) {
       setInviteError("网络错误");
     }
     setIsValidatingInvite(false);
   };
 
-  const handleAcceptInvite = async (overrideRole?: string, overrideStdRole?: string, overrideInviteData?: any) => {
+  const handleAcceptInvite = async (overrideRole?: string, overrideStdRole?: string, overrideInviteData?: any, overrideName?: string, overrideAvatar?: string) => {
     const finalInviteData = overrideInviteData || inviteData;
     const finalRole = overrideRole || selectedRel;
-    const finalStdRole = overrideStdRole || relationships.find(r => r.label === selectedRel)?.value || "other";
+    const finalStdRole = overrideStdRole || relationships.find(r => r.label === finalRole)?.value || "other";
+    const finalName = overrideName || tempName;
+    const finalAvatar = overrideAvatar || tempAvatar;
 
     if (!finalRole || !finalInviteData) return;
     try {
-      const phone = JSON.parse(localStorage.getItem("currentUser") || "{}").phone;
+      const savedUserBefore = JSON.parse(localStorage.getItem("currentUser") || "{}");
+      const phone = savedUserBefore.phone;
+
       const res = await fetch("/api/accept-invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -436,7 +444,9 @@ export const ProfilePage: React.FC = () => {
           phone: phone,
           inviteCode: inviteCodeInput.trim(),
           relationshipToInviter: finalRole,
-          standardRole: finalStdRole
+          standardRole: finalStdRole,
+          name: finalName,
+          avatarUrl: finalAvatar
         })
       });
 
@@ -447,12 +457,14 @@ export const ProfilePage: React.FC = () => {
       }
 
       const data = await res.json();
-      const savedUser = JSON.parse(localStorage.getItem("currentUser") || "{}");
+      const latestUser = JSON.parse(localStorage.getItem("currentUser") || "{}");
       localStorage.setItem("currentUser", JSON.stringify({
-        ...savedUser,
+        ...latestUser,
         id: data.userId,
         familyId: data.familyId,
         memberId: data.memberId,
+        name: finalName,
+        avatar: finalAvatar,
         relationship: finalRole,
         inviterName: finalInviteData.inviterName
       }));
@@ -1018,33 +1030,149 @@ export const ProfilePage: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                <div className="space-y-8 overflow-y-auto no-scrollbar pb-2 text-left">
-                  <p className="text-slate-500 leading-relaxed px-4 text-center">
-                    <span className="font-bold text-slate-800">{inviteData.inviterName}</span> 邀请您加入家族。请问您是他的？
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {relationships.map((rel) => (
-                      <button
-                        key={rel.label}
-                        onClick={() => setSelectedRel(rel.label)}
-                        className={cn(
-                          "py-4 px-2 rounded-2xl border-2 font-bold transition-all text-sm",
-                          selectedRel === rel.label
-                            ? "bg-[#eab308] border-[#eab308] text-black shadow-lg shadow-[#eab308]/20"
-                            : "bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100"
-                        )}
-                      >
-                        {rel.label}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => handleAcceptInvite()}
-                    disabled={!selectedRel}
-                    className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-xl shadow-[#eab308]/20 disabled:opacity-50 mt-4 active:scale-[0.98] transition-all"
-                  >
-                    确认加入
-                  </button>
+                <div className="space-y-6 overflow-y-auto no-scrollbar pb-2 text-left">
+                  {!isEditingInvite ? (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      <div className="text-center space-y-3">
+                        <div className="w-16 h-16 bg-[#eab308]/10 rounded-full flex items-center justify-center mx-auto text-[#eab308]">
+                          <Sparkles size={32} />
+                        </div>
+                        <h3 className="text-xl font-black text-slate-800">确认身份档案</h3>
+                        <p className="text-sm text-slate-500 font-medium px-4">
+                          <span className="font-bold text-[#eab308]">{inviteData.inviterName}</span> 为您预设了以下档案：
+                        </p>
+                      </div>
+
+                      <div className="bg-slate-50 p-6 rounded-[2.5rem] border-2 border-slate-100/50 flex flex-col items-center gap-4">
+                        <div className="w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-white">
+                          <img
+                            src={inviteData.targetAvatar || DEFAULT_AVATAR}
+                            alt="Avatar"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-black text-slate-800">{inviteData.targetName}</p>
+                          <p className="text-[#eab308] font-bold text-sm tracking-widest mt-1 uppercase">
+                            关系：{selectedRel || inviteData.targetRole}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 px-2">
+                        <button
+                          className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-black shadow-xl shadow-[#eab308]/20 active:scale-[0.98] transition-all"
+                          onClick={() => {
+                            // 继承 A 预设的资料
+                            handleAcceptInvite(
+                              inviteData.targetRole,
+                              inviteData.targetStandardRole,
+                              inviteData,
+                              inviteData.targetName,
+                              inviteData.targetAvatar
+                            );
+                          }}
+                        >
+                          是的，这是我
+                        </button>
+                        <button
+                          className="py-1 text-slate-400 font-bold hover:text-slate-600 transition-colors text-center text-sm"
+                          onClick={() => setIsEditingInvite(true)}
+                        >
+                          信息有误，我要修改
+                        </button>
+                        <button
+                          className="py-1 text-slate-300 font-medium hover:text-slate-400 transition-colors text-center text-[11px] mt-1"
+                          onClick={() => {
+                            setInviteCodeInput("");
+                            setInviteData(null);
+                          }}
+                        >
+                          这不是我，返回输入
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                      <div className="text-center px-4">
+                        <h3 className="text-xl font-black text-slate-800">修改加入信息</h3>
+                        <p className="text-xs text-slate-400 mt-1">更正邀请人填错的资料</p>
+                      </div>
+
+                      <div className="space-y-4 py-2">
+                        <div className="flex flex-col items-center mb-4">
+                          <div className="w-20 h-20 rounded-full border-2 border-slate-100 shadow-sm overflow-hidden relative group">
+                            <img src={tempAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1 px-4">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">真实姓名</label>
+                          <input
+                            type="text"
+                            className="w-full h-14 rounded-2xl bg-slate-100 border-none px-5 font-bold text-slate-700"
+                            value={tempName}
+                            onChange={(e) => setTempName(e.target.value)}
+                            placeholder="请输入姓名"
+                          />
+                        </div>
+
+                        <div className="space-y-1 px-4">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">头像选择</label>
+                          <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+                            {SYSTEM_AVATARS.slice(0, 6).map((url, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => setTempAvatar(url)}
+                                className={cn(
+                                  "size-12 rounded-full border-2 shrink-0 overflow-hidden transition-all",
+                                  tempAvatar === url ? "border-[#eab308] scale-90 shadow-sm" : "border-transparent"
+                                )}
+                              >
+                                <img src={url} className="w-full h-full object-cover" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1 px-4">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">我对他/她的称呼</label>
+                          <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+                            {relationships.map(rel => (
+                              <button
+                                key={rel.label}
+                                onClick={() => setSelectedRel(rel.label)}
+                                className={cn(
+                                  "py-3 rounded-xl border-2 font-bold text-xs transition-all",
+                                  selectedRel === rel.label
+                                    ? "bg-[#eab308] border-[#eab308] text-black shadow-sm"
+                                    : "bg-white border-slate-200 text-slate-400 hover:border-[#eab308]/30"
+                                )}
+                              >
+                                {rel.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3 px-4 pt-2">
+                        <button
+                          className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold active:scale-95 transition-transform"
+                          onClick={() => setIsEditingInvite(false)}
+                        >
+                          返回
+                        </button>
+                        <button
+                          className="flex-1 py-4 bg-[#eab308] text-black rounded-2xl font-black shadow-lg shadow-[#eab308]/10 active:scale-95 transition-transform"
+                          disabled={!selectedRel || !tempName}
+                          onClick={() => handleAcceptInvite()}
+                        >
+                          确认加入
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </motion.div>
