@@ -470,6 +470,36 @@ export const RegisterPage: React.FC = () => {
             )}
           </label>
 
+          <label className="flex flex-col gap-3">
+            <span className="text-[#1e293b] text-lg font-bold px-1">您的性别 (选填)</span>
+            <div className="flex gap-4">
+              <button
+                type="button"
+                onClick={() => setGender("male")}
+                className={cn(
+                  "flex-1 h-14 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 shadow-sm",
+                  gender === "male"
+                    ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20 text-base"
+                    : "bg-white text-slate-400 border-2 border-slate-50 text-base"
+                )}
+              >
+                <span>男</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setGender("female")}
+                className={cn(
+                  "flex-1 h-14 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 shadow-sm",
+                  gender === "female"
+                    ? "bg-rose-500 text-white shadow-lg shadow-rose-500/20 text-base"
+                    : "bg-white text-slate-400 border-2 border-slate-50 text-base"
+                )}
+              >
+                <span>女</span>
+              </button>
+            </div>
+          </label>
+
           {!hasUrlCode ? (
             <label className="flex flex-col gap-3">
               <span className="text-[#1e293b] text-lg font-bold px-1">家族邀请码 (选填)</span>

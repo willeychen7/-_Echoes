@@ -77,7 +77,8 @@ export const ProfilePage: React.FC = () => {
   const [editForm, setEditForm] = useState({
     name: "",
     bio: "",
-    birthday: ""
+    birthday: "",
+    gender: "男"
   });
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -366,7 +367,8 @@ export const ProfilePage: React.FC = () => {
       ...user,
       name: editForm.name,
       bio: editForm.bio,
-      birthday: editForm.birthday
+      birthday: editForm.birthday,
+      gender: editForm.gender
     };
     setUser(updatedUser);
 
@@ -384,7 +386,8 @@ export const ProfilePage: React.FC = () => {
           name: updatedUser.name,
           avatarUrl: updatedUser.avatar,
           bio: updatedUser.bio,
-          birthDate: updatedUser.birthday
+          birthDate: updatedUser.birthday,
+          gender: updatedUser.gender
         })
       });
     }
@@ -580,7 +583,7 @@ export const ProfilePage: React.FC = () => {
       items: [
         {
           icon: Edit2, label: "编辑个人资料", color: "text-blue-500 bg-blue-50", action: () => {
-            setEditForm({ name: user.name, bio: user.bio, birthday: user.birthday });
+            setEditForm({ name: user.name, bio: user.bio, birthday: user.birthday, gender: user.gender || "男" });
             setShowEditModal(true);
           }
         },
@@ -641,7 +644,7 @@ export const ProfilePage: React.FC = () => {
           <div
             className="flex items-center justify-center gap-2 mb-4 cursor-pointer group px-4 py-1 -mt-1 rounded-full hover:bg-slate-50 transition-colors"
             onClick={() => {
-              setEditForm({ name: user.name, bio: user.bio, birthday: user.birthday });
+              setEditForm({ name: user.name, bio: user.bio, birthday: user.birthday, gender: user.gender || "男" });
               setShowEditModal(true);
             }}
           >
@@ -651,9 +654,10 @@ export const ProfilePage: React.FC = () => {
             </div>
           </div>
 
-          {user.birthday && (
+          {(user.birthday || user.gender) && (
             <div className="flex items-center justify-center gap-1.5 mb-6 text-xs font-bold text-slate-400 bg-slate-50 px-3 py-1 rounded-full max-w-max mx-auto shadow-sm">
-              <span>🎂 生日：{user.birthday}</span>
+              {user.gender && <span className={user.gender === "女" ? "text-rose-400" : "text-blue-400"}>{user.gender === "女" ? "♀" : "♂"}</span>}
+              {user.birthday && <span>🎂 生日：{user.birthday}</span>}
             </div>
           )}
 
@@ -878,6 +882,26 @@ export const ProfilePage: React.FC = () => {
                     onChange={(e) => setEditForm({ ...editForm, birthday: e.target.value })}
                     className="w-full h-16 px-6 rounded-2xl bg-slate-50 border-none font-bold text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 ml-4">我的性别</label>
+                  <div className="flex gap-4 px-2">
+                    {["男", "女"].map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setEditForm({ ...editForm, gender: g })}
+                        className={cn(
+                          "flex-1 h-14 rounded-2xl font-bold transition-all",
+                          editForm.gender === g
+                            ? (g === "男" ? "bg-blue-500 text-white" : "bg-rose-500 text-white")
+                            : "bg-slate-50 text-slate-400"
+                        )}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-2 text-left">
                   <label className="text-xs font-bold text-slate-400 ml-4">我的个性签名</label>
