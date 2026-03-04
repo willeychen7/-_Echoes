@@ -270,6 +270,32 @@ export function getRigorousRelationship(
         return raw;
     }
 
+    // 情况 C: 桥接推算 (Bridging through a common creator)
+    // 如果 V 和 T 是由同一个人创建的（例如陈阿妹创建了所有人），我们根据他们相对于创建者的角色进行二次推导
+    if (tNode.createdByMemberId && eq(tNode.createdByMemberId, vNode.createdByMemberId)) {
+        const vRel = vNode.relationship || "";
+        const tRel = tNode.relationship || "";
+
+        // T 是创建者的子女
+        if (tRel.includes("儿子") || tRel.includes("女儿")) {
+            // V 也是创建者的子女 -> 兄弟姐妹
+            if (vRel.includes("儿子") || vRel.includes("女儿")) {
+                return tNode.gender === "female" ? "姐妹" : "兄弟";
+            }
+            // V 是创建者的晚辈 (外甥/侄子) -> T 是 V 的 表/堂兄弟姐妹 (Cousin)
+            if (vRel.includes("外甥") || vRel.includes("侄子")) {
+                return tNode.gender === "female" ? "表姐/妹" : "表哥/弟";
+            }
+        }
+        // T 是创建者的晚辈 (外甥/侄子)
+        if (tRel.includes("外甥") || tRel.includes("侄子")) {
+            // V 是创建者的子女 -> T 是 V 的 表/堂兄弟姐妹 (Cousin)
+            if (vRel.includes("儿子") || vRel.includes("女儿")) {
+                return tNode.gender === "female" ? "表姐/妹" : "表哥/弟";
+            }
+        }
+    }
+
     // --- 回退逻辑 ---
     const baseRel = tNode.relationship || "家人";
     if (tNode.createdByMemberId && !eq(tNode.createdByMemberId, vId)) {
