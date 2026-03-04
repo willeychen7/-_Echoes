@@ -25,7 +25,7 @@ const getRelativeTime = (dateStr: string) => {
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showAvatarDropdown, setShowAvatarDropdown] = useState(false);
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [showCropper, setShowCropper] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -297,36 +297,7 @@ export const ProfilePage: React.FC = () => {
 
     return () => clearInterval(pollTimer);
   }, []);
-  const handleAvatarClick = () => {
-    setShowAvatarDropdown(!showAvatarDropdown);
-  };
 
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const triggerFileUpload = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        // NOTE: 同步更新头像逻辑
-        const updated = { ...user, avatar: result };
-        localStorage.setItem("currentUser", JSON.stringify(updated));
-        setUser(updated);
-        setShowAvatarDropdown(false);
-        // 推送到后端
-        fetch("/api/users/sync-profile", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: user.id || 0, avatarUrl: result })
-        });
-      };
-      reader.readAsDataURL(file);
-    }
-  };
   const handleLogout = () => {
     if (isDemoMode(user)) {
       localStorage.removeItem("demoCustomMembers");
@@ -341,6 +312,9 @@ export const ProfilePage: React.FC = () => {
     setUser(updatedUser);
     localStorage.setItem("currentUser", JSON.stringify(updatedUser));
     localStorage.setItem("_profileLastMod", Date.now().toString());
+
+    // 同步更新邀请确认界面的预览头像
+    setTempAvatar(url);
 
     const targetMemberId = updatedUser.memberId;
     const targetUserId = updatedUser.id;
@@ -625,65 +599,13 @@ export const ProfilePage: React.FC = () => {
           <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-[#eab308]/10 to-transparent pointer-events-none" />
 
           <div className="relative z-10 mb-4 flex flex-col items-center">
-            <div className="group cursor-pointer relative" onClick={handleAvatarClick}>
+            <div className="group cursor-pointer relative" onClick={() => { setPendingAvatar(user.avatar); setShowAvatarModal(true); }}>
               <div className="size-28 rounded-full border-4 border-white shadow-lg overflow-hidden relative">
                 <img src={user.avatar} alt={user.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" referrerPolicy="no-referrer" />
                 <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <Camera className="text-white" size={24} />
                 </div>
               </div>
-
-              {/* In-place Dropdown for Profile */}
-              <AnimatePresence>
-                {showAvatarDropdown && (
-                  <>
-                    <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setShowAvatarDropdown(false); }} />
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                      className="absolute top-[110%] left-1/2 -translate-x-1/2 w-[280px] bg-white rounded-3xl shadow-2xl border border-slate-100 p-4 z-[70]"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="space-y-4">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left ml-2">选择预设头像</p>
-                        <div className="grid grid-cols-4 gap-2 text-left">
-                          {SYSTEM_AVATARS.slice(0, 11).map((url) => (
-                            <button
-                              key={url}
-                              onClick={() => {
-                                const updated = { ...user, avatar: url };
-                                localStorage.setItem("currentUser", JSON.stringify(updated));
-                                setUser(updated);
-                                setShowAvatarDropdown(false);
-                                fetch("/api/users/sync-profile", {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ userId: user.id || 0, avatarUrl: url })
-                                });
-                              }}
-                              className={cn(
-                                "aspect-square rounded-xl overflow-hidden border-2 transition-all active:scale-95",
-                                user.avatar === url ? "border-[#eab308]" : "border-transparent"
-                              )}
-                            >
-                              <img src={url} className="w-full h-full object-cover" />
-                            </button>
-                          ))}
-                          <button
-                            onClick={triggerFileUpload}
-                            className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors"
-                          >
-                            <Plus size={20} />
-                          </button>
-                        </div>
-                      </div>
-                      <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
-
               <div className="absolute bottom-0 right-0 bg-[#eab308] text-black text-[10px] font-bold px-3 py-1 rounded-full border-2 border-white shadow-sm flex items-center gap-1">
                 我
               </div>
@@ -829,7 +751,74 @@ export const ProfilePage: React.FC = () => {
           </div>
         )}
 
+        {showAvatarModal && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px]"
+            >
+              <h3 className="text-2xl font-bold mb-6 text-center">更换我的头像</h3>
 
+              <div className="flex justify-center mb-8">
+                <div className="size-32 rounded-full border-4 border-[#eab308]/20 shadow-inner overflow-hidden relative bg-slate-50">
+                  <img
+                    src={pendingAvatar || user.avatar}
+                    className="w-full h-full object-cover"
+                    key={pendingAvatar}
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 border-[6px] border-white/50 rounded-full pointer-events-none" />
+                </div>
+              </div>
+
+              <div className="space-y-8">
+                <div className="grid grid-cols-4 gap-4">
+                  {defaultAvatars.map((url, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setPendingAvatar(url)}
+                      className={cn(
+                        "aspect-square rounded-2xl border-2 overflow-hidden hover:border-[#eab308] transition-all",
+                        (pendingAvatar || user.avatar) === url ? "border-[#eab308] scale-95 shadow-lg shadow-[#eab308]/20" : "border-slate-50"
+                      )}
+                    >
+                      <img src={url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    </button>
+                  ))}
+                  <label className="aspect-square rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-1 text-slate-400 cursor-pointer hover:bg-slate-50 transition-colors">
+                    <Camera size={20} />
+                    <span className="text-[10px] font-bold">上传</span>
+                    <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const url = URL.createObjectURL(file);
+                        setTempImage(url);
+                        setShowCropper(true);
+                      }
+                    }} />
+                  </label>
+                </div>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={() => {
+                      if (pendingAvatar) {
+                        handleAvatarChange(pendingAvatar);
+                        setShowAvatarModal(false);
+                      }
+                    }}
+                    className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-xl shadow-[#eab308]/20 active:scale-[0.98] transition-all"
+                  >
+                    确认更换
+                  </button>
+                  <button onClick={() => setShowAvatarModal(false)} className="w-full py-5 bg-slate-100 rounded-3xl font-bold text-slate-500 active:scale-95 transition-transform">取消</button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
 
         {showEditModal && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">

@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "./components/Button";
-import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown, Sparkles, Edit2, X, Camera } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown, Sparkles, Edit2, X } from "lucide-react";
 import { Card } from "./components/Card";
 import { cn } from "./lib/utils";
 import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
@@ -17,9 +17,8 @@ export const RegisterPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isAvatarUploaded, setIsAvatarUploaded] = useState(false);
+  const [showDefaultAvatars, setShowDefaultAvatars] = useState(false);
   const [avatar, setAvatar] = useState(DEFAULT_AVATAR);
-  const [showAvatarDropdown, setShowAvatarDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [invitationCode, setInvitationCode] = useState("");
   const [hasUrlCode, setHasUrlCode] = useState(false);
@@ -254,10 +253,11 @@ export const RegisterPage: React.FC = () => {
   const defaultAvatars = SYSTEM_AVATARS;
 
   const handleAvatarClick = () => {
-    setShowAvatarDropdown(!showAvatarDropdown);
+    setShowDefaultAvatars(!showDefaultAvatars);
   };
 
-  const triggerFileUpload = () => {
+  const handleUploadClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     fileInputRef.current?.click();
   };
 
@@ -279,7 +279,7 @@ export const RegisterPage: React.FC = () => {
           const compressed = canvas.toDataURL("image/jpeg", 0.85);
           setAvatar(compressed);
           setIsAvatarUploaded(true);
-          setShowAvatarDropdown(false);
+          setShowDefaultAvatars(false);
         };
         img.src = reader.result as string;
       };
@@ -290,7 +290,7 @@ export const RegisterPage: React.FC = () => {
   const selectDefaultAvatar = (url: string) => {
     setAvatar(url);
     setIsAvatarUploaded(true);
-    setShowAvatarDropdown(false);
+    setShowDefaultAvatars(false);
   };
 
   return (
@@ -325,52 +325,40 @@ export const RegisterPage: React.FC = () => {
             accept="image/*"
           />
           <button
-            onClick={handleAvatarClick}
-            className={`absolute bottom-1 right-1 p-2 rounded-full shadow-md border border-slate-100 transition-all z-[20] ${isAvatarUploaded ? "bg-slate-100 text-slate-400" : "bg-white text-[#eab308] hover:scale-110"
+            onClick={handleUploadClick}
+            disabled={isAvatarUploaded}
+            className={`absolute bottom-1 right-1 p-2 rounded-full shadow-md border border-slate-100 transition-all ${isAvatarUploaded ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-white text-[#eab308] hover:scale-110"
               }`}
           >
-            <Camera size={20} className={isAvatarUploaded ? "text-slate-300" : "text-[#eab308]"} />
+            <ImagePlus size={20} className={isAvatarUploaded ? "text-slate-300" : "text-[#eab308]"} />
           </button>
 
-          {/* 极简 Dropdown */}
-          <AnimatePresence>
-            {showAvatarDropdown && (
-              <>
-                {/* 点击外部关闭 */}
-                <div className="fixed inset-0 z-[30]" onClick={() => setShowAvatarDropdown(false)} />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                  className="absolute top-[110%] left-1/2 -translate-x-1/2 w-[280px] bg-white rounded-3xl shadow-2xl border border-slate-100 p-4 z-[40]"
+          {/* Default Avatars Popover */}
+          {showDefaultAvatars && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute top-full mt-4 left-1/2 -translate-x-1/2 bg-white p-4 rounded-3xl shadow-2xl border border-slate-100 z-50 min-w-[280px]"
+            >
+              <div className="grid grid-cols-4 gap-3">
+                {defaultAvatars.map((url, i) => (
+                  <button
+                    key={i}
+                    onClick={() => selectDefaultAvatar(url)}
+                    className="w-12 h-12 rounded-full border-2 border-slate-100 hover:border-[#eab308] overflow-hidden transition-all"
+                  >
+                    <img src={url} alt={`Default ${i}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  </button>
+                ))}
+                <button
+                  onClick={handleUploadClick}
+                  className="w-12 h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308] transition-all"
                 >
-                  <div className="space-y-4">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">选择预设头像</p>
-                    <div className="grid grid-cols-4 gap-2">
-                      {SYSTEM_AVATARS.slice(0, 11).map((url) => (
-                        <button
-                          key={url}
-                          onClick={() => { setAvatar(url); setShowAvatarDropdown(false); setIsAvatarUploaded(true); }}
-                          className={cn(
-                            "aspect-square rounded-xl overflow-hidden border-2 transition-all active:scale-95",
-                            avatar === url ? "border-[#eab308]" : "border-transparent"
-                          )}
-                        >
-                          <img src={url} className="w-full h-full object-cover" />
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => { triggerFileUpload(); setShowAvatarDropdown(false); }}
-                        className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors"
-                      >
-                        <Plus size={20} />
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
+                  <Plus size={24} />
+                </button>
+              </div>
+            </motion.div>
+          )}
         </div>
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">创建账号</h1>
@@ -575,15 +563,20 @@ export const RegisterPage: React.FC = () => {
                         size="xl"
                         className="w-full h-16 rounded-2xl bg-[#eab308] text-black font-black shadow-lg shadow-[#eab308]/20 active:scale-[0.98] transition-all"
                         onClick={() => {
-                          setName(inviteData.targetName);
-                          setAvatar(inviteData.targetAvatar || avatar);
+                          // 核心修正：用户手动上传的 avatar (如果存在) 必须覆盖 A 的预设
+                          const finalName = inviteData.targetName;
+                          const finalAvatar = avatar || inviteData.targetAvatar;
+
+                          setName(finalName);
+                          setAvatar(finalAvatar);
                           setIsAvatarUploaded(true);
+
                           handleCompleteRegistration(
                             inviteData.targetRole,
                             inviteData.targetStandardRole,
                             undefined,
-                            inviteData.targetName,
-                            inviteData.targetAvatar || avatar
+                            finalName,
+                            finalAvatar
                           );
                         }}
                       >
