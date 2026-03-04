@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "./components/Button";
-import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown, Sparkles, Edit2, X } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown, Sparkles, Edit2, X, Camera } from "lucide-react";
 import { Card } from "./components/Card";
 import { cn } from "./lib/utils";
 import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
@@ -17,8 +17,9 @@ export const RegisterPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isAvatarUploaded, setIsAvatarUploaded] = useState(false);
-  const [showDefaultAvatars, setShowDefaultAvatars] = useState(false);
   const [avatar, setAvatar] = useState(DEFAULT_AVATAR);
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
 
   const [invitationCode, setInvitationCode] = useState("");
   const [hasUrlCode, setHasUrlCode] = useState(false);
@@ -253,11 +254,11 @@ export const RegisterPage: React.FC = () => {
   const defaultAvatars = SYSTEM_AVATARS;
 
   const handleAvatarClick = () => {
-    setShowDefaultAvatars(!showDefaultAvatars);
+    setPendingAvatar(avatar);
+    setShowAvatarModal(true);
   };
 
-  const handleUploadClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const triggerFileUpload = () => {
     fileInputRef.current?.click();
   };
 
@@ -278,8 +279,9 @@ export const RegisterPage: React.FC = () => {
           ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
           const compressed = canvas.toDataURL("image/jpeg", 0.85);
           setAvatar(compressed);
+          setPendingAvatar(compressed);
           setIsAvatarUploaded(true);
-          setShowDefaultAvatars(false);
+          setShowAvatarModal(false);
         };
         img.src = reader.result as string;
       };
@@ -289,8 +291,9 @@ export const RegisterPage: React.FC = () => {
 
   const selectDefaultAvatar = (url: string) => {
     setAvatar(url);
+    setPendingAvatar(url);
     setIsAvatarUploaded(true);
-    setShowDefaultAvatars(false);
+    setShowAvatarModal(false);
   };
 
   return (
@@ -325,40 +328,12 @@ export const RegisterPage: React.FC = () => {
             accept="image/*"
           />
           <button
-            onClick={handleUploadClick}
-            disabled={isAvatarUploaded}
-            className={`absolute bottom-1 right-1 p-2 rounded-full shadow-md border border-slate-100 transition-all ${isAvatarUploaded ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-white text-[#eab308] hover:scale-110"
+            onClick={handleAvatarClick}
+            className={`absolute bottom-1 right-1 p-2 rounded-full shadow-md border border-slate-100 transition-all ${isAvatarUploaded ? "bg-slate-100 text-slate-400" : "bg-white text-[#eab308] hover:scale-110"
               }`}
           >
-            <ImagePlus size={20} className={isAvatarUploaded ? "text-slate-300" : "text-[#eab308]"} />
+            <Camera size={20} className={isAvatarUploaded ? "text-slate-300" : "text-[#eab308]"} />
           </button>
-
-          {/* Default Avatars Popover */}
-          {showDefaultAvatars && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="absolute top-full mt-4 left-1/2 -translate-x-1/2 bg-white p-4 rounded-3xl shadow-2xl border border-slate-100 z-50 min-w-[280px]"
-            >
-              <div className="grid grid-cols-4 gap-3">
-                {defaultAvatars.map((url, i) => (
-                  <button
-                    key={i}
-                    onClick={() => selectDefaultAvatar(url)}
-                    className="w-12 h-12 rounded-full border-2 border-slate-100 hover:border-[#eab308] overflow-hidden transition-all"
-                  >
-                    <img src={url} alt={`Default ${i}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  </button>
-                ))}
-                <button
-                  onClick={handleUploadClick}
-                  className="w-12 h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308] transition-all"
-                >
-                  <Plus size={24} />
-                </button>
-              </div>
-            </motion.div>
-          )}
         </div>
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">创建账号</h1>
@@ -683,6 +658,72 @@ export const RegisterPage: React.FC = () => {
             提示：如果您在操作中遇到困难，可以请您的子女或孙辈协助完成注册。
           </p>
         </div>
+        {/* 头像挑选弹窗（同步 ProfilePage 的高级体验） */}
+        <AnimatePresence>
+          {showAvatarModal && (
+            <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
+              <motion.div
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px]"
+              >
+                <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-2xl font-black text-slate-800">挑选我的头像</h3>
+                  <button onClick={() => setShowAvatarModal(false)} className="size-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="flex justify-center mb-10">
+                  <div className="size-32 rounded-full border-4 border-[#eab308]/20 shadow-inner overflow-hidden relative bg-slate-50">
+                    <img
+                      src={pendingAvatar || avatar}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-8">
+                  <div className="grid grid-cols-4 gap-4 max-h-48 overflow-y-auto no-scrollbar py-1">
+                    {SYSTEM_AVATARS.map((url, i) => (
+                      <button
+                        key={url}
+                        onClick={() => setPendingAvatar(url)}
+                        className={cn(
+                          "aspect-square rounded-2xl border-2 overflow-hidden hover:border-[#eab308] transition-all",
+                          (pendingAvatar || avatar) === url ? "border-[#eab308] scale-95 shadow-lg shadow-[#eab308]/20" : "border-slate-50"
+                        )}
+                      >
+                        <img src={url} alt="" className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                    <button
+                      onClick={triggerFileUpload}
+                      className="aspect-square rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-1 text-slate-400 hover:bg-slate-50 transition-colors"
+                    >
+                      <Camera size={20} />
+                      <span className="text-[10px] font-black uppercase">上传</span>
+                    </button>
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+                  </div>
+
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => {
+                        if (pendingAvatar) setAvatar(pendingAvatar);
+                        setShowAvatarModal(false);
+                      }}
+                      className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-black shadow-xl shadow-[#eab308]/20 active:scale-[0.98] transition-all"
+                    >
+                      确定选择
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
