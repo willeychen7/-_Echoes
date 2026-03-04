@@ -156,12 +156,8 @@ export const RegisterPage: React.FC = () => {
       setInviterRole(data.inviterRole);
       setInviterId(data.inviterId);
 
-      if (data.targetRole) {
-        // NOTE: if role already filled by inviter, skip the modal
-        await handleCompleteRegistration(data.targetRole, data.targetStandardRole, data.inviterId);
-      } else {
-        setShowRelationshipModal(true);
-      }
+      // 核心修复：既然邀请人已经填写过关系，加入时不再重复弹窗询问，直接采用后端返回的关系进行实名关联
+      await handleCompleteRegistration(data.targetRole || "家族成员", data.targetStandardRole || "other", data.inviterId);
     } catch (err) {
       console.error("Validation error:", err);
       setInviteError("网络错误，请稍后重试");
