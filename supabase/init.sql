@@ -49,6 +49,9 @@ CREATE TABLE users (
     member_id INTEGER,
     relationship TEXT,
     avatar_url TEXT,
+    bio TEXT,
+    birth_date DATE,
+    gender TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
