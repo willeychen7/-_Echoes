@@ -1231,14 +1231,28 @@ export const ProfilePage: React.FC = () => {
           <ImageCropper
             image={tempImage}
             onCropComplete={(croppedImage) => {
-              if (isCroppingForInvite) {
-                setTempAvatar(croppedImage);
-                setIsCroppingForInvite(false);
-              } else {
-                setPendingAvatar(croppedImage);
-              }
-              setShowCropper(false);
-              setTempImage(null);
+              // 关键修复：增加图片压缩，防止 Base64 过大导致 Vercel 接口 413 错误
+              const img = new Image();
+              img.onload = () => {
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d");
+                const MAX_WIDTH = 500;
+                const scale = Math.min(1, MAX_WIDTH / img.width);
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const compressed = canvas.toDataURL("image/jpeg", 0.7);
+
+                if (isCroppingForInvite) {
+                  setTempAvatar(compressed);
+                  setIsCroppingForInvite(false);
+                } else {
+                  setPendingAvatar(compressed);
+                }
+                setShowCropper(false);
+                setTempImage(null);
+              };
+              img.src = croppedImage;
             }}
             onClose={() => {
               setShowCropper(false);

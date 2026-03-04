@@ -166,6 +166,10 @@ export const RegisterPage: React.FC = () => {
       setInviteData(data);
 
       // 进入确认环节：展示 A 创建的信息供 B 确认或修改
+      // 预填修改视图所需的状态
+      if (data.targetName) setName(data.targetName);
+      if (data.targetAvatar) setAvatar(data.targetAvatar);
+
       setSelectedRelationship(data.targetRole || "");
       setShowVerificationModal(true);
     } catch (err) {
@@ -251,7 +255,9 @@ export const RegisterPage: React.FC = () => {
       isRegistered: true
     };
     localStorage.setItem("currentUser", JSON.stringify(userData));
-    navigate("/register-success");
+    alert("档案确认成功！欢迎加入家族。");
+    navigate("/family-square");
+    window.location.reload();
   };
 
   const defaultAvatars = SYSTEM_AVATARS;
@@ -744,10 +750,23 @@ export const RegisterPage: React.FC = () => {
         <ImageCropper
           image={tempImage}
           onCropComplete={(croppedImage) => {
-            setAvatar(croppedImage);
-            setIsAvatarUploaded(true);
-            setShowCropper(false);
-            setTempImage(null);
+            // 压缩图片：避免 base64 过大导致 Vercel 413 错误
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement("canvas");
+              const ctx = canvas.getContext("2d");
+              const MAX_WIDTH = 500;
+              const scale = Math.min(1, MAX_WIDTH / img.width);
+              canvas.width = img.width * scale;
+              canvas.height = img.height * scale;
+              ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+              const compressed = canvas.toDataURL("image/jpeg", 0.7); // 质量降到 0.7 显著减小体积
+              setAvatar(compressed);
+              setIsAvatarUploaded(true);
+              setShowCropper(false);
+              setTempImage(null);
+            };
+            img.src = croppedImage;
           }}
           onClose={() => {
             setShowCropper(false);
