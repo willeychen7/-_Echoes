@@ -1111,13 +1111,13 @@ export const ProfilePage: React.FC = () => {
                         <button
                           className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-black shadow-xl shadow-[#eab308]/20 active:scale-[0.98] transition-all"
                           onClick={() => {
-                            // 继承 A 预设的资料
+                            // 修正：必须优先使用 tempName 和 tempAvatar (即用户可能修改过的值)
                             handleAcceptInvite(
-                              inviteData.targetRole,
+                              selectedRel || inviteData.targetRole,
                               inviteData.targetStandardRole,
                               inviteData,
-                              inviteData.targetName,
-                              inviteData.targetAvatar
+                              tempName,
+                              tempAvatar
                             );
                           }}
                         >
@@ -1214,7 +1214,7 @@ export const ProfilePage: React.FC = () => {
                         <button
                           className="flex-1 py-4 bg-[#eab308] text-black rounded-2xl font-black shadow-lg shadow-[#eab308]/10 active:scale-95 transition-transform"
                           disabled={!selectedRel || !tempName}
-                          onClick={() => handleAcceptInvite()}
+                          onClick={() => handleAcceptInvite(selectedRel, undefined, inviteData, tempName, tempAvatar)}
                         >
                           确认加入
                         </button>

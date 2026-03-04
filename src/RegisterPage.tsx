@@ -711,7 +711,10 @@ export const RegisterPage: React.FC = () => {
                       </Button>
                       <Button
                         className="flex-1 h-14 rounded-xl bg-[#eab308] text-black font-black"
-                        onClick={() => handleCompleteRegistration()}
+                        onClick={() => {
+                          const stdRole = allRelationships.find(r => r.label === selectedRelationship)?.value || "other";
+                          handleCompleteRegistration(selectedRelationship, stdRole, undefined, name, avatar);
+                        }}
                       >
                         确认加入
                       </Button>
