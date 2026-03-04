@@ -97,84 +97,96 @@ export function deduceRole(relationship: string): string {
 }
 
 /**
+ * 核心：获取一个人的父母 ID 集合
+ */
+function getParentIds(nodeId: number, members: any[]) {
+    const node = members.find(m => m.id === nodeId);
+    if (!node) return { fId: null, mId: null };
+    return { fId: node.fatherId, mId: node.motherId };
+}
+
+/**
  * 严谨的家族关系推导函数
- * 基于 fatherId, motherId 和 gender 进行树状遍历
  */
 export function getRigorousRelationship(
     viewer: any,
     target: any,
     members: any[]
 ): string {
-    const viewerMemberId = viewer?.memberId || viewer?.id;
-    const viewerUserId = viewer?.id || viewer?.userId; // Assuming viewer is currentUser object
-    const targetMemberId = target?.id;
-    const targetUserId = target?.userId;
+    const vId = viewer?.memberId || viewer?.id;
+    const tId = target?.id;
 
-    if (!targetMemberId) return "家人";
+    if (!tId || !vId) return target?.relationship || "家人";
+    if (vId === tId) return "我";
 
-    // 0. Identity check (Me)
-    const isMe = (viewerMemberId && targetMemberId && viewerMemberId == targetMemberId) ||
-        (viewerUserId && targetUserId && viewerUserId === targetUserId);
+    const vNode = members.find(m => m.id === vId);
+    const tNode = members.find(m => m.id === tId);
+    if (!vNode || !tNode) return target?.relationship || "家人";
 
-    if (isMe) return "我";
+    // 1. 直系父子
+    if (tId === vNode.fatherId) return "爸爸";
+    if (tId === vNode.motherId) return "妈妈";
 
-    const vNode = members.find(m => m.id === viewerMemberId);
-    const tNode = members.find(m => m.id === targetMemberId);
-
-    if (!vNode || !tNode) return "家人";
-
-    // 1. 直系父子/母子关系
-    if (tNode.id === vNode.fatherId) return "爸爸";
-    if (tNode.id === vNode.motherId) return "妈妈";
-
-    // 2. 直系子女关系
-    if (vNode.id === tNode.fatherId) return tNode.gender === "female" ? "女儿" : "儿子";
-    if (vNode.id === tNode.motherId) return tNode.gender === "female" ? "女儿" : "儿子";
-
-    // 3. 祖孙关系
-    const vFather = members.find(m => m.id === vNode.fatherId);
-    const vMother = members.find(m => m.id === vNode.motherId);
-
-    if (vFather) {
-        if (tNode.id === vFather.fatherId) return "爷爷";
-        if (tNode.id === vFather.motherId) return "奶奶";
-    }
-    if (vMother) {
-        if (tNode.id === vMother.fatherId) return "外公";
-        if (tNode.id === vMother.motherId) return "外婆";
+    // 2. 直系子女
+    if (vId === tNode.fatherId || vId === tNode.motherId) {
+        return tNode.gender === "female" ? "女儿" : "儿子";
     }
 
-    // 4. 孙辈关系
-    const tFather = members.find(m => m.id === tNode.fatherId);
-    const tMother = members.find(m => m.id === tNode.motherId);
-
-    if (tFather) {
-        if (vNode.id === tFather.fatherId || vNode.id === tFather.motherId) {
-            return tNode.gender === "female" ? "孙女" : "孙子";
-        }
-    }
-    if (tMother) {
-        if (vNode.id === tMother.fatherId || vNode.id === tMother.motherId) {
-            return tNode.gender === "female" ? "外孙女" : "外孙子";
-        }
-    }
-
-    // 5. 兄弟姐妹关系 (同父或同母)
+    // 3. 兄弟姐妹
     if ((vNode.fatherId && vNode.fatherId === tNode.fatherId) ||
         (vNode.motherId && vNode.motherId === tNode.motherId)) {
-        if (tNode.gender === "female") return "姐妹";
-        return "兄弟";
+        return tNode.gender === "female" ? "姐妹" : "兄弟";
     }
 
-    // 6. 配偶关系
-    const vChildren = members.filter(m => m.fatherId === vNode.id || m.motherId === vNode.id);
-    const isSpouse = vChildren.some(child =>
-        (child.fatherId === vNode.id && child.motherId === tNode.id) ||
-        (child.motherId === vNode.id && child.fatherId === tNode.id)
-    );
-    if (isSpouse) return tNode.gender === "female" ? "妻子" : "丈夫";
+    // 4. 祖孙 (向上两代)
+    const { fId: vf, mId: vm } = getParentIds(vId, members);
+    if (vf) {
+        const { fId: vff, mId: vfm } = getParentIds(vf, members);
+        if (tId === vff) return "爷爷";
+        if (tId === vfm) return "奶奶";
+    }
+    if (vm) {
+        const { fId: vmf, mId: vmm } = getParentIds(vm, members);
+        if (tId === vmf) return "外公";
+        if (tId === vmm) return "外婆";
+    }
 
-    // 回退到原始 relationship 字段
+    // 5. 孙辈 (向下两代)
+    const { fId: tf, mId: tm } = getParentIds(tId, members);
+    if (tf && (tf === vId)) return tNode.gender === "female" ? "女儿" : "儿子"; // fallback to 2
+    if (tf) {
+        const { fId: tff, mId: tfm } = getParentIds(tf, members);
+        if (tff === vId || tfm === vId) return tNode.gender === "female" ? "孙女" : "孙子";
+    }
+    if (tm) {
+        const { fId: tmf, mId: tmm } = getParentIds(tm, members);
+        if (tmf === vId || tmm === vId) return tNode.gender === "female" ? "外孙女" : "外孙子";
+    }
+
+    // 6. 配偶 (基于共同子女推断)
+    const vIsSpouse = members.some(child =>
+        (child.fatherId === vId && child.motherId === tId) ||
+        (child.motherId === vId && child.fatherId === tId)
+    );
+    if (vIsSpouse) return tNode.gender === "female" ? "妻子" : "丈夫";
+
+    // 7. 舅舅/阿姨/叔叔/姑姑 (父母的兄弟姐妹)
+    if (vf) {
+        const { fId: vff, mId: vfm } = getParentIds(vf, members);
+        const fSiblings = members.filter(m => (vff && m.fatherId === vff) || (vfm && m.motherId === vfm));
+        if (fSiblings.some(s => s.id === tId)) {
+            return tNode.gender === "female" ? "姑姑" : "叔伯";
+        }
+    }
+    if (vm) {
+        const { fId: vmf, mId: vmm } = getParentIds(vm, members);
+        const mSiblings = members.filter(m => (vmf && m.fatherId === vmf) || (vmm && m.motherId === vmm));
+        if (mSiblings.some(s => s.id === tId)) {
+            return tNode.gender === "female" ? "阿姨" : "舅舅";
+        }
+    }
+
+    // 回退：如果没有任何树状连边，尝试显示数据库存的原始称呼
     return tNode.relationship || "家人";
 }
 

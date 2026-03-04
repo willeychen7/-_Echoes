@@ -674,8 +674,7 @@ export const ArchivePage: React.FC = () => {
             </span>
           ) : (
             !isMeMember && (
-              <div className="flex flex-col items-center gap-2 mt-2">
-                <span className="text-[9px] font-black text-slate-300 tracking-[0.2em] uppercase px-2 py-0.5 bg-slate-50 rounded border border-slate-100">随行档案</span>
+              <div className="mt-2">
                 <button
                   onClick={() => setShowShareModal(true)}
                   className="px-6 py-2 bg-[#eab308] text-black rounded-full text-[11px] font-black inline-flex items-center gap-2 hover:bg-[#d9a306] transition-all shadow-lg shadow-[#eab308]/20 active:scale-95"
