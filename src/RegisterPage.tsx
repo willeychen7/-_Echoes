@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "./components/Button";
-import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown, Sparkles } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown, Sparkles, Edit2, X } from "lucide-react";
 import { Card } from "./components/Card";
 import { cn } from "./lib/utils";
 import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
@@ -558,20 +558,18 @@ export const RegisterPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="grid gap-3 pt-4">
+                    <div className="grid gap-4 pt-4 px-2">
                       <Button
                         size="xl"
-                        className="w-full h-16 rounded-2xl bg-[#eab308] text-black font-black shadow-lg shadow-[#eab308]/20"
+                        className="w-full h-16 rounded-2xl bg-[#eab308] text-black font-black shadow-lg shadow-[#eab308]/20 active:scale-[0.98] transition-all"
                         onClick={() => {
-                          // 接受 A 的预设
-                          // 同步设置到 state 便于跳转后显示，但注册接口直接传 override 值确保实时性
                           setName(inviteData.targetName);
                           setAvatar(inviteData.targetAvatar || avatar);
                           setIsAvatarUploaded(true);
                           handleCompleteRegistration(
                             inviteData.targetRole,
                             inviteData.targetStandardRole,
-                            undefined, // inviterId already in state
+                            undefined,
                             inviteData.targetName,
                             inviteData.targetAvatar || avatar
                           );
@@ -579,12 +577,24 @@ export const RegisterPage: React.FC = () => {
                       >
                         是的，这是我
                       </Button>
-                      <button
-                        className="py-4 text-slate-400 font-bold hover:text-slate-600 transition-colors text-center w-full"
-                        onClick={() => setIsEditingInvite(true)}
-                      >
-                        信息有误，我要修改
-                      </button>
+                      <div className="flex gap-3">
+                        <button
+                          className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                          onClick={() => setIsEditingInvite(true)}
+                        >
+                          <Edit2 size={16} /> 信息有误
+                        </button>
+                        <button
+                          className="flex-1 py-4 bg-red-50 text-red-500 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                          onClick={() => {
+                            setInvitationCode("");
+                            setInviteData(null);
+                            setShowVerificationModal(false);
+                          }}
+                        >
+                          <X size={16} /> 这不是我
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : (

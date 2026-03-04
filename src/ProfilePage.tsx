@@ -1082,19 +1082,19 @@ export const ProfilePage: React.FC = () => {
                           是的，这是我
                         </button>
                         <button
-                          className="py-1 text-slate-400 font-bold hover:text-slate-600 transition-colors text-center text-sm"
+                          className="w-full py-4 bg-slate-50 text-slate-500 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
                           onClick={() => setIsEditingInvite(true)}
                         >
-                          信息有误，我要修改
+                          <Edit2 size={16} /> 信息有误，我要修改
                         </button>
                         <button
-                          className="py-1 text-slate-300 font-medium hover:text-slate-400 transition-colors text-center text-[11px] mt-1"
+                          className="w-full py-4 bg-red-50 text-red-500 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
                           onClick={() => {
                             setInviteCodeInput("");
                             setInviteData(null);
                           }}
                         >
-                          这不是我，返回输入
+                          <X size={16} /> 这不是我，返回输入
                         </button>
                       </div>
                     </div>
