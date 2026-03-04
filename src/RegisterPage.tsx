@@ -537,12 +537,18 @@ export const RegisterPage: React.FC = () => {
                     </div>
 
                     <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-slate-100/50 flex flex-col items-center gap-4">
-                      <div className="w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-white">
+                      <div
+                        className="w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-white relative group cursor-pointer"
+                        onClick={handleAvatarClick}
+                      >
                         <img
-                          src={inviteData.targetAvatar || avatar}
+                          src={avatar || inviteData.targetAvatar}
                           alt="Avatar"
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover transition-transform group-hover:scale-110"
                         />
+                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <ImagePlus className="text-white" size={20} />
+                        </div>
                       </div>
                       <div className="text-center">
                         <p className="text-2xl font-black text-slate-800">{inviteData.targetName}</p>
