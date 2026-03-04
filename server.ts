@@ -1021,34 +1021,35 @@ export async function createApp() {
           }
         }
 
-        // 4. 获取用户统计数据 (并行执行，避免串行阻塞)
+        // 4. 获取用户统计数据 (并行执行，避免任务阻塞)
         let memoriesCount = 0;
         let likesCount = 0;
         if (member) {
-          const statsPromises = [];
-
-          // 统计留言数
-          statsPromises.push(
-            supabase.from("messages")
+          try {
+            // 获取留言总数
+            const { count: mCount } = await supabase.from("messages")
               .select("*", { count: 'exact', head: true })
-              .eq("family_member_id", member.id)
-              .then((res: any) => memoriesCount = res.count || 0)
-          );
+              .eq("family_member_id", member.id);
+            memoriesCount = mCount || 0;
 
-          // 统计点赞数 (使用更高效的 count 聚合)
-          statsPromises.push(
-            supabase.from("likes")
-              .select("*", { count: 'exact', head: true })
-              .eq("target_type", "message")
-              .in("target_id",
-                supabase.from("messages")
-                  .select("id")
-                  .eq("family_member_id", member.id)
-              )
-              .then((res: any) => likesCount = res.count || 0)
-          );
+            // 获取点赞总数 (先查出该作者的所有留言 ID)
+            const { data: memberMessages } = await supabase
+              .from("messages")
+              .select("id")
+              .eq("family_member_id", member.id);
 
-          await Promise.all(statsPromises).catch(err => console.error("Stats fetching error:", err));
+            if (memberMessages && memberMessages.length > 0) {
+              const msgIds = memberMessages.map(m => m.id);
+              const { count: lCount } = await supabase
+                .from("likes")
+                .select("*", { count: 'exact', head: true })
+                .eq("target_type", "message")
+                .in("target_id", msgIds);
+              likesCount = lCount || 0;
+            }
+          } catch (statsErr) {
+            console.error("[LOGIN] Stats fetching error:", statsErr);
+          }
         }
 
         const days = Math.max(1, Math.floor((Date.now() - new Date(user.created_at || Date.now()).getTime()) / 86400000));
