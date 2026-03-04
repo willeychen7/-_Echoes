@@ -708,16 +708,19 @@ export async function createApp() {
             updateData.mother_id = mId;
             updateData.gender = role === "uncle" ? "male" : "female";
           } else if (role === "nephew" || role === "niece") {
-            // Nephew is child of sibling
+            // Nephew is child of a sibling
+            const gp = await ensureSiblingParents(inviter.id);
             const { data: sibling } = await supabase.from("family_members").insert({
               family_id: inviter.family_id,
               name: `${inviter.name}的兄弟姐妹`,
               is_registered: false,
-              father_id: (await ensureSiblingParents(inviter.id)).fId, // Ensure inviter has parents for sibling
-              mother_id: (await ensureSiblingParents(inviter.id)).mId
+              father_id: gp.fId,
+              mother_id: gp.mId
             }).select().single();
             if (sibling) {
-              updateData[inviter.gender === 'male' ? 'father_id' : 'mother_id'] = sibling.id; // Link target as child of sibling
+              // We just need a link to the sibling. 
+              // Using father_id as default link for the nephew to the anchor sibling.
+              updateData.father_id = sibling.id;
             }
             updateData.gender = role === "nephew" ? "male" : "female";
           }
