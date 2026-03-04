@@ -83,7 +83,10 @@ export const FamilySquare: React.FC = () => {
     { id: 4, user: "陈兴华", action: "更新了个人资料", target: "爷爷", time: "2小时前", icon: "👤" }
   ]);
   const [activeActivityIndex, setActiveActivityIndex] = useState(0);
-  const [activeTab, setActiveTab] = useState<"events" | "archive">("events");
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<"events" | "archive">(() => {
+    return window.location.hash === "#archive" ? "archive" : "events";
+  });
   const [eventRange, setEventRange] = useState<"week" | "month" | "year">("month");
   // NOTE: 记录当前展开祝福面板的事件 ID，null 表示全部收起
   const [openBlessingEventId, setOpenBlessingEventId] = useState<number | null>(null);
@@ -93,7 +96,7 @@ export const FamilySquare: React.FC = () => {
   const [sentEventIds, setSentEventIds] = useState<number[]>([]);
   const [expandedNoteIds, setExpandedNoteIds] = useState<number[]>([]);
   const navigate = useNavigate();
-  const location = useLocation();
+  // const location = useLocation(); // Already declared above at line 86
 
   useEffect(() => {
     const timer = setInterval(() => setActiveActivityIndex(prev => (prev + 1) % activities.length), 4000);
@@ -590,7 +593,7 @@ export const FamilySquare: React.FC = () => {
                 <Card
                   key={member.id}
                   className="p-4 border-none shadow-xl shadow-slate-200/40 bg-white rounded-[2.5rem] cursor-pointer hover:shadow-2xl transition-all group overflow-hidden relative"
-                  onClick={() => navigate(`/archive/${member.id}`)}
+                  onClick={() => navigate(`/archive/${member.id}`, { state: { member } })}
                 >
                   <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><FolderOpen size={80} /></div>
                   <div className="relative z-10 flex flex-col items-center">

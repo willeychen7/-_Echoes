@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useLayoutEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowLeft, Share2, Mic, Camera, Video, MessageSquare, Play, Sparkles, RotateCcw, CheckCircle, Send, X, Heart, Trash2 } from "lucide-react";
 import { FamilyMember, Message, MessageType } from "./types";
@@ -28,19 +28,18 @@ interface MemoryArchive {
 export const ArchivePage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [member, setMember] = useState<FamilyMember | null>(null);
-  const [loading, setLoading] = useState(true);
+  const location = useLocation();
+  const [member, setMember] = useState<FamilyMember | null>(location.state?.member || null);
+  const [loading, setLoading] = useState(!location.state?.member);
+  const [loadingMessages, setLoadingMessages] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [tab, setTab] = useState<"say" | "questions">("say");
   const [inputMode, setInputMode] = useState<"voice" | "text" | "photo" | "video">("voice");
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [transcription, setTranscription] = useState("");
-  const [questions, setQuestions] = useState<string[]>([
-    "您还记得TA小时候最喜欢的一件玩具或食物吗？",
-    "描述一个让您感到自豪的时刻。",
-    "TA对您影响最深的一句话是什么？"
-  ]);
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [isShuffling, setIsShuffling] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [archiveData, setArchiveData] = useState<MemoryArchive | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -144,73 +143,66 @@ export const ArchivePage: React.FC = () => {
 
       const fetchMemberData = async () => {
         try {
-          // 并行执行所有的初始化请求，大幅提升进入页面速度
-          const promises: Promise<any>[] = [];
-
           const isDemo = isDemoMode(parsed);
           const familyId = parsed?.familyId || "demo";
 
-          // 1. 获取成员信息请求
+          // 1. 获取核心成员信息 - 最优先处理，渲染页面骨架
           if (isDemo) {
             const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
             const found = [...DEMO_MEMBERS, ...customMembers].find(m => m.id === Number(id));
-            if (found) setMember(found);
+            if (found) {
+              setMember(found);
+              setLoading(false); // 成员信息到手，立即取消全屏 Loading
+            }
           } else {
-            promises.push(
-              fetch(`/api/family-members/${id}`).then(res => res.ok ? res.json() : null).then(data => {
-                if (data) {
-                  setMember(data);
-                  if (data.id && (data.avatar_url || data.avatarUrl)) {
-                    updateAvatarCache(data.id, data.avatar_url || data.avatarUrl);
-                  }
+            fetch(`/api/family-members/${id}`).then(res => res.ok ? res.json() : null).then(data => {
+              if (data) {
+                setMember(data);
+                if (data.id && (data.avatar_url || data.avatarUrl)) {
+                  updateAvatarCache(data.id, data.avatar_url || data.avatarUrl);
                 }
-              })
-            );
-
-            // 2. 预热家庭头像 (改为并行但非阻塞后续主逻辑)
-            fetch(`/api/family-members?familyId=${familyId}`).then(res => res.ok ? res.json() : []).then(allMembers => {
-              if (Array.isArray(allMembers)) {
-                allMembers.forEach((m: any) => {
-                  if (m.id && (m.avatar_url || m.avatarUrl)) updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
-                });
+                setLoading(false);
+              } else {
+                setLoading(false);
               }
-            }).catch(e => console.warn("Avatar pre-warm failed:", e));
+            }).catch(() => setLoading(false));
+
+            // 并行获取创建者信息
+            fetch(`/api/archive-creators/${id}`).then(res => res.ok ? res.json() : null).then(data => {
+              if (data) setCreatorName(data.creatorName);
+            });
           }
 
-          // 3. 获取档案归档留言请求
-          promises.push(
-            fetch(`/api/memories?memberId=${id}`).then(res => res.ok ? res.json() : []).then(data => {
-              if (Array.isArray(data)) {
-                data.forEach((m: any) => {
-                  if (m.authorId && m.authorAvatar) updateAvatarCache(m.authorId, m.authorAvatar);
-                });
-              }
-              const currUser = parsed;
-              const formattedMessages = (Array.isArray(data) ? data : []).map((m: any) => {
-                const userKey = currUser ? String(currUser.memberId || currUser.id || currUser.name) : "匿名";
-                return {
-                  ...m,
-                  isLiked: m.likedBy?.includes(userKey) || false
-                };
+          // 2. 预热家庭头像 (全局缓存)
+          fetch(`/api/family-members?familyId=${familyId}`).then(res => res.ok ? res.json() : []).then(allMembers => {
+            if (Array.isArray(allMembers)) {
+              allMembers.forEach((m: any) => {
+                if (m.id && (m.avatar_url || m.avatarUrl)) updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
               });
-              setMessages(formattedMessages);
-            })
-          );
+            }
+          });
 
-          // 4. 获取创建者信息
-          if (!isDemo) {
-            promises.push(
-              fetch(`/api/archive-creators/${id}`).then(res => res.ok ? res.json() : null).then(data => {
-                if (data) setCreatorName(data.creatorName);
-              })
-            );
-          }
+          // 3. 获取档案留言 - 独立 Loading，不阻塞主页面渲染
+          setLoadingMessages(true);
+          fetch(`/api/memories?memberId=${id}`).then(res => res.ok ? res.json() : []).then(data => {
+            if (Array.isArray(data)) {
+              data.forEach((m: any) => {
+                if (m.authorId && m.authorAvatar) updateAvatarCache(m.authorId, m.authorAvatar);
+              });
+            }
+            const currUser = parsed;
+            const formattedMessages = (Array.isArray(data) ? data : []).map((m: any) => {
+              const userKey = currUser ? String(currUser.memberId || currUser.id || currUser.name) : "匿名";
+              return {
+                ...m,
+                isLiked: m.likedBy?.includes(userKey) || false
+              };
+            });
+            setMessages(formattedMessages);
+          }).finally(() => setLoadingMessages(false));
 
-          // 等待核心数据加载完成（并行等待）
-          await Promise.all(promises);
         } catch (err) {
           console.error("Archive load error:", err);
-        } finally {
           setLoading(false);
         }
       };
@@ -221,14 +213,18 @@ export const ArchivePage: React.FC = () => {
   }, [id]);
 
   const shuffleQuestions = () => {
-    // 强制触发更新提示
-    setQuestions([]);
+    if (isShuffling) return; // 防止重复点击
+    setIsShuffling(true);
     fetch(`/api/question-bank?limit=3&_t=${Date.now()}`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
           setQuestions(data);
         }
+      })
+      .finally(() => {
+        // 增加最小旋转时间，让反馈更明显
+        setTimeout(() => setIsShuffling(false), 500);
       });
   };
 
@@ -935,105 +931,120 @@ export const ArchivePage: React.FC = () => {
           </AnimatePresence>
 
           <div className="space-y-8">
-            {messages.map((msg, i) => {
-              const getMsgTypeInfo = (type: MessageType) => {
-                switch (type) {
-                  case MessageType.AUDIO: return { label: "语音", color: "text-blue-500 bg-blue-50" };
-                  case MessageType.IMAGE: return { label: "照片", color: "text-purple-500 bg-purple-50" };
-                  case MessageType.VIDEO: return { label: "视频", color: "text-orange-500 bg-orange-50" };
-                  default: return { label: "文字", color: "text-slate-400 bg-slate-50" };
-                }
-              };
-              const typeInfo = getMsgTypeInfo(msg.type);
-              const isAuthor = currentUser && (
-                (msg.authorId && currentUser.memberId && String(msg.authorId) === String(currentUser.memberId)) ||
-                (msg.familyMemberId && currentUser.memberId && String(msg.familyMemberId) === String(currentUser.memberId)) ||
-                (String(msg.authorName) === String(currentUser.name))
-              );
-              return (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-50 flex gap-5"
-                >
-                  <div className="flex flex-col items-center gap-3 shrink-0">
-                    <div className="size-16 rounded-full overflow-hidden border-4 border-white shadow-md">
-                      <img
-                        src={isAuthor ? getSafeAvatar(currentUser.avatar) : resolveAvatar(avatarCache, msg.authorId, msg.authorAvatar, msg.authorName || String(i))}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
+            {loadingMessages ? (
+              // 骨架屏提示
+              <div className="space-y-6">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-50 flex gap-5 animate-pulse">
+                    <div className="size-16 rounded-full bg-slate-100" />
+                    <div className="flex-1 space-y-3">
+                      <div className="h-4 bg-slate-100 rounded w-1/4" />
+                      <div className="h-20 bg-slate-50 rounded" />
                     </div>
-                    <span className="px-3 py-1 rounded-full bg-[#eab308]/10 text-[#eab308] text-[10px] font-black">
-                      {isAuthor ? "我" : (msg.familyMemberId === Number(id) && msg.authorName === member?.name ? "原作者" : msg.authorRole)}
-                    </span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className="text-xl font-black text-slate-800">{msg.authorName}</span>
-                      <span className={cn("px-3 py-0.5 rounded-full text-[10px] font-black uppercase", typeInfo.color)}>
-                        {typeInfo.label}
-                      </span>
-                      <span className="text-[11px] text-slate-300 ml-auto font-black italic">{getRelativeTime(msg.createdAt)}</span>
-                    </div>
-
-                    {/* 优先显示文字 */}
-                    {msg.content && msg.content !== "分享了照片" && msg.content !== "分享了视频" && msg.type !== MessageType.AUDIO && (
-                      <p className="text-xl text-slate-600 font-serif italic mb-4">“{msg.content}”</p>
-                    )}
-
-                    {msg.type === MessageType.AUDIO && (
-                      <div className="space-y-4 mt-4">
-                        <AudioBar
-                          url={msg.mediaUrl || ""}
-                          duration={msg.duration || 0}
-                          isPlaying={playingId === msg.id}
-                          onToggle={() => setPlayingId(playingId === msg.id ? null : msg.id)}
+                ))}
+              </div>
+            ) : (
+              messages.map((msg, i) => {
+                const getMsgTypeInfo = (type: MessageType) => {
+                  switch (type) {
+                    case MessageType.AUDIO: return { label: "语音", color: "text-blue-500 bg-blue-50" };
+                    case MessageType.IMAGE: return { label: "照片", color: "text-purple-500 bg-purple-50" };
+                    case MessageType.VIDEO: return { label: "视频", color: "text-orange-500 bg-orange-50" };
+                    default: return { label: "文字", color: "text-slate-400 bg-slate-50" };
+                  }
+                };
+                const typeInfo = getMsgTypeInfo(msg.type);
+                const isAuthor = currentUser && (
+                  (msg.authorId && currentUser.memberId && String(msg.authorId) === String(currentUser.memberId)) ||
+                  (msg.familyMemberId && currentUser.memberId && String(msg.familyMemberId) === String(currentUser.memberId)) ||
+                  (String(msg.authorName) === String(currentUser.name))
+                );
+                return (
+                  <motion.div
+                    key={msg.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-50 flex gap-5"
+                  >
+                    <div className="flex flex-col items-center gap-3 shrink-0">
+                      <div className="size-16 rounded-full overflow-hidden border-4 border-white shadow-md">
+                        <img
+                          src={isAuthor ? getSafeAvatar(currentUser.avatar) : resolveAvatar(avatarCache, msg.authorId, msg.authorAvatar, msg.authorName || String(i))}
+                          alt=""
+                          className="w-full h-full object-cover"
                         />
-                        {msg.content && <p className="text-lg text-slate-600 font-serif italic mb-2">“{msg.content}”</p>}
                       </div>
-                    )}
-                    {msg.type === MessageType.IMAGE && (
-                      <div className="space-y-4">
-                        {msg.mediaUrl && <img src={msg.mediaUrl} alt="" className="rounded-2xl border-2 border-white shadow-lg w-full h-auto" />}
-                      </div>
-                    )}
-                    {msg.type === MessageType.VIDEO && (
-                      <div className="space-y-4">
-                        <div className="aspect-video rounded-2xl bg-slate-100 flex items-center justify-center relative shadow-lg overflow-hidden border-2 border-white">
-                          <video src={msg.mediaUrl} controls className="w-full h-full object-cover" />
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-6 mt-6 pt-6 border-t border-slate-50">
-                      <button
-                        onClick={() => handleLike(msg.id.toString())}
-                        className={cn("flex items-center gap-2 transition-all active:scale-90", msg.isLiked ? "text-rose-500 scale-110" : "text-slate-400")}
-                      >
-                        <Heart size={22} fill={msg.isLiked ? "currentColor" : "none"} />
-                        <span className="text-sm font-black">{msg.likes || 0}</span>
-                      </button>
-                      <button className="flex items-center gap-2 text-slate-400">
-                        <MessageSquare size={22} />
-                        <span className="text-sm font-black">互动</span>
-                      </button>
-
-                      {msg.authorName === currentUser?.name && (
-                        <button
-                          onClick={() => onDeleteMessage(msg.id)}
-                          className="ml-auto flex items-center gap-2 text-slate-200 hover:text-red-400 transition-colors"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      )}
+                      <span className="px-3 py-1 rounded-full bg-[#eab308]/10 text-[#eab308] text-[10px] font-black">
+                        {isAuthor ? "我" : (msg.familyMemberId === Number(id) && msg.authorName === member?.name ? "原作者" : msg.authorRole)}
+                      </span>
                     </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-4">
+                        <span className="text-xl font-black text-slate-800">{msg.authorName}</span>
+                        <span className={cn("px-3 py-0.5 rounded-full text-[10px] font-black uppercase", typeInfo.color)}>
+                          {typeInfo.label}
+                        </span>
+                        <span className="text-[11px] text-slate-300 ml-auto font-black italic">{getRelativeTime(msg.createdAt)}</span>
+                      </div>
+
+                      {/* 优先显示文字 */}
+                      {msg.content && msg.content !== "分享了照片" && msg.content !== "分享了视频" && msg.type !== MessageType.AUDIO && (
+                        <p className="text-xl text-slate-600 font-serif italic mb-4">“{msg.content}”</p>
+                      )}
+
+                      {msg.type === MessageType.AUDIO && (
+                        <div className="space-y-4 mt-4">
+                          <AudioBar
+                            url={msg.mediaUrl || ""}
+                            duration={msg.duration || 0}
+                            isPlaying={playingId === msg.id}
+                            onToggle={() => setPlayingId(playingId === msg.id ? null : msg.id)}
+                          />
+                          {msg.content && <p className="text-lg text-slate-600 font-serif italic mb-2">“{msg.content}”</p>}
+                        </div>
+                      )}
+                      {msg.type === MessageType.IMAGE && (
+                        <div className="space-y-4">
+                          {msg.mediaUrl && <img src={msg.mediaUrl} alt="" className="rounded-2xl border-2 border-white shadow-lg w-full h-auto" />}
+                        </div>
+                      )}
+                      {msg.type === MessageType.VIDEO && (
+                        <div className="space-y-4">
+                          <div className="aspect-video rounded-2xl bg-slate-100 flex items-center justify-center relative shadow-lg overflow-hidden border-2 border-white">
+                            <video src={msg.mediaUrl} controls className="w-full h-full object-cover" />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-6 mt-6 pt-6 border-t border-slate-50">
+                        <button
+                          onClick={() => handleLike(msg.id.toString())}
+                          className={cn("flex items-center gap-2 transition-all active:scale-90", msg.isLiked ? "text-rose-500 scale-110" : "text-slate-400")}
+                        >
+                          <Heart size={22} fill={msg.isLiked ? "currentColor" : "none"} />
+                          <span className="text-sm font-black">{msg.likes || 0}</span>
+                        </button>
+                        <button className="flex items-center gap-2 text-slate-400">
+                          <MessageSquare size={22} />
+                          <span className="text-sm font-black">互动</span>
+                        </button>
+
+                        {msg.authorName === currentUser?.name && (
+                          <button
+                            onClick={() => onDeleteMessage(msg.id)}
+                            className="ml-auto flex items-center gap-2 text-slate-200 hover:text-red-400 transition-colors"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })
+            )}
           </div>
         </section>
       </main>
