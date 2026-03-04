@@ -109,8 +109,7 @@ export const AddMemberPage: React.FC = () => {
 
   const copyCode = () => {
     if (inviteCode) {
-      const inviteLink = `${window.location.origin}/register?code=${inviteCode}`;
-      navigator.clipboard.writeText(`邀请您加入岁月留声家族！直接点击链接注册：${inviteLink} \n或者手动输入邀请码: ${inviteCode}`);
+      navigator.clipboard.writeText(inviteCode);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }

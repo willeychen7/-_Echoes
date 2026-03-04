@@ -979,6 +979,22 @@ export async function createApp() {
               await supabase.from("notifications").update({ member_id: target.id }).eq("member_id", oldMemberId);
               await supabase.from("archive_memory_creators").update({ member_id: target.id }).eq("member_id", oldMemberId);
               await supabase.from("archive_memory_creators").update({ creator_member_id: target.id }).eq("creator_member_id", oldMemberId);
+
+              // 迁移用户在这个小家族里辛辛苦苦创建的其他未注册亲戚（把他们的 family_id 指向新家族），以免家族删除时被连带干掉
+              await supabase.from("family_members")
+                .update({ family_id: inviter.family_id })
+                .eq("family_id", currentUser.family_id)
+                .neq("id", oldMemberId);
+
+              // 同理，同步转移用户在原家族里发的大事记
+              await supabase.from("events")
+                .update({ family_id: inviter.family_id })
+                .eq("family_id", currentUser.family_id);
+
+              // 如果这些未注册亲戚把旧用户设为了父母/配偶等，也要同步把相对关系转给新的用户档案
+              await supabase.from("family_members").update({ father_id: target.id }).eq("father_id", oldMemberId);
+              await supabase.from("family_members").update({ mother_id: target.id }).eq("mother_id", oldMemberId);
+              await supabase.from("family_members").update({ spouse_id: target.id }).eq("spouse_id", oldMemberId);
             }
           }
 
