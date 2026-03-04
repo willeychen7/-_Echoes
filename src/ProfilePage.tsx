@@ -1102,33 +1102,37 @@ export const ProfilePage: React.FC = () => {
                         )}
                       </AnimatePresence>
 
-                      <div className="w-full flex flex-col gap-3 mt-2">
-                        <label className="flex items-center gap-3 bg-white px-5 py-4 rounded-2xl border border-slate-200 focus-within:border-[#eab308] focus-within:ring-2 focus-within:ring-[#eab308]/20 transition-all shadow-sm">
-                          <span className="text-slate-400 font-bold text-sm whitespace-nowrap">真实姓名</span>
-                          <input
-                            type="text"
-                            className="flex-1 bg-transparent border-none outline-none font-black text-slate-800 placeholder:text-slate-300 text-right md:text-left"
-                            value={tempName}
-                            onChange={(e) => setTempName(e.target.value)}
-                            placeholder="您的姓名"
-                          />
-                          <Edit2 size={16} className="text-[#eab308] shrink-0" />
-                        </label>
+                      <div className="w-full flex flex-col gap-4 mt-2">
+                        <div className="space-y-1.5 text-left w-full">
+                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">真实姓名</label>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              className="w-full h-14 rounded-2xl bg-white border-2 border-slate-100 px-5 font-bold text-slate-800 placeholder:text-slate-300 focus:border-[#eab308] focus:ring-4 focus:ring-[#eab308]/10 transition-all shadow-sm"
+                              value={tempName}
+                              onChange={(e) => setTempName(e.target.value)}
+                              placeholder="请输入您的姓名"
+                            />
+                            <Edit2 size={16} className="text-slate-300 absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+                        </div>
 
-                        <label className="flex items-center gap-3 bg-white px-5 py-4 rounded-2xl border border-slate-200 focus-within:border-[#eab308] focus-within:ring-2 focus-within:ring-[#eab308]/20 transition-all shadow-sm relative">
-                          <span className="text-slate-400 font-bold text-sm whitespace-nowrap">您的身份</span>
-                          <select
-                            className="flex-1 bg-transparent border-none outline-none font-black text-slate-800 appearance-none cursor-pointer pr-6 text-right md:text-left"
-                            value={selectedRel}
-                            onChange={(e) => setSelectedRel(e.target.value)}
-                          >
-                            <option value="" disabled>选择关系</option>
-                            {relationships.map(rel => (
-                              <option key={rel.label} value={rel.label}>{rel.label}</option>
-                            ))}
-                          </select>
-                          <ChevronDown size={16} className="text-[#eab308] pointer-events-none absolute right-5" />
-                        </label>
+                        <div className="space-y-1.5 text-left w-full">
+                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">您的身份（我对他/她的称呼）</label>
+                          <div className="relative">
+                            <select
+                              className="w-full h-14 rounded-2xl bg-white border-2 border-slate-100 px-5 font-bold text-slate-800 appearance-none cursor-pointer focus:border-[#eab308] focus:ring-4 focus:ring-[#eab308]/10 transition-all shadow-sm"
+                              value={selectedRel}
+                              onChange={(e) => setSelectedRel(e.target.value)}
+                            >
+                              <option value="" disabled>选择关系</option>
+                              {relationships.map(rel => (
+                                <option key={rel.label} value={rel.label}>{rel.label}</option>
+                              ))}
+                            </select>
+                            <ChevronDown size={18} className="text-slate-400 absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+                        </div>
                       </div>
                     </div>
 

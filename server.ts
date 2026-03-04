@@ -719,6 +719,9 @@ export async function createApp() {
         res.json({ success: true, memberId: data.id, familyId: inviter.family_id, userId: userData.id });
       } catch (err: any) {
         console.error("[CLAIM] Error:", err.message);
+        if (err.message && err.message.includes("duplicate key value violates unique constraint")) {
+          return res.status(400).json({ error: "该账号已被注册，请直接返回登录。" });
+        }
         res.status(500).json({ error: err.message });
       }
     });
@@ -987,6 +990,9 @@ export async function createApp() {
         res.json({ success: true, memberId: member.id, familyId: family.id, userId: userData?.id });
       } catch (err: any) {
         console.error("[REGISTER] Error:", err.message);
+        if (err.message && err.message.includes("duplicate key value violates unique constraint")) {
+          return res.status(400).json({ error: "该手机号或邮箱已被注册，请返回直接登录。" });
+        }
         res.status(500).json({ error: err.message });
       }
     });
