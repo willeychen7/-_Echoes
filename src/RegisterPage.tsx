@@ -6,6 +6,7 @@ import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown, Sparkles, Edit2, 
 import { Card } from "./components/Card";
 import { cn } from "./lib/utils";
 import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
+import { ImageCropper } from "./components/ImageCropper";
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
@@ -37,6 +38,8 @@ export const RegisterPage: React.FC = () => {
   const [isCodeSent, setIsCodeSent] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [verificationError, setVerificationError] = useState("");
+  const [showCropper, setShowCropper] = useState(false);
+  const [tempImage, setTempImage] = useState<string | null>(null);
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -265,26 +268,11 @@ export const RegisterPage: React.FC = () => {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        // NOTE: 注册时上传头像先压缩，避免 base64 过大导致服务器 body 解析失败
-        const img = new Image();
-        img.onload = () => {
-          const MAX_SIZE = 400;
-          const canvas = document.createElement("canvas");
-          const scale = Math.min(1, MAX_SIZE / Math.max(img.width, img.height));
-          canvas.width = Math.round(img.width * scale);
-          canvas.height = Math.round(img.height * scale);
-          const ctx = canvas.getContext("2d");
-          ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const compressed = canvas.toDataURL("image/jpeg", 0.85);
-          setAvatar(compressed);
-          setIsAvatarUploaded(true);
-          setShowDefaultAvatars(false);
-        };
-        img.src = reader.result as string;
-      };
-      reader.readAsDataURL(file);
+      const url = URL.createObjectURL(file);
+      setTempImage(url);
+      setShowCropper(true);
+      setShowDefaultAvatars(false);
+      setShowModalAvatarPicker(false);
     }
   };
 
@@ -749,6 +737,21 @@ export const RegisterPage: React.FC = () => {
           </p>
         </div>
       </div>
+      {showCropper && tempImage && (
+        <ImageCropper
+          image={tempImage}
+          onCropComplete={(croppedImage) => {
+            setAvatar(croppedImage);
+            setIsAvatarUploaded(true);
+            setShowCropper(false);
+            setTempImage(null);
+          }}
+          onClose={() => {
+            setShowCropper(false);
+            setTempImage(null);
+          }}
+        />
+      )}
     </div>
   );
 };

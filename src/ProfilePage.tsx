@@ -46,6 +46,7 @@ export const ProfilePage: React.FC = () => {
   const [showLeaveDoubleConfirm, setShowLeaveDoubleConfirm] = useState(false);
   const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
   const [showInviteAvatarPicker, setShowInviteAvatarPicker] = useState(false);
+  const [isCroppingForInvite, setIsCroppingForInvite] = useState(false);
 
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem("currentUser");
@@ -1087,13 +1088,11 @@ export const ProfilePage: React.FC = () => {
                                 <input type="file" className="hidden" accept="image/*" onChange={(e) => {
                                   const file = e.target.files?.[0];
                                   if (file) {
-                                    // 直接复用主页面的上传裁剪逻辑或简化处理
-                                    const reader = new FileReader();
-                                    reader.onload = (event) => {
-                                      setTempAvatar(event.target?.result as string);
-                                      setShowInviteAvatarPicker(false);
-                                    };
-                                    reader.readAsDataURL(file);
+                                    const url = URL.createObjectURL(file);
+                                    setTempImage(url);
+                                    setIsCroppingForInvite(true);
+                                    setShowCropper(true);
+                                    setShowInviteAvatarPicker(false);
                                   }
                                 }} />
                               </label>
@@ -1232,14 +1231,19 @@ export const ProfilePage: React.FC = () => {
           <ImageCropper
             image={tempImage}
             onCropComplete={(croppedImage) => {
-              setPendingAvatar(croppedImage);
+              if (isCroppingForInvite) {
+                setTempAvatar(croppedImage);
+                setIsCroppingForInvite(false);
+              } else {
+                setPendingAvatar(croppedImage);
+              }
               setShowCropper(false);
               setTempImage(null);
-              // We stay in the modal so they can see preview and hit confirm
             }}
             onClose={() => {
               setShowCropper(false);
               setTempImage(null);
+              setIsCroppingForInvite(false);
             }}
           />
         )}
