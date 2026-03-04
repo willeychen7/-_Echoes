@@ -932,7 +932,8 @@ export async function createApp() {
         };
 
         // 1.5 IDENTITY GUARD & DATA MIGRATION
-        const { data: currentUser } = await supabase.from("users").select("id, name, avatar_url, bio, birth_date, gender, family_id, member_id").eq("phone_or_email", phone).maybeSingle();
+        const { data: currentUser, error: userErr } = await supabase.from("users").select("id, name, avatar_url, family_id, member_id").eq("phone_or_email", phone).maybeSingle();
+        if (userErr) console.error("[ACCEPT-INVITE] fetch user error:", userErr);
         if (!currentUser) throw new Error("用户未在系统注册");
 
         // SECURITY: Check if the profile (target.id) is already "owned" by someone else
