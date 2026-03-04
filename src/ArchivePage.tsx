@@ -678,7 +678,7 @@ export const ArchivePage: React.FC = () => {
                 onClick={() => setShowShareModal(true)}
                 className="px-4 py-1.5 bg-slate-50 border border-slate-100 text-slate-400 rounded-full text-[10px] shadow-sm font-black inline-flex items-center gap-1.5 hover:bg-[#eab308]/10 hover:text-[#eab308] hover:border-[#eab308]/20 transition-colors"
               >
-                未注册 <Share2 size={12} />
+                随行档案 <Share2 size={12} />
               </button>
             )
           )}
@@ -1057,8 +1057,8 @@ export const ArchivePage: React.FC = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <h3 className="text-2xl font-black text-slate-800">邀请 {member.name} 加入</h3>
-                    <p className="text-sm text-slate-500">{member.name} 尚未注册账号。发送邀请码，他们可以借此加入家族网络。</p>
+                    <h3 className="text-2xl font-black text-slate-800">关于 {member.name}</h3>
+                    <p className="text-sm text-slate-500">{member.name} 目前为随行档案状态。若 TA 有使用手机，您可发送邀请码让 TA 正式加入接管档案。</p>
                   </div>
 
                   <div className="bg-slate-50 rounded-2xl p-6 border-2 border-dashed border-slate-200">

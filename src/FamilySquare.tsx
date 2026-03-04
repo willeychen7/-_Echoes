@@ -670,8 +670,8 @@ export const FamilySquare: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="text-2xl font-black text-slate-800">邀请 {invitingMember.name} 加入</h3>
-                  <p className="text-sm text-slate-500">{invitingMember.name} 尚未注册账号，您可以分享邀请码让她加入家族。</p>
+                  <h3 className="text-2xl font-black text-slate-800">关于 {invitingMember.name}</h3>
+                  <p className="text-sm text-slate-500">{invitingMember.name} 目前为随行档案状态。您也可以随时分享邀请码让 TA 正式加入家族。</p>
                 </div>
 
                 <div className="bg-slate-50 rounded-2xl p-6 border-2 border-dashed border-slate-200">
