@@ -370,7 +370,7 @@ export async function createApp() {
     });
 
     app.put("/api/family-members/:id", async (req, res) => {
-      const { name, relationship, avatarUrl, bio, birthDate } = req.body;
+      const { name, relationship, avatarUrl, bio, birthDate, gender } = req.body;
 
       // 1. 先获取旧的名称，以便同步之前的留言
       const { data: oldMember } = await supabase
@@ -387,7 +387,8 @@ export async function createApp() {
           relationship: relationship || undefined,
           avatar_url: avatarUrl || undefined,
           bio: bio || undefined,
-          birth_date: birthDate || undefined
+          birth_date: birthDate || undefined,
+          gender: gender || undefined
         })
         .eq("id", req.params.id);
 
