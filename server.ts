@@ -877,7 +877,7 @@ export async function createApp() {
         };
 
         // 1.5 IDENTITY GUARD & DATA MIGRATION
-        const { data: currentUser } = await supabase.from("users").select("id, name, avatar_url, bio, birth_date, gender").eq("phone_or_email", phone).maybeSingle();
+        const { data: currentUser } = await supabase.from("users").select("id, name, avatar_url, bio, birth_date, gender, family_id, member_id").eq("phone_or_email", phone).maybeSingle();
         if (!currentUser) throw new Error("用户未在系统注册");
 
         // SECURITY: Check if the profile (target.id) is already "owned" by someone else
@@ -886,6 +886,31 @@ export async function createApp() {
             error: "身份不匹配：该档案曾属于另一位用户，您无法认领此档案。",
             code: "IDENTITY_MISMATCH"
           });
+        }
+
+        // HANDLE: 如果用户已有家族（不是目标家族），检查是否允许切换
+        if (currentUser.family_id && currentUser.family_id !== inviter.family_id) {
+          // 查看这个家族里有多少成员
+          const { data: existingMembers } = await supabase
+            .from("family_members")
+            .select("id")
+            .eq("family_id", currentUser.family_id);
+
+          const memberCount = existingMembers?.length || 0;
+          if (memberCount > 1) {
+            // 已有其他成员的家族，不能自动切换
+            return res.status(409).json({
+              error: `您已经属于一个有 ${memberCount} 位成员的家族。如需加入新家族，请先在“我的”页面退出当前家族。`,
+              code: "ALREADY_IN_FAMILY"
+            });
+          }
+
+          // 独立家族（只有自己），可以直接切换——删除旧的空家族和家族成员档案
+          console.log(`[ACCEPT-INVITE] User ${currentUser.id} switching from solo family ${currentUser.family_id} to family ${inviter.family_id}`);
+          if (currentUser.member_id) {
+            await supabase.from("family_members").delete().eq("id", currentUser.member_id);
+          }
+          await supabase.from("families").delete().eq("id", currentUser.family_id);
         }
 
         // MIGRATION: Check if THIS user had a DIFFERENT legacy record (ID 123) in this family
@@ -966,67 +991,46 @@ export async function createApp() {
       }
     });
 
-    // Generic registration (creating new family)
+    // Generic registration (standalone user - NO family created)
     app.post("/api/register-new", async (req, res) => {
       if (!supabase) return res.status(500).json({ error: "服务器初始化失败：数据库未连接" });
-      console.log("[REGISTER-NEW] Start registration for:", req.body.phone);
+      console.log("[REGISTER-NEW] Creating standalone user:", req.body.phone);
       try {
         const { name, phone, password, avatar } = req.body;
         if (!name || !phone || !password) {
           return res.status(400).json({ error: "Missing required fields" });
         }
 
-        // 1. Create family
-        const { data: family, error: fError } = await supabase
-          .from("families")
-          .insert({ name: `${name}的家族` })
-          .select()
-          .single();
-
-        if (fError) throw new Error(`Family creation failed: ${fError.message}`);
-
-        // 2. Create member
-        const { data: member, error: mError } = await supabase
-          .from("family_members")
-          .insert({
-            name,
-            family_id: family.id,
-            relationship: "创建者",
-            avatar_url: avatar || "",
-            is_registered: true,
-            standard_role: "creator"
-          })
-          .select()
-          .single();
-
-        if (mError) throw new Error(`Member creation failed: ${mError.message}`);
-
-        // 3. User account
+        // 只创建用户账号，不自动建家族
+        // 家族只有当用户邀请山人或接受山请时才创建
         const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
-        const { data: userData, error: uError } = await supabase.from("users").upsert({
+
+        // 先检查是否已存在
+        const { data: existingUser } = await supabase
+          .from("users")
+          .select("id")
+          .eq("phone_or_email", phone)
+          .maybeSingle();
+
+        if (existingUser) {
+          return res.status(400).json({ error: "该手机号或邮箱已被注册，请返回直接登录。" });
+        }
+
+        const { data: userData, error: uError } = await supabase.from("users").insert({
           phone_or_email: phone,
           password: hashedPassword,
           name,
-          relationship: "我",
-          member_id: member.id,
-          family_id: family.id,
           avatar_url: avatar || ""
+          // NOTE: family_id 和 member_id 暂不设置，用户加入家族时再写入
         }).select("id").single();
 
         if (uError) throw uError;
 
-        // 4. BIND FAMILY & MEMBER TO CREATOR (Ownership Link)
-        if (userData?.id) {
-          await supabase.from("families").update({ creator_id: userData.id }).eq("id", family.id);
-          await supabase.from("family_members").update({ user_id: userData.id }).eq("id", member.id);
-        }
-
-        res.json({ success: true, memberId: member.id, familyId: family.id, userId: userData?.id });
+        console.log("[REGISTER-NEW] Created standalone user:", userData?.id);
+        // 返回的 familyId 和 memberId 为 null ，前端需要处理此情况
+        res.json({ success: true, memberId: null, familyId: null, userId: userData?.id });
       } catch (err: any) {
         console.error("[REGISTER] Error:", err.message);
-        if (err.message && err.message.includes("duplicate key value violates unique constraint")) {
-          return res.status(400).json({ error: "该手机号或邮箱已被注册，请返回直接登录。" });
-        }
         res.status(500).json({ error: err.message });
       }
     });

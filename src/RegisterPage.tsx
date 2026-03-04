@@ -248,7 +248,7 @@ export const RegisterPage: React.FC = () => {
       name: finalName,
       phone,
       avatar: finalAvatar,
-      relationship: overrideRole || selectedRelationship || "创建者",
+      relationship: overrideRole || selectedRelationship || (currentFamilyId ? "创建者" : ""),
       inviterName: (invitationCode || overrideRole) ? inviterName : null,
       inviterId: finalInviterId,
       inviterRole,
@@ -257,8 +257,16 @@ export const RegisterPage: React.FC = () => {
       isRegistered: true
     };
     localStorage.setItem("currentUser", JSON.stringify(userData));
-    alert("档案确认成功！欢迎加入家族。");
-    navigate("/family-square");
+
+    if (currentFamilyId) {
+      // 加入了家族（通过邀请码）
+      alert("档案确认成功！欢迎加入家族。");
+      navigate("/family-square");
+    } else {
+      // 独立用户注册成功，引导去个人页面加入家族
+      alert("注册成功！您可以在【我的】页面输入邀请码加入家族，或者邀请家人一起加入。");
+      navigate("/profile");
+    }
     window.location.reload();
   };
 
