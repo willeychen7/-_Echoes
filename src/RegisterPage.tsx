@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "./components/Button";
-import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown, Sparkles, Edit2, X } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown, Sparkles, Edit2, X, Camera } from "lucide-react";
 import { Card } from "./components/Card";
 import { cn } from "./lib/utils";
 import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
@@ -326,11 +326,9 @@ export const RegisterPage: React.FC = () => {
           />
           <button
             onClick={handleUploadClick}
-            disabled={isAvatarUploaded}
-            className={`absolute bottom-1 right-1 p-2 rounded-full shadow-md border border-slate-100 transition-all ${isAvatarUploaded ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-white text-[#eab308] hover:scale-110"
-              }`}
+            className="absolute bottom-1 right-1 p-2 rounded-full shadow-md border border-slate-100 transition-all bg-white text-[#eab308] hover:scale-110"
           >
-            <ImagePlus size={20} className={isAvatarUploaded ? "text-slate-300" : "text-[#eab308]"} />
+            <Camera size={20} className="text-[#eab308]" />
           </button>
 
           {/* Default Avatars Popover */}
@@ -536,9 +534,9 @@ export const RegisterPage: React.FC = () => {
                       </p>
                     </div>
 
-                    <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-slate-100/50 flex flex-col items-center gap-4">
+                    <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-slate-100/50 flex flex-col items-center gap-4 relative">
                       <div
-                        className="w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-white relative group cursor-pointer"
+                        className="w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-white relative group cursor-pointer shrink-0"
                         onClick={handleAvatarClick}
                       >
                         <img
@@ -550,6 +548,34 @@ export const RegisterPage: React.FC = () => {
                           <ImagePlus className="text-white" size={20} />
                         </div>
                       </div>
+
+                      {/* Modal Avatar Selection Popover */}
+                      {showDefaultAvatars && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="absolute top-[80%] z-[110] bg-white p-4 rounded-3xl shadow-2xl border border-slate-100 min-w-[280px]"
+                        >
+                          <div className="grid grid-cols-4 gap-3">
+                            {defaultAvatars.map((url, i) => (
+                              <button
+                                key={i}
+                                onClick={(e) => { e.stopPropagation(); selectDefaultAvatar(url); }}
+                                className="w-12 h-12 rounded-full border-2 border-slate-100 hover:border-[#eab308] overflow-hidden transition-all"
+                              >
+                                <img src={url} alt={`Default ${i}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              </button>
+                            ))}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                              className="w-12 h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308] transition-all"
+                            >
+                              <Camera size={24} />
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+
                       <div className="text-center">
                         <p className="text-2xl font-black text-slate-800">{inviteData.targetName}</p>
                         <p className="text-[#eab308] font-bold text-sm tracking-widest mt-1 uppercase">
