@@ -407,7 +407,8 @@ export async function createApp() {
     app.post("/api/family-members", async (req, res) => {
       try {
         const { name, relationship, avatarUrl, bio, birthDate, standardRole, familyId, createdByMemberId } = req.body;
-        const inviteCode = `FA-${Math.floor(1000 + Math.random() * 9000)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        // NOTE: 不再生成旧的 FA- 格式邀请码
+        // 邀请码统一使用前端动态生成的 INV-{targetId}-{inviterId} 格式
 
         const { data: existing } = await supabase
           .from("family_members")
@@ -429,7 +430,7 @@ export async function createApp() {
             avatar_url: avatarUrl,
             bio,
             birth_date: birthDate || null,
-            invite_code: inviteCode,
+            invite_code: null, // 不再存旧格式，前端用 INV- 动态生成
             is_registered: false,
             standard_role: standardRole || ""
           })
@@ -450,7 +451,7 @@ export async function createApp() {
           }
         }
 
-        res.json({ id: data.id, linked: false, inviteCode });
+        res.json({ id: data.id, linked: false });
       } catch (err: any) {
         console.error("[MEMBER] POST error:", err.message);
         res.status(500).json({ error: "创建档案失败，请稍后重试" });

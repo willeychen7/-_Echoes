@@ -1064,13 +1064,13 @@ export const ArchivePage: React.FC = () => {
                   <div className="bg-slate-50 rounded-2xl p-6 border-2 border-dashed border-slate-200">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">专属邀请码</p>
                     <p className="text-4xl font-mono font-black text-[#eab308] tracking-wider mb-2 select-all">
-                      {member.inviteCode || `INV-${member.id}-${currentUser?.memberId}`}
+                      INV-{member.id}-{currentUser?.memberId}
                     </p>
                   </div>
 
                   <button
                     onClick={() => {
-                      const code = member.inviteCode || `INV-${member.id}-${currentUser?.memberId}`;
+                      const code = `INV-${member.id}-${currentUser?.memberId}`;
                       navigator.clipboard.writeText(code).then(() => {
                         alert("邀请码已复制");
                         setShowShareModal(false);
