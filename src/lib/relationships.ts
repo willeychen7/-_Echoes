@@ -200,7 +200,49 @@ export function getRigorousRelationship(
         return tNode.gender === "female" ? "侄女/外甥女" : "侄子/外甥";
     }
 
-    // 回退：如果没有任何树状连边，尝试显示数据库存的原始称呼
+    // --- 新增：逆向称谓推断 (基于创建档案时的备注关系) ---
+    // 如果没有树状连边，但 viewer 是由 target 创建的，或者 target 是由 viewer 创建的
+    // 我们根据已有的一方称谓 + 性别，强行推导出另一方的显示称谓
+
+    // 映射表：目标角色 -> 观察者应该看到的称谓 (基于观察者性别)
+    const inverseMap: Record<string, { male: string; female: string }> = {
+        "儿子": { male: "爸爸", female: "妈妈" },
+        "女儿": { male: "爸爸", female: "妈妈" },
+        "爸爸": { male: "儿子", female: "女儿" },
+        "妈妈": { male: "儿子", female: "女儿" },
+        "侄子": { male: "叔伯", female: "姑妈" },
+        "外甥": { male: "舅舅", female: "阿姨" },
+        "侄女": { male: "叔伯", female: "姑妈" },
+        "外甥女": { male: "舅舅", female: "阿姨" },
+        "孙子": { male: "爷爷/外公", female: "奶奶/外婆" },
+        "孙女": { male: "爷爷/外公", female: "奶奶/外婆" },
+        "爷爷": { male: "孙子", female: "孙女" },
+        "奶奶": { male: "孙子", female: "孙女" },
+        "外公": { male: "外孙", female: "外孙女" },
+        "外婆": { male: "外孙", female: "外孙女" },
+        "丈夫": { male: "丈夫", female: "妻子" },
+        "妻子": { male: "丈夫", female: "妻子" },
+    };
+
+    // 情况 A: target 创建了 viewer，viewer 知道自己是 target 的什么
+    // 例如：陈阿妹创建了k仔，k仔的数据库关系存的是“外甥”。k仔(viewer)看陈阿妹(target)
+    if (eq(vNode.createdByMemberId, tId)) {
+        // viewer 是被 target 创建的。viewer 自身的 relationship 字段存的是“我是 target 的 XX”
+        const myRoleToCreator = vNode.relationship || "";
+        for (const [key, value] of Object.entries(inverseMap)) {
+            if (myRoleToCreator.includes(key)) {
+                return tNode.gender === "female" ? value.female : value.male;
+            }
+        }
+    }
+
+    // 情况 B: viewer 创建了 target，target 的 relationship 存的是“他是我的 XX”
+    // 例如：陈阿妹(viewer)看k仔(target)。k仔记录里存的是“外甥”
+    if (eq(tNode.createdByMemberId, vId)) {
+        return tNode.relationship || "创建者";
+    }
+
+    // --- 回退逻辑 ---
     const baseRel = tNode.relationship || "家人";
     if (tNode.createdByMemberId && !eq(tNode.createdByMemberId, vId)) {
         const creator = members.find(m => eq(m.id, tNode.createdByMemberId));

@@ -398,7 +398,44 @@ export async function createApp() {
       }
 
       // 3. 核心同步逻辑：更新关联的 users 表
-      await supabase.from("users").update({ name, relationship }).eq("member_id", req.params.id);
+      const userUpdate: any = { name, relationship };
+      if (gender) userUpdate.gender = gender;
+      if (bio) userUpdate.bio = bio;
+      if (birthDate) userUpdate.birth_date = birthDate;
+      if (avatarUrl) userUpdate.avatar_url = avatarUrl;
+      await supabase.from("users").update(userUpdate).eq("member_id", req.params.id);
+
+      // 4. 角色自动修正逻辑 (Gender-aware standard_role sync)
+      if (gender) {
+        const { data: member } = await supabase.from("family_members").select("standard_role").eq("id", req.params.id).single();
+        if (member?.standard_role) {
+          const roleMap: Record<string, string> = {
+            "son": "daughter", "daughter": "son",
+            "father": "mother", "mother": "father",
+            "brother": "sister", "sister": "brother",
+            "husband": "wife", "wife": "husband",
+            "nephew": "niece", "niece": "nephew",
+            "grandson": "granddaughter", "granddaughter": "grandson",
+            "grandfather": "grandmother", "grandmother": "grandfather"
+          };
+          const currentRole = member.standard_role;
+          let newRole = currentRole;
+
+          // 如果性别与角色不匹配，尝试翻转
+          if (gender === "male") {
+            if (["daughter", "mother", "sister", "wife", "niece", "granddaughter", "grandmother"].includes(currentRole)) {
+              newRole = Object.keys(roleMap).find(key => roleMap[key] === currentRole) || currentRole;
+            }
+          } else if (gender === "female") {
+            if (["son", "father", "brother", "husband", "nephew", "grandson", "grandfather"].includes(currentRole)) {
+              newRole = roleMap[currentRole] || currentRole;
+            }
+          }
+          if (newRole !== currentRole) {
+            await supabase.from("family_members").update({ standard_role: newRole }).eq("id", req.params.id);
+          }
+        }
+      }
 
       // 4. Sync profile changes to past content
       await syncMemberContent(req.params.id, name, oldMember?.name, avatarUrl, relationship);
