@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Phone, Gift, Calendar as LucideCalendar, ArrowLeft, Trash2, MessageSquare } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Phone, Gift, Calendar as LucideCalendar, ArrowLeft, Trash2, MessageSquare, ChevronUp, ChevronDown } from "lucide-react";
 import { FamilyEvent, FamilyMember } from "./types";
 import { Card } from "./components/Card";
 import { useNavigate } from "react-router-dom";
@@ -18,6 +18,7 @@ export const CalendarPage: React.FC = () => {
   const [viewRange, setViewRange] = useState<"day" | "month">("day");
   const [openBlessingEventId, setOpenBlessingEventId] = useState<number | null>(null);
   const [sentEventIds, setSentEventIds] = useState<number[]>([]);
+  const [expandedNoteIds, setExpandedNoteIds] = useState<number[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -284,8 +285,10 @@ export const CalendarPage: React.FC = () => {
                 const [y, m_val, d_val] = event.date.split("-").map(Number);
                 const isActuallyToday = y === today.getFullYear() && (m_val - 1) === today.getMonth() && d_val === today.getDate();
 
-                const rawTip = event.notes || "";
-                const displayTip = rawTip.length > 30 ? rawTip.slice(0, 28) + "..." : rawTip;
+                const fullNotes = event.notes || "";
+                const isNoteTooLong = fullNotes.length > 40;
+                const isNoteExpanded = expandedNoteIds.includes(Number(event.id));
+                const displayTip = (isNoteTooLong && !isNoteExpanded) ? fullNotes.slice(0, 38) + "..." : fullNotes;
 
                 const getEventInfo = (type: string, title: string) => {
                   if (type === "birthday") return { label: "生日", color: "bg-pink-50 text-pink-500" };
@@ -345,7 +348,30 @@ export const CalendarPage: React.FC = () => {
 
                         {displayTip && (
                           <div className="min-w-0 mb-5 ml-1">
-                            <p className="text-xl text-slate-500 font-medium leading-relaxed tracking-tight line-clamp-2">{displayTip}</p>
+                            <p className={cn(
+                              "text-xl text-slate-500 font-medium leading-relaxed tracking-tight break-all",
+                              !isNoteExpanded && "line-clamp-2"
+                            )}>
+                              {displayTip}
+                            </p>
+                            {isNoteTooLong && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const eid = Number(event.id);
+                                  setExpandedNoteIds(prev =>
+                                    isNoteExpanded ? prev.filter(id => id !== eid) : [...prev, eid]
+                                  );
+                                }}
+                                className="text-[#eab308] mt-1 text-base font-black flex items-center gap-1 hover:opacity-80 active:scale-95 transition-all"
+                              >
+                                {isNoteExpanded ? (
+                                  <><ChevronUp size={14} /> 收起详情</>
+                                ) : (
+                                  <><ChevronDown size={14} /> 展开全文</>
+                                )}
+                              </button>
+                            )}
                           </div>
                         )}
 

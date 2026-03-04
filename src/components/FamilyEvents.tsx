@@ -132,10 +132,33 @@ export const WallMessages: React.FC<{
 }> = ({ messages, currentUser, getMsgTypeInfo, handleLike, onDeleteMessage, maxVisible }) => {
     const [expanded, setExpanded] = useState(false);
     const [playingId, setPlayingId] = useState<number | null>(null);
+    const [expandedMsgIds, setExpandedMsgIds] = useState<number[]>([]);
     const avatarCache = useAvatarCache();
 
     const visibleMessages = expanded ? messages : messages.slice(0, maxVisible);
     const hasMore = messages.length > maxVisible;
+
+    const renderMessageContent = (msg: Message) => {
+        if (!msg.content || msg.content === "分享了照片" || msg.content === "分享了视频") return null;
+        const isMsgExpanded = expandedMsgIds.includes(msg.id);
+        const isTooLong = msg.content.length > 60;
+        const displayContent = (isTooLong && !isMsgExpanded) ? msg.content.slice(0, 58) + "..." : msg.content;
+        return (
+            <div className="my-2">
+                <p className={cn("text-xl text-slate-600 font-serif italic", !isMsgExpanded && "line-clamp-3")}>
+                    “{displayContent}”
+                </p>
+                {isTooLong && (
+                    <button
+                        onClick={() => setExpandedMsgIds(prev => isMsgExpanded ? prev.filter(id => id !== msg.id) : [...prev, msg.id])}
+                        className="text-[#eab308] text-[10px] font-black mt-1 hover:underline"
+                    >
+                        {isMsgExpanded ? "收起" : "展开全文"}
+                    </button>
+                )}
+            </div>
+        );
+    };
 
     return (
         <div className="space-y-5 pt-2">
@@ -169,9 +192,7 @@ export const WallMessages: React.FC<{
                                 <span className="text-[10px] text-slate-300 ml-auto font-bold">{getRelativeTime(msg.createdAt)}</span>
                             </div>
 
-                            {msg.type === MessageType.TEXT && (
-                                <p className="text-xl text-slate-600 font-serif italic mb-2">“{msg.content}”</p>
-                            )}
+                            {msg.type === MessageType.TEXT && renderMessageContent(msg)}
                             {msg.type === MessageType.AUDIO && (
                                 <div className="space-y-4">
                                     <AudioBar
@@ -180,15 +201,13 @@ export const WallMessages: React.FC<{
                                         isPlaying={playingId === msg.id}
                                         onToggle={() => setPlayingId(playingId === msg.id ? null : msg.id)}
                                     />
-                                    {msg.content && <p className="text-xl text-slate-600 font-serif italic">“{msg.content}”</p>}
+                                    {renderMessageContent(msg)}
                                 </div>
                             )}
                             {msg.type === MessageType.IMAGE && msg.mediaUrl && (
                                 <div className="space-y-3">
                                     <img src={msg.mediaUrl} alt="" className="rounded-xl shadow-md w-full h-auto border border-white" />
-                                    {msg.content && msg.content !== "分享了照片" && (
-                                        <p className="text-xl text-slate-600 font-serif italic mb-2">“{msg.content}”</p>
-                                    )}
+                                    {renderMessageContent(msg)}
                                 </div>
                             )}
                             {msg.type === MessageType.VIDEO && msg.mediaUrl && (
@@ -196,9 +215,7 @@ export const WallMessages: React.FC<{
                                     <div className="aspect-video bg-black rounded-xl relative flex items-center justify-center overflow-hidden">
                                         <video src={msg.mediaUrl} controls className="w-full h-full object-cover opacity-60" />
                                     </div>
-                                    {msg.content && msg.content !== "分享了视频" && (
-                                        <p className="text-xl text-slate-600 font-serif italic mb-2">“{msg.content}”</p>
-                                    )}
+                                    {renderMessageContent(msg)}
                                 </div>
                             )}
 
@@ -472,11 +489,12 @@ export const InlineBlessingPanel: React.FC<{
             finalImageUrl = await uploadFile(finalImageUrl, 'images', 'jpg');
         }
 
-        confetti({ particleCount: 80, spread: 50, origin: { y: 0.8 } });
-
+        const tempId = -Math.floor(Math.random() * 1000000);
         const finalContent = transcription.trim() || (inputMode === "photo" ? "分享了照片" : inputMode === "video" ? "分享了视频" : "留下了祝福");
 
-        const msgData = {
+        // 乐观更新对象
+        const optimisticMsg: Message = {
+            id: tempId,
             familyMemberId: event.memberId,
             authorName: currentUser?.name || "家人",
             authorRole: currentUser?.relationship || "家人",
@@ -485,28 +503,60 @@ export const InlineBlessingPanel: React.FC<{
             type: inputMode === "voice" ? MessageType.AUDIO : inputMode === "photo" ? MessageType.IMAGE : inputMode === "video" ? MessageType.VIDEO : MessageType.TEXT,
             mediaUrl: inputMode === "photo" ? finalImageUrl || undefined : inputMode === "voice" ? finalAudioUrl || undefined : undefined,
             duration: finalRecordingTime,
-            eventId: event.id
-        };
+            eventId: event.id,
+            isLiked: false,
+            likes: 0,
+            createdAt: new Date().toISOString(),
+        } as any;
 
+        // 立即展示在界面上
+        setMessages(prev => [optimisticMsg, ...prev]);
         setShowInput(false);
         setShowWall(true);
         resetCurrentInputData();
+        confetti({ particleCount: 80, spread: 50, origin: { y: 0.8 } });
 
-        fetch("/api/messages", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(msgData)
-        })
-            .then(res => res.json())
-            .then(data => {
-                const newMsg: Message = {
-                    ...msgData,
-                    id: data.id,
-                    createdAt: new Date().toISOString()
+        // 后台执行上传与存储逻辑
+        (async () => {
+            try {
+                let currentAudioUrl = finalAudioUrl;
+                let currentImageUrl = finalImageUrl;
+
+                if (!isDemoMode(currentUser)) {
+                    if (inputMode === "voice" && currentAudioUrl) {
+                        currentAudioUrl = await uploadFile(currentAudioUrl, 'audio', 'webm');
+                    }
+                    if (inputMode === "photo" && currentImageUrl) {
+                        currentImageUrl = await uploadFile(currentImageUrl, 'images', 'jpg');
+                    }
+                }
+
+                const payload = {
+                    ...optimisticMsg,
+                    mediaUrl: inputMode === "photo" ? currentImageUrl : inputMode === "voice" ? currentAudioUrl : undefined,
                 };
-                setMessages(prev => [newMsg, ...prev]);
-                window.dispatchEvent(new CustomEvent('blessing-sent', { detail: { eventId: event.id } }));
-            });
+                delete (payload as any).id;
+                delete (payload as any).createdAt;
+
+                const res = await fetch("/api/messages", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: data.id, mediaUrl: payload.mediaUrl } : m));
+                    window.dispatchEvent(new CustomEvent('blessing-sent', { detail: { eventId: event.id } }));
+                } else {
+                    throw new Error(data.error || "Failed to save message");
+                }
+            } catch (err) {
+                console.error("[OPTIMISTIC] Background send failed:", err);
+                setMessages(prev => prev.filter(m => m.id !== tempId));
+                alert("祝福发送失败，请检查网络。");
+            }
+        })();
     };
 
     const handleLike = async (id: number) => {

@@ -91,6 +91,7 @@ export const FamilySquare: React.FC = () => {
   const [eventsSummary, setEventsSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [sentEventIds, setSentEventIds] = useState<number[]>([]);
+  const [expandedNoteIds, setExpandedNoteIds] = useState<number[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -399,7 +400,10 @@ export const FamilySquare: React.FC = () => {
                     ? (linkedMembers.length > 3 ? `${linkedMembers.slice(0, 3).map(m => m.name).join("、")}等${linkedMembers.length}人` : linkedMembers.map(m => m.name).join("、"))
                     : (event.customMemberName || null);
 
-                  const displayTip = (event.notes || "").length > 30 ? (event.notes || "").slice(0, 28) + "..." : event.notes || "";
+                  const fullNotes = event.notes || "";
+                  const isNoteTooLong = fullNotes.length > 40;
+                  const isNoteExpanded = expandedNoteIds.includes(Number(event.id));
+                  const displayTip = (isNoteTooLong && !isNoteExpanded) ? fullNotes.slice(0, 38) + "..." : fullNotes;
                   const getEventInfo = (type: string, title: string) => {
                     if (type === "birthday") return { label: "生日", color: "bg-pink-50 text-pink-500" };
                     if (type === "graduation") return { label: "毕业礼", color: "bg-blue-50 text-blue-500" };
@@ -481,7 +485,30 @@ export const FamilySquare: React.FC = () => {
 
                           {displayTip && (
                             <div className="min-w-0 mb-5 ml-1">
-                              <p className="text-xl text-slate-500 font-medium leading-relaxed tracking-tight line-clamp-2">{displayTip}</p>
+                              <p className={cn(
+                                "text-xl text-slate-500 font-medium leading-relaxed tracking-tight break-all",
+                                !isNoteExpanded && "line-clamp-2"
+                              )}>
+                                {displayTip}
+                              </p>
+                              {isNoteTooLong && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const eid = Number(event.id);
+                                    setExpandedNoteIds(prev =>
+                                      isNoteExpanded ? prev.filter(id => id !== eid) : [...prev, eid]
+                                    );
+                                  }}
+                                  className="text-[#eab308] mt-1 text-base font-black flex items-center gap-1 hover:opacity-80 active:scale-95 transition-all"
+                                >
+                                  {isNoteExpanded ? (
+                                    <><ChevronUp size={14} /> 收起详情</>
+                                  ) : (
+                                    <><ChevronDown size={14} /> 展开全文</>
+                                  )}
+                                </button>
+                              )}
                             </div>
                           )}
 

@@ -1021,19 +1021,34 @@ export async function createApp() {
           }
         }
 
-        // 4. 获取用户统计数据 (仅当有关联档案时)
+        // 4. 获取用户统计数据 (并行执行，避免串行阻塞)
         let memoriesCount = 0;
         let likesCount = 0;
         if (member) {
-          const { count: mCount } = await supabase.from("messages").select("*", { count: 'exact', head: true }).eq("family_member_id", member.id);
-          memoriesCount = mCount || 0;
+          const statsPromises = [];
 
-          const { data: memberMessages } = await supabase.from("messages").select("id").eq("family_member_id", member.id);
-          if (memberMessages?.length) {
-            const msgIds = memberMessages.map(m => m.id);
-            const { count: lCount } = await supabase.from("likes").select("*", { count: 'exact', head: true }).in("message_id", msgIds);
-            likesCount = lCount || 0;
-          }
+          // 统计留言数
+          statsPromises.push(
+            supabase.from("messages")
+              .select("*", { count: 'exact', head: true })
+              .eq("family_member_id", member.id)
+              .then((res: any) => memoriesCount = res.count || 0)
+          );
+
+          // 统计点赞数 (使用更高效的 count 聚合)
+          statsPromises.push(
+            supabase.from("likes")
+              .select("*", { count: 'exact', head: true })
+              .eq("target_type", "message")
+              .in("target_id",
+                supabase.from("messages")
+                  .select("id")
+                  .eq("family_member_id", member.id)
+              )
+              .then((res: any) => likesCount = res.count || 0)
+          );
+
+          await Promise.all(statsPromises).catch(err => console.error("Stats fetching error:", err));
         }
 
         const days = Math.max(1, Math.floor((Date.now() - new Date(user.created_at || Date.now()).getTime()) / 86400000));
@@ -1130,15 +1145,28 @@ export async function createApp() {
     });
 
     app.get("/api/question-bank", async (req, res) => {
-      const limit = parseInt(req.query.limit as string) || 3;
-      const { data, error } = await supabase
-        .from("question_bank")
-        .select("content")
-        .order("id", { ascending: true }) // Supabase doesn't have RANDOM() directly, order by ID for consistency or implement client-side shuffle
-        .limit(limit);
+      try {
+        const limit = parseInt(req.query.limit as string) || 3;
+        const { data, error } = await supabase
+          .from("question_bank")
+          .select("content");
 
-      if (error) return res.status(500).json({ error: error.message });
-      res.json((data || []).map(q => q.content));
+        if (error) throw error;
+        if (!data || data.length === 0) return res.json([]);
+
+        // 使用 Fisher-Yates 洗牌算法确保更好的随机性
+        const arr = [...data];
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+
+        const selected = arr.slice(0, limit).map(q => q.content);
+        res.json(selected);
+      } catch (err: any) {
+        console.error("[API] Get question-bank error:", err.message);
+        res.status(500).json({ error: "无法获取题库" });
+      }
     });
 
     app.post("/api/events", async (req, res) => {
@@ -1328,43 +1356,41 @@ export async function createApp() {
         const { memberId } = req.query;
         if (!memberId) return res.status(400).json({ error: "memberId is required" });
 
-        const { data, error } = await supabase
+        // 1. 获取目标档案的所有留言
+        const { data: memories, error } = await supabase
           .from("memories")
           .select("*")
           .eq("member_id", Number(memberId))
           .order("created_at", { ascending: false });
 
         if (error) throw error;
+        if (!memories || memories.length === 0) return res.json([]);
 
-        // 增强同步：从姓名和 ID 映射出作者最新资料，防止记忆中的数据过时
-        const { data: familyMembers } = await supabase.from("family_members").select("id, name, avatar_url");
-        const nameToIdMap: Record<string, number> = {};
-        const nameToAvatarMap: Record<string, string> = {};
-        familyMembers?.forEach(f => {
-          nameToIdMap[f.name] = f.id;
-          // IMPORTANT: Better finger-printing for names like "test_profile"
-          const cleanKey = f.name.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, "");
-          if (cleanKey) nameToIdMap[cleanKey] = f.id;
+        // 2. 优化：仅获取作者的最新资料，而不是全量表
+        // 提取留言中涉及的所有作者 ID
+        const authorIds = [...new Set(memories.map(m => m.author_id).filter(Boolean))];
+        let authorMap: Record<number, any> = {};
 
-          if (f.avatar_url) {
-            nameToAvatarMap[f.name] = f.avatar_url;
-            nameToAvatarMap[String(f.id)] = f.avatar_url; // NEW: Map ID directly to avatar
-            if (cleanKey) nameToAvatarMap[cleanKey] = f.avatar_url;
-          }
-        });
+        if (authorIds.length > 0) {
+          const { data: authors } = await supabase
+            .from("family_members")
+            .select("id, name, avatar_url")
+            .in("id", authorIds);
 
-        const formatted = (data || []).map(m => {
-          // STRICT ID RESOLUTION: Only link to latest profile if author_id is explicitly present
-          const authorId = m.author_id || null;
-          const authorAvatar = authorId ? nameToAvatarMap[String(authorId)] : m.author_avatar;
+          authors?.forEach(a => {
+            authorMap[a.id] = a;
+          });
+        }
 
+        const formatted = memories.map(m => {
+          const author = m.author_id ? authorMap[m.author_id] : null;
           return {
             id: m.id,
             familyMemberId: m.member_id,
-            authorId,
-            authorName: m.author_name,
+            authorId: m.author_id,
+            authorName: author?.name || m.author_name,
             authorRole: m.author_relationship,
-            authorAvatar,
+            authorAvatar: author?.avatar_url || m.author_avatar,
             content: m.content,
             type: m.type,
             mediaUrl: m.media_url,

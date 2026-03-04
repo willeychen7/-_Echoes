@@ -144,67 +144,70 @@ export const ArchivePage: React.FC = () => {
 
       const fetchMemberData = async () => {
         try {
-          if (isDemoMode(parsed)) {
+          // 并行执行所有的初始化请求，大幅提升进入页面速度
+          const promises: Promise<any>[] = [];
+
+          const isDemo = isDemoMode(parsed);
+          const familyId = parsed?.familyId || "demo";
+
+          // 1. 获取成员信息请求
+          if (isDemo) {
             const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
             const found = [...DEMO_MEMBERS, ...customMembers].find(m => m.id === Number(id));
             if (found) setMember(found);
           } else {
-            const res = await fetch(`/api/family-members/${id}`);
-            if (res.ok) {
-              const data = await res.json();
-              setMember(data);
-              // NOTE: 同步全局头像缓存，确保其他地方看到的头像也是最新的
-              if (data.id && (data.avatar_url || data.avatarUrl)) {
-                updateAvatarCache(data.id, data.avatar_url || data.avatarUrl);
-              }
-            }
-
-            // --- 新增：预热整个家庭的头像缓存，确保留言作者的头像也是最新的 ---
-            const familyId = parsed?.familyId || "demo";
-            if (!isDemoMode(parsed)) {
-              const allMemRes = await fetch(`/api/family-members?familyId=${familyId}`);
-              if (allMemRes.ok) {
-                const allMembers = await allMemRes.json();
-                if (Array.isArray(allMembers)) {
-                  allMembers.forEach((m: any) => {
-                    if (m.id && (m.avatar_url || m.avatarUrl)) {
-                      updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
-                    }
-                  });
+            promises.push(
+              fetch(`/api/family-members/${id}`).then(res => res.ok ? res.json() : null).then(data => {
+                if (data) {
+                  setMember(data);
+                  if (data.id && (data.avatar_url || data.avatarUrl)) {
+                    updateAvatarCache(data.id, data.avatar_url || data.avatarUrl);
+                  }
                 }
+              })
+            );
+
+            // 2. 预热家庭头像 (改为并行但非阻塞后续主逻辑)
+            fetch(`/api/family-members?familyId=${familyId}`).then(res => res.ok ? res.json() : []).then(allMembers => {
+              if (Array.isArray(allMembers)) {
+                allMembers.forEach((m: any) => {
+                  if (m.id && (m.avatar_url || m.avatarUrl)) updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
+                });
               }
-            }
+            }).catch(e => console.warn("Avatar pre-warm failed:", e));
           }
 
-          const msgRes = await fetch(`/api/memories?memberId=${id}`);
-          if (msgRes.ok) {
-            const data = await msgRes.json();
-            // 同步这些过往留言所属作者的头像到本地缓存
-            if (Array.isArray(data)) {
-              data.forEach((m: any) => {
-                if (m.authorId && m.authorAvatar) {
-                  updateAvatarCache(m.authorId, m.authorAvatar);
-                }
+          // 3. 获取档案归档留言请求
+          promises.push(
+            fetch(`/api/memories?memberId=${id}`).then(res => res.ok ? res.json() : []).then(data => {
+              if (Array.isArray(data)) {
+                data.forEach((m: any) => {
+                  if (m.authorId && m.authorAvatar) updateAvatarCache(m.authorId, m.authorAvatar);
+                });
+              }
+              const currUser = parsed;
+              const formattedMessages = (Array.isArray(data) ? data : []).map((m: any) => {
+                const userKey = currUser ? String(currUser.memberId || currUser.id || currUser.name) : "匿名";
+                return {
+                  ...m,
+                  isLiked: m.likedBy?.includes(userKey) || false
+                };
               });
-            }
-            const currUser = parsed;
-            const formattedMessages = (Array.isArray(data) ? data : []).map((m: any) => {
-              const userKey = currUser ? String(currUser.memberId || currUser.id || currUser.name) : "匿名";
-              return {
-                ...m,
-                isLiked: m.likedBy?.includes(userKey) || false
-              };
-            });
-            setMessages(formattedMessages);
+              setMessages(formattedMessages);
+            })
+          );
+
+          // 4. 获取创建者信息
+          if (!isDemo) {
+            promises.push(
+              fetch(`/api/archive-creators/${id}`).then(res => res.ok ? res.json() : null).then(data => {
+                if (data) setCreatorName(data.creatorName);
+              })
+            );
           }
 
-          if (!isDemoMode(parsed)) {
-            const creatorRes = await fetch(`/api/archive-creators/${id}`);
-            if (creatorRes.ok) {
-              const creatorData = await creatorRes.json();
-              setCreatorName(creatorData.creatorName);
-            }
-          }
+          // 等待核心数据加载完成（并行等待）
+          await Promise.all(promises);
         } catch (err) {
           console.error("Archive load error:", err);
         } finally {
@@ -218,7 +221,15 @@ export const ArchivePage: React.FC = () => {
   }, [id]);
 
   const shuffleQuestions = () => {
-    fetch("/api/question-bank?limit=2").then(res => res.json()).then(setQuestions);
+    // 强制触发更新提示
+    setQuestions([]);
+    fetch(`/api/question-bank?limit=3&_t=${Date.now()}`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setQuestions(data);
+        }
+      });
   };
 
   const handleWarmResponse = async () => {
@@ -281,82 +292,93 @@ export const ArchivePage: React.FC = () => {
       }
     };
 
-    let uploadedUrl = undefined;
-    if (inputMode === "photo" && selectedImage) {
-      uploadedUrl = await uploadFile(selectedImage, 'archive_photos', 'jpg');
-    } else if (inputMode === "video" && selectedVideo) {
-      uploadedUrl = await uploadFile(selectedVideo, 'archive_videos', 'mp4');
-    } else if (inputMode === "voice" && recordedAudioUrl) {
-      uploadedUrl = await uploadFile(recordedAudioUrl, 'archive_audio', 'webm');
-    }
+    // --- Optimistic UI: Prepare local preview data ---
+    const tempId = -Math.floor(Math.random() * 1000000); // Temporary ID for UI
+    const localContent = transcription || (inputMode === "photo" ? "分享了照片" : inputMode === "video" ? "分享了视频" : "留下了足迹");
+    const localMediaUrl = inputMode === "photo" ? selectedImage : (inputMode === "video" ? selectedVideo : (inputMode === "voice" ? recordedAudioUrl : null));
 
-    const msgData = {
+    const optimisticMsg: any = {
+      id: tempId,
       familyMemberId: Number(id),
       authorId: currentUser?.memberId || null,
       authorName: currentUser?.name || "家人",
       authorRole: currentUser?.relationship || "家人",
       authorAvatar: currentUser?.avatar,
-      content: transcription || (inputMode === "photo" ? "分享了照片" : inputMode === "video" ? "分享了视频" : "留下了足迹"),
+      content: localContent,
       type: inputMode === "voice" ? MessageType.AUDIO :
         inputMode === "photo" ? MessageType.IMAGE :
           inputMode === "video" ? MessageType.VIDEO : MessageType.TEXT,
-      mediaUrl: uploadedUrl || null,
+      mediaUrl: localMediaUrl,
       duration: recordingTime,
-      eventId: null
+      isLiked: false,
+      likes: 0,
+      createdAt: new Date().toISOString(),
+      sending: true // Flag to show "sending" state if desired
     };
 
-    try {
-      if (!isDemoMode(currentUser)) {
-        console.log("[POST] Sending memory to API:", msgData);
-        const res = await fetch("/api/memories", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(msgData)
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const newMessage: Message = {
-            ...msgData,
-            id: data.id,
-            createdAt: new Date().toISOString()
-          };
-          setMessages(prev => [newMessage, ...prev]);
-
-          // 发送成功后平滑滚动到留言墙
-          setTimeout(() => {
-            const wall = document.getElementById("archive-wall");
-            if (wall) wall.scrollIntoView({ behavior: "smooth", block: "start" });
-          }, 300);
-        } else {
-          const err = await res.json();
-          console.error("[POST] Memory error response:", err);
-          alert(`留言失败: ${err.error || '服务器错误'}`);
-        }
-      } else {
-        const newMessage: Message = {
-          ...msgData,
-          id: Date.now(),
-          createdAt: new Date().toISOString()
-        };
-        setMessages(prev => [newMessage, ...prev]);
-
-        setTimeout(() => {
-          const wall = document.getElementById("archive-wall");
-          if (wall) wall.scrollIntoView({ behavior: "smooth", block: "start" });
-        }, 300);
-      }
-    } catch (error) {
-      console.error("[POST] Critical network error:", error);
-      alert("网络错误，留言未能送达，请重试。查看控制台了解详情。");
-    }
-
+    // 1. 立即更新 UI (乐观 UI)，确保用户点击后几毫秒内就能看到新留言
+    setMessages(prev => [optimisticMsg, ...prev]);
     setTranscription("");
-    setIsRecording(false);
-    setRecordingTime(0);
-    setRecordedAudioUrl(null);
     setSelectedImage(null);
     setSelectedVideo(null);
-  };
+    setRecordedAudioUrl(null);
+    setIsRecording(false);
+    setRecordingTime(0);
+
+    // 2. 立即滚动到留言区域
+    setTimeout(() => {
+      const wall = document.getElementById("archive-wall");
+      if (wall) wall.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+
+    // 3. 在完全分离的异步块中执行后台处理，绝不阻塞主线程或 UI 渲染
+    (async () => {
+      try {
+        let uploadedUrl = localMediaUrl;
+        if (!isDemoMode(currentUser)) {
+          if (inputMode === "photo" && selectedImage) {
+            uploadedUrl = await uploadFile(selectedImage, 'archive_photos', 'jpg');
+          } else if (inputMode === "video" && selectedVideo) {
+            uploadedUrl = await uploadFile(selectedVideo, 'archive_videos', 'mp4');
+          } else if (inputMode === "voice" && recordedAudioUrl) {
+            uploadedUrl = await uploadFile(recordedAudioUrl, 'archive_audio', 'webm');
+          }
+
+          const msgData = {
+            ...optimisticMsg,
+            mediaUrl: uploadedUrl,
+            sending: false
+          };
+          delete (msgData as any).id;
+          delete (msgData as any).createdAt;
+
+          const res = await fetch("/api/memories", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(msgData)
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            // 用服务端生成的真实 ID 更新本地留言
+            setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: data.id, mediaUrl: uploadedUrl, sending: false } : m));
+          } else {
+            throw new Error("Server save failed");
+          }
+        } else {
+          // 演示模式：等待一小会模拟真实感后标记完成
+          setTimeout(() => {
+            setMessages(prev => prev.map(m => m.id === tempId ? { ...m, sending: false } : m));
+          }, 800);
+        }
+      } catch (error) {
+        console.error("[OPTIMISTIC] Background processing failed:", error);
+        // 如果最终失败，从列表中彻底移除并通知用户
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        alert("留言发送失败，请检查网络后重试。");
+      }
+    })();
+  }; // handleWarmResponse 结束
 
   const toggleRecording = () => {
     if (isRecording) {
@@ -688,17 +710,33 @@ export const ArchivePage: React.FC = () => {
           <AnimatePresence mode="wait">
             {tab === "questions" && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} key="questions">
-                <Card className="bg-amber-50/50 border-2 border-amber-100 p-8 rounded-[2.5rem] relative">
-                  <button onClick={shuffleQuestions} className="absolute top-6 right-6 text-[#eab308] p-2 hover:bg-white rounded-full transition-colors z-10">
-                    <RotateCcw size={24} />
+                <Card className="bg-amber-50/50 border-2 border-amber-100 p-8 rounded-[2.5rem] relative overflow-hidden group">
+                  <button
+                    onClick={shuffleQuestions}
+                    className="absolute top-6 right-6 text-[#eab308] p-3 hover:bg-white rounded-full transition-all active:rotate-180 z-10 shadow-sm border border-amber-100"
+                    title="换一换"
+                  >
+                    <motion.div whileTap={{ rotate: 180 }} transition={{ duration: 0.3 }}>
+                      <RotateCcw size={24} />
+                    </motion.div>
                   </button>
-                  <ul className="space-y-4 pr-10">
-                    {questions.map((q, i) => (
-                      <li key={i} className="flex gap-4 text-slate-700 font-black text-xl leading-relaxed">
-                        <span className="text-[#eab308] scale-125">{i + 1}.</span> {q}
-                      </li>
-                    ))}
-                  </ul>
+                  {questions.length === 0 ? (
+                    <div className="py-10 text-center animate-pulse text-slate-400 font-bold">正在整理推荐问题...</div>
+                  ) : (
+                    <ul className="space-y-4 pr-10">
+                      {questions.map((q, i) => (
+                        <motion.li
+                          key={q}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.1 }}
+                          className="flex gap-4 text-slate-700 font-black text-xl leading-relaxed"
+                        >
+                          <span className="text-[#eab308] scale-125">{i + 1}.</span> {q}
+                        </motion.li>
+                      ))}
+                    </ul>
+                  )}
                 </Card>
               </motion.div>
             )}
@@ -917,7 +955,7 @@ export const ArchivePage: React.FC = () => {
                   key={msg.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.1 }}
+                  transition={{ duration: 0.3 }}
                   className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-50 flex gap-5"
                 >
                   <div className="flex flex-col items-center gap-3 shrink-0">
