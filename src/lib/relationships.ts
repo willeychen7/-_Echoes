@@ -283,28 +283,41 @@ export function getRigorousRelationship(
         return raw;
     }
 
-    // 情况 C: 桥接推算 (Bridging through a common creator)
-    // 如果 V 和 T 是由同一个人创建的（例如陈阿妹创建了所有人），我们根据他们相对于创建者的角色进行二次推导
-    if (tNode.createdByMemberId && eq(tNode.createdByMemberId, vNode.createdByMemberId)) {
-        const vRel = vNode.relationship || "";
-        const tRel = tNode.relationship || "";
+    // 情况 C: 级联桥接推算 (Bridge via Recursive Deduction)
+    // 如果 V 和 T 是由同一个人（中间人）创建的，我们通过“中间人”的身份进行二次换算
+    if (tNode.createdByMemberId && !eq(tNode.createdByMemberId, vId)) {
+        const creator = members.find(m => eq(m.id, tNode.createdByMemberId));
+        if (creator) {
+            // 1. 获取中间人相对于观察者的实时称法 (可能是 "妈妈", 也可能是用户刚才改的 "舅妈")
+            const cRel = getRigorousRelationship(viewer, creator, members);
+            const tRel = tNode.relationship || "";
 
-        // T 是创建者的子女
-        if (tRel.includes("儿子") || tRel.includes("女儿")) {
-            // V 也是创建者的子女 -> 兄弟姐妹
-            if (vRel.includes("儿子") || vRel.includes("女儿")) {
-                return tNode.gender === "female" ? "姐妹" : "兄弟";
-            }
-            // V 是创建者的晚辈 (外甥/侄子) -> T 是 V 的 表/堂兄弟姐妹 (Cousin)
-            if (vRel.includes("外甥") || vRel.includes("侄子")) {
-                return tNode.gender === "female" ? "表姐/妹" : "表哥/弟";
-            }
-        }
-        // T 是创建者的晚辈 (外甥/侄子)
-        if (tRel.includes("外甥") || tRel.includes("侄子")) {
-            // V 是创建者的子女 -> T 是 V 的 表/堂兄弟姐妹 (Cousin)
-            if (vRel.includes("儿子") || vRel.includes("女儿")) {
-                return tNode.gender === "female" ? "表姐/妹" : "表哥/弟";
+            // 2. 万能桥接表：[中间人身份][他在中间人那里的初始备注] -> [他在我眼中的身份]
+            const bridgeMap: Record<string, Record<string, string>> = {
+                "妈妈": { "儿子": "兄弟", "女儿": "姐妹" },
+                "爸爸": { "儿子": "兄弟", "女儿": "姐妹" },
+                "舅舅": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+                "舅妈": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+                "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+                "姨妈": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+                "叔叔": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
+                "伯伯": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
+                "姑姑": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
+                "婶婶": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
+                "伯母": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
+                "姑父": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
+                "哥哥": { "儿子": "侄子", "女儿": "侄女" },
+                "弟弟": { "儿子": "侄子", "女儿": "侄女" },
+                "姐姐": { "儿子": "外甥", "女儿": "外甥女" },
+                "妹妹": { "儿子": "外甥", "女儿": "外甥女" }
+            };
+
+            // 3. 执行匹配
+            const tMap = bridgeMap[cRel];
+            if (tMap) {
+                for (const [tKey, finalRel] of Object.entries(tMap)) {
+                    if (tRel.includes(tKey)) return finalRel;
+                }
             }
         }
     }
