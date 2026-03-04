@@ -19,6 +19,7 @@ export const RegisterPage: React.FC = () => {
   const [isAvatarUploaded, setIsAvatarUploaded] = useState(false);
   const [showDefaultAvatars, setShowDefaultAvatars] = useState(false);
   const [avatar, setAvatar] = useState(DEFAULT_AVATAR);
+  const [showModalAvatarPicker, setShowModalAvatarPicker] = useState(false);
 
   const [invitationCode, setInvitationCode] = useState("");
   const [hasUrlCode, setHasUrlCode] = useState(false);
@@ -537,7 +538,7 @@ export const RegisterPage: React.FC = () => {
                     <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-slate-100/50 flex flex-col items-center gap-4 relative">
                       <div
                         className="w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-white relative group cursor-pointer shrink-0"
-                        onClick={handleAvatarClick}
+                        onClick={() => setShowModalAvatarPicker(!showModalAvatarPicker)}
                       >
                         <img
                           src={avatar || inviteData.targetAvatar}
@@ -549,33 +550,37 @@ export const RegisterPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="text-center relative">
-                        {/* Modal Avatar Selection Popover */}
-                        {showDefaultAvatars && (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 z-[110] bg-white p-4 rounded-3xl shadow-2xl border border-slate-100 min-w-[280px]"
-                          >
-                            <div className="grid grid-cols-4 gap-3">
-                              {defaultAvatars.map((url, i) => (
-                                <button
-                                  key={i}
-                                  onClick={(e) => { e.stopPropagation(); selectDefaultAvatar(url); }}
-                                  className="w-12 h-12 rounded-full border-2 border-slate-100 hover:border-[#eab308] overflow-hidden transition-all"
-                                >
-                                  <img src={url} alt={`Default ${i}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                </button>
-                              ))}
+                      {/* Inline Modal Avatar Selection */}
+                      {showModalAvatarPicker && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          className="w-full"
+                        >
+                          <div className="grid grid-cols-4 gap-2 bg-slate-100/50 p-3 rounded-[1.5rem] mt-2 mb-4">
+                            {defaultAvatars.map((url, i) => (
                               <button
-                                onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                                className="w-12 h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308] transition-all"
+                                key={i}
+                                onClick={(e) => { e.stopPropagation(); selectDefaultAvatar(url); setShowModalAvatarPicker(false); }}
+                                className={cn(
+                                  "aspect-square rounded-full border-2 overflow-hidden transition-all",
+                                  avatar === url ? "border-[#eab308] scale-90" : "border-white"
+                                )}
                               >
-                                <Camera size={24} />
+                                <img src={url} alt={`Default ${i}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               </button>
-                            </div>
-                          </motion.div>
-                        )}
+                            ))}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); setShowModalAvatarPicker(false); }}
+                              className="aspect-square rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308] transition-all bg-white"
+                            >
+                              <Camera size={20} />
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+
+                      <div className="text-center relative">
                         <p className="text-2xl font-black text-slate-800">{inviteData.targetName}</p>
                         <p className="text-[#eab308] font-bold text-sm tracking-widest mt-1 uppercase">
                           关系：{selectedRelationship || inviteData.targetRole}
@@ -637,7 +642,7 @@ export const RegisterPage: React.FC = () => {
                     <div className="space-y-5 py-4">
                       <div className="flex flex-col items-center mb-4">
                         <div
-                          onClick={handleAvatarClick}
+                          onClick={() => setShowModalAvatarPicker(!showModalAvatarPicker)}
                           className="w-24 h-24 rounded-full border-4 border-slate-100 shadow-sm overflow-hidden relative group cursor-pointer"
                         >
                           <img src={avatar} alt="Avatar" className="w-full h-full object-cover" />
@@ -646,28 +651,31 @@ export const RegisterPage: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Edit View Avatar Selection Popover */}
-                        {showDefaultAvatars && (
+                        {/* Edit View Inline Avatar Selection */}
+                        {showModalAvatarPicker && (
                           <motion.div
-                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            className="absolute top-24 z-[110] bg-white p-4 rounded-3xl shadow-2xl border border-slate-100 min-w-[280px]"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            className="w-full"
                           >
-                            <div className="grid grid-cols-4 gap-3">
+                            <div className="grid grid-cols-4 gap-2 bg-slate-100/50 p-3 rounded-[1.5rem] mt-2 mb-2">
                               {defaultAvatars.map((url, i) => (
                                 <button
                                   key={i}
-                                  onClick={(e) => { e.stopPropagation(); selectDefaultAvatar(url); }}
-                                  className="w-12 h-12 rounded-full border-2 border-slate-100 hover:border-[#eab308] overflow-hidden transition-all"
+                                  onClick={(e) => { e.stopPropagation(); selectDefaultAvatar(url); setShowModalAvatarPicker(false); }}
+                                  className={cn(
+                                    "aspect-square rounded-full border-2 overflow-hidden transition-all",
+                                    avatar === url ? "border-[#eab308] scale-90" : "border-white"
+                                  )}
                                 >
                                   <img src={url} alt={`Default ${i}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 </button>
                               ))}
                               <button
-                                onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                                className="w-12 h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308] transition-all"
+                                onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); setShowModalAvatarPicker(false); }}
+                                className="aspect-square rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308] transition-all bg-white"
                               >
-                                <Camera size={24} />
+                                <Camera size={20} />
                               </button>
                             </div>
                           </motion.div>

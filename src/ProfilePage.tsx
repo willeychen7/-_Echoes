@@ -45,6 +45,7 @@ export const ProfilePage: React.FC = () => {
   const [isLeaving, setIsLeaving] = useState(false);
   const [showLeaveDoubleConfirm, setShowLeaveDoubleConfirm] = useState(false);
   const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
+  const [showInviteAvatarPicker, setShowInviteAvatarPicker] = useState(false);
 
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem("currentUser");
@@ -1049,7 +1050,7 @@ export const ProfilePage: React.FC = () => {
                       <div className="bg-slate-50 p-6 rounded-[2.5rem] border-2 border-slate-100/50 flex flex-col items-center gap-4">
                         <div
                           className="w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-white relative group cursor-pointer"
-                          onClick={() => { setPendingAvatar(tempAvatar); setShowAvatarModal(true); }}
+                          onClick={() => setShowInviteAvatarPicker(!showInviteAvatarPicker)}
                         >
                           <img
                             src={tempAvatar || inviteData.targetAvatar || DEFAULT_AVATAR}
@@ -1060,6 +1061,45 @@ export const ProfilePage: React.FC = () => {
                             <Camera className="text-white" size={20} />
                           </div>
                         </div>
+
+                        {/* Inline Avatar Picker */}
+                        {showInviteAvatarPicker && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            className="w-full px-2 pt-2"
+                          >
+                            <div className="grid grid-cols-4 gap-2 bg-white/50 p-3 rounded-[1.5rem] border border-[#eab308]/10">
+                              {SYSTEM_AVATARS.slice(0, 7).map((url, i) => (
+                                <button
+                                  key={i}
+                                  onClick={() => { setTempAvatar(url); setShowInviteAvatarPicker(false); }}
+                                  className={cn(
+                                    "aspect-square rounded-full border-2 overflow-hidden transition-all",
+                                    tempAvatar === url ? "border-[#eab308] scale-90" : "border-slate-100"
+                                  )}
+                                >
+                                  <img src={url} className="w-full h-full object-cover" />
+                                </button>
+                              ))}
+                              <label className="aspect-square rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-400 cursor-pointer hover:bg-white transition-colors">
+                                <Camera size={16} />
+                                <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    // 直接复用主页面的上传裁剪逻辑或简化处理
+                                    const reader = new FileReader();
+                                    reader.onload = (event) => {
+                                      setTempAvatar(event.target?.result as string);
+                                      setShowInviteAvatarPicker(false);
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }} />
+                              </label>
+                            </div>
+                          </motion.div>
+                        )}
                         <div className="text-center">
                           <p className="text-2xl font-black text-slate-800">{inviteData.targetName}</p>
                           <p className="text-[#eab308] font-bold text-sm tracking-widest mt-1 uppercase">
