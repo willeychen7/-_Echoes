@@ -55,10 +55,11 @@ export async function createApp() {
             ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT;
           ` }).catch(err => console.log("Users Migration check:", err.message));
 
-          // Add user_id to family_members for persistent identity
+          // Add user_id and gender to family_members for persistent identity and rigorous relationships
           await supabase.rpc('exec_sql', {
             sql_query: `
             ALTER TABLE family_members ADD COLUMN IF NOT EXISTS user_id INTEGER;
+            ALTER TABLE family_members ADD COLUMN IF NOT EXISTS gender TEXT;
           ` }).catch(err => console.log("Members Migration check:", err.message));
         }
       } catch (e) {
