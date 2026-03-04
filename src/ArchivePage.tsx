@@ -751,7 +751,7 @@ export const ArchivePage: React.FC = () => {
             )}
           </h1>
           {!isMeMember && (
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
               {isEditingRelation ? (
                 <div className="flex items-center gap-1">
                   <input
@@ -777,29 +777,24 @@ export const ArchivePage: React.FC = () => {
                   <Edit2 size={10} className="opacity-0 group-hover:opacity-50 transition-opacity ml-1" />
                 </button>
               )}
+
+              {member.isRegistered ? (
+                <span className="px-3 py-1 bg-emerald-50 text-emerald-500 rounded-full text-[10px] font-black inline-flex items-center gap-1">
+                  <CheckCircle size={12} fill="currentColor" /> 已注册
+                </span>
+              ) : (
+                <button
+                  onClick={() => setShowShareModal(true)}
+                  className="px-3 py-1 bg-[#eab308] text-black rounded-full text-[10px] font-black inline-flex items-center gap-1.5 hover:bg-[#d9a306] transition-all shadow-sm active:scale-95"
+                >
+                  邀请注册 <Share2 size={12} />
+                </button>
+              )}
             </div>
           )}
           {displayBio && displayBio.trim() !== "" && (
             <p className="text-sm text-slate-400 italic mt-3 mb-2">“{displayBio}”</p>
           )}
-
-          {member.isRegistered ? (
-            <span className="px-3 py-1 bg-emerald-50 text-emerald-500 rounded-full text-[10px] font-black inline-flex items-center gap-1">
-              <CheckCircle size={12} fill="currentColor" /> 已注册
-            </span>
-          ) : (
-            !isMeMember && (
-              <div className="mt-2">
-                <button
-                  onClick={() => setShowShareModal(true)}
-                  className="px-6 py-2 bg-[#eab308] text-black rounded-full text-[11px] font-black inline-flex items-center gap-2 hover:bg-[#d9a306] transition-all shadow-lg shadow-[#eab308]/20 active:scale-95"
-                >
-                  邀请注册 <Share2 size={14} />
-                </button>
-              </div>
-            )
-          )}
-
           {creatorName && (
             <div className="mt-4 px-3 py-1 bg-amber-50/50 rounded-full text-[10px] font-black text-amber-600/60 flex items-center gap-1.5 ring-1 ring-amber-100 italic">
               {isMeMember ? "由 我 为自己开启了记忆档案" : `由 ${creatorName || "系统"} 为 TA 开启了记忆档案`}

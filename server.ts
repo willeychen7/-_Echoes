@@ -325,7 +325,8 @@ export async function createApp() {
         "奶奶": "grandmother", "外婆": "grandmother", "姥姥": "grandmother",
         "孙子": "grandson", "孙女": "granddaughter", "外孙": "grandson", "外孙女": "granddaughter",
         "舅舅": "uncle", "阿姨": "aunt", "叔叔": "uncle", "伯伯": "uncle", "姑姑": "aunt",
-        "侄子": "nephew", "外甥": "nephew", "侄女": "niece", "外甥女": "niece"
+        "侄子": "nephew", "外甥": "nephew", "侄女": "niece", "外甥女": "niece",
+        "舅妈": "aunt", "婶婶": "aunt", "伯母": "aunt", "姨妈": "aunt", "姑父": "uncle", "姨父": "uncle"
       };
 
       const updatePayload: any = { relationship };

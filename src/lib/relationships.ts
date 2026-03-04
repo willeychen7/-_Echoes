@@ -227,6 +227,13 @@ export function getRigorousRelationship(
     // 情况 A: target 创建了 viewer，viewer 知道自己是 target 的什么
     // 例如：陈阿妹创建了k仔，k仔的数据库关系存的是“外甥”。k仔(viewer)看陈阿妹(target)
     if (eq(vNode.createdByMemberId, tId)) {
+        // --- 优先尊重手动修正 (Manual Override Check) ---
+        // 如果 target 身上已经存了一个非默认的关系称呼，且不是“本人”，优先用它的
+        const manualRel = tNode.relationship || "";
+        if (manualRel && !["本人", "家人", "创建者", ""].includes(manualRel)) {
+            return manualRel;
+        }
+
         // viewer 是被 target 创建的。viewer 自身的 relationship 字段存的是“我是 target 的 XX”
         const myRoleToCreator = vNode.relationship || "";
         for (const [key, value] of Object.entries(inverseMap)) {
@@ -262,6 +269,12 @@ export function getRigorousRelationship(
             "奶奶": { male: "爷爷", female: "奶奶" },
             "外公": { male: "外公", female: "外婆" },
             "外婆": { male: "外公", female: "外婆" },
+            "舅舅": { male: "舅舅", female: "舅妈" },
+            "舅妈": { male: "舅舅", female: "舅妈" },
+            "伯伯": { male: "伯伯", female: "伯母" },
+            "伯母": { male: "伯伯", female: "伯母" },
+            "叔叔": { male: "叔叔", female: "婶婶" },
+            "婶婶": { male: "叔叔", female: "婶婶" },
         };
         const entry = labels[raw];
         if (entry) {
