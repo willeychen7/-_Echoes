@@ -972,9 +972,10 @@ export async function createApp() {
 
         if (uError) throw uError;
 
-        // 4. BIND FAMILY TO CREATOR (Ownership Link)
+        // 4. BIND FAMILY & MEMBER TO CREATOR (Ownership Link)
         if (userData?.id) {
           await supabase.from("families").update({ creator_id: userData.id }).eq("id", family.id);
+          await supabase.from("family_members").update({ user_id: userData.id }).eq("id", member.id);
         }
 
         res.json({ success: true, memberId: member.id, familyId: family.id, userId: userData?.id });
