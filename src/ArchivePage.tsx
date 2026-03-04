@@ -29,8 +29,24 @@ export const ArchivePage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const [member, setMember] = useState<FamilyMember | null>(location.state?.member || null);
-  const [loading, setLoading] = useState(!location.state?.member);
+
+  // 核心优化：多级读取 (导航状态 > 本地持久化缓存 > API)
+  const [member, setMember] = useState<FamilyMember | null>(() => {
+    // 1. 如果是从导航状态来的，最快
+    if (location.state?.member) return location.state.member;
+    // 2. 尝试从本地持久化缓存找，消除网络等待
+    try {
+      const cached = localStorage.getItem("familyMembersCache");
+      if (cached) {
+        const list = JSON.parse(cached);
+        return list.find((m: any) => String(m.id) === String(id)) || null;
+      }
+    } catch { }
+    return null;
+  });
+
+  // 如果已经拿到了基本的成员信息（头像、名字），就不要显示全屏 Loading 动画了
+  const [loading, setLoading] = useState(!member);
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [tab, setTab] = useState<"say" | "questions">("say");
@@ -137,7 +153,9 @@ export const ArchivePage: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      setLoading(true);
+      // 核心修复：如果已经从 location.state 拿到了成员信息，就不再展示全屏 Loading
+      const hasMember = member && String(member.id) === String(id);
+      if (!hasMember) setLoading(true);
       const savedUser = localStorage.getItem("currentUser");
       const parsed = savedUser ? JSON.parse(savedUser) : null;
 
