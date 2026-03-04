@@ -65,12 +65,7 @@ const Header: React.FC<{
 };
 
 export const FamilySquare: React.FC = () => {
-  const [members, setMembers] = useState<FamilyMember[]>(() => {
-    try {
-      const saved = localStorage.getItem("familyMembersCache");
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
+  const [members, setMembers] = useState<FamilyMember[]>([]);
   const [events, setEvents] = useState<FamilyEvent[]>([]);
   const [userAvatar, setUserAvatar] = useState(() => {
     const saved = localStorage.getItem("currentUser");
@@ -88,14 +83,9 @@ export const FamilySquare: React.FC = () => {
     { id: 4, user: "陈兴华", action: "更新了个人资料", target: "爷爷", time: "2小时前", icon: "👤" }
   ]);
   const [activeActivityIndex, setActiveActivityIndex] = useState(0);
-  const location = useLocation();
-  const [activeTab, setActiveTab] = useState<"events" | "archive">(() => {
-    try {
-      const hash = typeof window !== 'undefined' ? window.location.hash : '';
-      return hash === "#archive" ? "archive" : "events";
-    } catch { return "events"; }
-  });
+  const [activeTab, setActiveTab] = useState<"events" | "archive">("events");
   const [eventRange, setEventRange] = useState<"week" | "month" | "year">("month");
+  // NOTE: 记录当前展开祝福面板的事件 ID，null 表示全部收起
   const [openBlessingEventId, setOpenBlessingEventId] = useState<number | null>(null);
   const [invitingMember, setInvitingMember] = useState<FamilyMember | null>(null);
   const [eventsSummary, setEventsSummary] = useState<string | null>(null);
@@ -103,6 +93,7 @@ export const FamilySquare: React.FC = () => {
   const [sentEventIds, setSentEventIds] = useState<number[]>([]);
   const [expandedNoteIds, setExpandedNoteIds] = useState<number[]>([]);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const timer = setInterval(() => setActiveActivityIndex(prev => (prev + 1) % activities.length), 4000);
@@ -136,7 +127,6 @@ export const FamilySquare: React.FC = () => {
         fetch(`/api/family-members?familyId=${familyId}`).then(res => res.json()).then(data => {
           if (Array.isArray(data)) {
             setMembers(data);
-            localStorage.setItem("familyMembersCache", JSON.stringify(data));
             data.forEach((m: any) => {
               if (m.id && (m.avatar_url || m.avatarUrl)) {
                 updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
@@ -216,10 +206,12 @@ export const FamilySquare: React.FC = () => {
   useEffect(() => {
     if (location.hash === "#archive") {
       setActiveTab("archive");
+      setTimeout(() => document.getElementById("archive-section")?.scrollIntoView({ behavior: "smooth" }), 100);
     } else {
       setActiveTab("events");
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
-  }, [location.hash]);
+  }, [location.hash, location.pathname]);
 
   const generateEventsSummary = async () => {
     setSummaryLoading(true);
@@ -320,7 +312,7 @@ export const FamilySquare: React.FC = () => {
         </div>
 
         {activeTab === "events" && (
-          <section className="pb-20 pt-4">
+          <section className="animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20 pt-4">
             <div className="sticky top-[132px] z-30 bg-[#fdfbf7]/90 backdrop-blur-md -mx-6 px-6 mb-6 shadow-sm border-b border-slate-100 divide-y divide-slate-100 flex flex-col">
               <div className="py-2 flex items-center justify-between">
                 <h2 className="text-xl font-bold flex items-center gap-2">
@@ -581,7 +573,7 @@ export const FamilySquare: React.FC = () => {
         )}
 
         {activeTab === "archive" && (
-          <section id="archive-section" className="pb-20 pt-4">
+          <section id="archive-section" className="animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20 pt-4">
             <div className="sticky top-[132px] z-30 bg-[#fdfbf7]/90 backdrop-blur-md -mx-6 px-6 mb-6 shadow-sm border-b border-slate-100 flex flex-col">
               <div className="py-2 flex items-center justify-between">
                 <h2 className="text-xl font-bold flex items-center gap-2">
@@ -598,7 +590,7 @@ export const FamilySquare: React.FC = () => {
                 <Card
                   key={member.id}
                   className="p-4 border-none shadow-xl shadow-slate-200/40 bg-white rounded-[2.5rem] cursor-pointer hover:shadow-2xl transition-all group overflow-hidden relative"
-                  onClick={() => navigate(`/archive/${member.id}`, { state: { member } })}
+                  onClick={() => navigate(`/archive/${member.id}`)}
                 >
                   <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><FolderOpen size={80} /></div>
                   <div className="relative z-10 flex flex-col items-center">
