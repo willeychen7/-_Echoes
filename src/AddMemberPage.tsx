@@ -77,7 +77,7 @@ export const AddMemberPage: React.FC = () => {
       });
       const data = await response.json().catch(() => ({}));
       const newId = data.id || Date.now();
-      const inviteCodeResponse = data.inviteCode || `FA-${Math.floor(1000 + Math.random() * 9000)}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      const inviteCodeResponse = data.inviteCode || `INV-${newId}-${createdByMemberId}`;
 
       if (isDemoMode(currentUser)) {
         const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
