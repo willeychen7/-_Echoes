@@ -154,6 +154,7 @@ export const RegisterPage: React.FC = () => {
         return;
       }
       const data = await res.json();
+      console.log("[Debug] Invite Data Received:", data); // 调试日志：确认 Vercel 已更新
       setInviterName(data.inviterName);
       setInviterRole(data.inviterRole);
       setInviterId(data.inviterId);
