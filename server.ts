@@ -557,6 +557,7 @@ export async function createApp() {
     app.post("/api/register-claim", async (req, res) => {
       try {
         const { inviteCode, name, avatarUrl, relationshipToInviter, standardRole, phone, password } = req.body;
+        console.log("[CLAIM] Request:", { inviteCode, name, phone, standardRole, hasAvatar: !!avatarUrl });
         if (!inviteCode || !name || !phone || !password) {
           return res.status(400).json({ error: "Required fields missing" });
         }
@@ -694,34 +695,66 @@ export async function createApp() {
           await supabase.from("family_members").update(rest).eq("id", id);
         }
 
-        // 5. Create user account
+        // 5. Create or retrieve user account (safe upsert)
         const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
-        const { data: userData, error: userError } = await supabase.from("users").upsert({
-          phone_or_email: phone,
-          password: hashedPassword,
-          name,
-          relationship: "我",
-          family_id: inviter.family_id,
-          member_id: data.id,
-          avatar_url: avatarUrl
-        }).select().single();
 
-        if (userError) throw userError;
+        // 先查询是否已存在该 phone 账号
+        const { data: existingUser } = await supabase
+          .from("users")
+          .select("id")
+          .eq("phone_or_email", phone)
+          .maybeSingle();
 
-        // NEW: Persistence link
+        let userData: any;
+        if (existingUser) {
+          // 已存在账号 -> 仅更新相关字段（不覆盖密码以免误伤）
+          console.log("[CLAIM] Existing user found, updating:", existingUser.id);
+          const { data: updated, error: updateErr } = await supabase
+            .from("users")
+            .update({
+              name,
+              relationship: "我",
+              family_id: inviter.family_id,
+              member_id: data.id,
+              avatar_url: avatarUrl || undefined
+            })
+            .eq("id", existingUser.id)
+            .select()
+            .single();
+          if (updateErr) throw updateErr;
+          userData = updated;
+        } else {
+          // 全新账号 -> insert
+          console.log("[CLAIM] Creating new user for phone:", phone);
+          const { data: created, error: insertErr } = await supabase
+            .from("users")
+            .insert({
+              phone_or_email: phone,
+              password: hashedPassword,
+              name,
+              relationship: "我",
+              family_id: inviter.family_id,
+              member_id: data.id,
+              avatar_url: avatarUrl || ""
+            })
+            .select()
+            .single();
+          if (insertErr) throw insertErr;
+          userData = created;
+        }
+
+        // Persistence link
         if (userData) {
           await supabase.from("family_members").update({ user_id: userData.id }).eq("id", data.id);
         }
 
-        // 6. Sync profile changes (especially avatar/name from registration) to past content
+        // 6. Sync profile changes
         await syncMemberContent(data.id, name, target.name, avatarUrl, "我");
 
-        res.json({ success: true, memberId: data.id, familyId: inviter.family_id, userId: userData.id });
+        console.log("[CLAIM] Success:", { memberId: data.id, familyId: inviter.family_id, userId: userData?.id });
+        res.json({ success: true, memberId: data.id, familyId: inviter.family_id, userId: userData?.id });
       } catch (err: any) {
-        console.error("[CLAIM] Error:", err.message);
-        if (err.message && err.message.includes("duplicate key value violates unique constraint")) {
-          return res.status(400).json({ error: "该账号已被注册，请直接返回登录。" });
-        }
+        console.error("[CLAIM] Error:", err.message, err);
         res.status(500).json({ error: err.message });
       }
     });

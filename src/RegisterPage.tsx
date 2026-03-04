@@ -25,6 +25,8 @@ export const RegisterPage: React.FC = () => {
   const [invitationCode, setInvitationCode] = useState("");
   const [hasUrlCode, setHasUrlCode] = useState(false);
   const [selectedRelationship, setSelectedRelationship] = useState("");
+  const [customRelText, setCustomRelText] = useState(""); // 选"其他"时允许自由输入
+  const [isEditingName, setIsEditingName] = useState(false); // 点笔才能编辑名字
   const [inviterName, setInviterName] = useState("");
   const [inviterId, setInviterId] = useState<number | null>(null);
   const [inviterRole, setInviterRole] = useState("");
@@ -580,14 +582,28 @@ export const RegisterPage: React.FC = () => {
                       <div className="space-y-1.5 text-left w-full">
                         <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">真实姓名</label>
                         <div className="relative">
-                          <input
-                            type="text"
-                            className="w-full h-14 rounded-2xl bg-white border-2 border-slate-100 px-5 font-bold text-slate-800 placeholder:text-slate-300 focus:border-[#eab308] focus:ring-4 focus:ring-[#eab308]/10 transition-all shadow-sm"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="请输入您的姓名"
-                          />
-                          <Edit2 size={16} className="text-slate-300 absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          {isEditingName ? (
+                            <input
+                              autoFocus
+                              type="text"
+                              className="w-full h-14 rounded-2xl bg-white border-2 border-[#eab308] ring-4 ring-[#eab308]/10 px-5 font-bold text-slate-800 placeholder:text-slate-300 transition-all shadow-sm"
+                              value={name}
+                              onChange={(e) => setName(e.target.value)}
+                              onBlur={() => setIsEditingName(false)}
+                              placeholder="请输入您的姓名"
+                            />
+                          ) : (
+                            <div className="w-full h-14 rounded-2xl bg-white border-2 border-slate-100 px-5 font-bold text-slate-800 shadow-sm flex items-center justify-between">
+                              <span className={name ? "text-slate-800" : "text-slate-300"}>{name || "请输入您的姓名"}</span>
+                              <button
+                                type="button"
+                                onClick={() => setIsEditingName(true)}
+                                className="p-1.5 rounded-full hover:bg-[#eab308]/10 text-slate-300 hover:text-[#eab308] transition-all"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -597,7 +613,7 @@ export const RegisterPage: React.FC = () => {
                           <select
                             className="w-full h-14 rounded-2xl bg-white border-2 border-slate-100 px-5 font-bold text-slate-800 appearance-none cursor-pointer focus:border-[#eab308] focus:ring-4 focus:ring-[#eab308]/10 transition-all shadow-sm"
                             value={selectedRelationship}
-                            onChange={(e) => setSelectedRelationship(e.target.value)}
+                            onChange={(e) => { setSelectedRelationship(e.target.value); setCustomRelText(""); }}
                           >
                             <option value="" disabled>选择关系</option>
                             {allRelationships.map(rel => (
@@ -606,6 +622,20 @@ export const RegisterPage: React.FC = () => {
                           </select>
                           <ChevronDown size={18} className="text-slate-400 absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none" />
                         </div>
+                        {/* 选"其他"时显示自由输入框 */}
+                        {selectedRelationship === "其他" && (
+                          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="relative mt-2">
+                            <input
+                              autoFocus
+                              type="text"
+                              className="w-full h-12 rounded-xl bg-white border-2 border-[#eab308] ring-2 ring-[#eab308]/10 px-5 font-bold text-slate-800 placeholder:text-slate-300 transition-all shadow-sm text-sm"
+                              value={customRelText}
+                              onChange={(e) => setCustomRelText(e.target.value)}
+                              placeholder="请输入具体的关系，例如：表哥、干爸"
+                              maxLength={20}
+                            />
+                          </motion.div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -615,6 +645,10 @@ export const RegisterPage: React.FC = () => {
                       size="xl"
                       className="w-full h-16 rounded-2xl bg-[#eab308] text-black font-black shadow-lg shadow-[#eab308]/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                       onClick={() => {
+                        // 当选择"其他"且有自定义文字时，使用自定义文字作为关系标签
+                        const effectiveRel = (selectedRelationship === "其他" && customRelText.trim())
+                          ? customRelText.trim()
+                          : (selectedRelationship || inviteData.targetRole);
                         const stdRole = allRelationships.find(r => r.label === selectedRelationship)?.value || "other";
                         const finalName = name || inviteData.targetName;
                         const finalAvatar = avatar || inviteData.targetAvatar;
@@ -622,7 +656,7 @@ export const RegisterPage: React.FC = () => {
                         setName(finalName);
                         setAvatar(finalAvatar);
 
-                        handleCompleteRegistration(selectedRelationship || inviteData.targetRole, stdRole, undefined, finalName, finalAvatar);
+                        handleCompleteRegistration(effectiveRel, stdRole, undefined, finalName, finalAvatar);
                       }}
                     >
                       <Check size={20} /> 是的，确认加入
