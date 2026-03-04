@@ -212,15 +212,37 @@ export const FamilySquare: React.FC = () => {
     };
   }, []);
 
+  // NOTE: 核心刷新优化 - 捕获首次加载，禁止刷新时的视觉跳动
+  const [isFirstRender, setIsFirstRender] = useState(true);
+
   useEffect(() => {
     if (location.hash === "#archive") {
       setActiveTab("archive");
-      setTimeout(() => document.getElementById("archive-section")?.scrollIntoView({ behavior: "smooth" }), 100);
-    } else {
-      setActiveTab("events");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      const target = document.getElementById("archive-section");
+      if (target) {
+        // 关键：如果是首次进入（刷新），使用 instant 模式，杜绝跳动感
+        // 如果是后续点击，才使用 smooth
+        if (isFirstRender) {
+          target.scrollIntoView({ behavior: "auto" });
+          setIsFirstRender(false);
+        } else {
+          target.scrollIntoView({ behavior: "smooth" });
+        }
+      } else if (isFirstRender) {
+        // 如果 DOM 还没准备好，再给一次极短的补偿定位
+        setTimeout(() => {
+          document.getElementById("archive-section")?.scrollIntoView({ behavior: "auto" });
+          setIsFirstRender(false);
+        }, 0);
+      }
+    } else if (location.pathname === "/square") {
+      // 只有在真正切换回广场首页且没有锚点时才重置
+      if (!isFirstRender) {
+        setActiveTab("events");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     }
-  }, [location.hash, location.pathname]);
+  }, [location.hash, location.pathname]); // 只在锚点或路径真正变化时响应
 
   const generateEventsSummary = async () => {
     setSummaryLoading(true);
