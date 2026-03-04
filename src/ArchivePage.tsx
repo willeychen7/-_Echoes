@@ -56,6 +56,13 @@ export const ArchivePage: React.FC = () => {
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
   const [creatorName, setCreatorName] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<number | null>(null);
+  const [showEditInfoModal, setShowEditInfoModal] = useState(false);
+  const [editInfoForm, setEditInfoForm] = useState({
+    name: "",
+    gender: "male",
+    birthday: "",
+    bio: ""
+  });
   // NOTE: 全局头像缓存，用户改头像后全局同步
   const avatarCache = useAvatarCache();
   const canSend = !isRecording && (
@@ -236,6 +243,37 @@ export const ArchivePage: React.FC = () => {
           setQuestions(data);
         }
       });
+  };
+
+  const handleUpdateInfo = async () => {
+    if (!member) return;
+    try {
+      const response = await fetch(`/api/family-members/${member.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editInfoForm.name,
+          gender: editInfoForm.gender,
+          birthDate: editInfoForm.birthday,
+          bio: editInfoForm.bio
+        })
+      });
+      if (response.ok) {
+        setMember({
+          ...member,
+          name: editInfoForm.name,
+          gender: editInfoForm.gender,
+          birthDate: editInfoForm.birthday,
+          birth_date: editInfoForm.birthday,
+          bio: editInfoForm.bio
+        } as any);
+        // 同时更新列表，确保关系推导用的是新数据
+        setMembers(prev => prev.map(m => m.id === member.id ? { ...m, ...editInfoForm, birth_date: editInfoForm.birthday } : m) as any);
+        setShowEditInfoModal(false);
+      }
+    } catch (err) {
+      console.error("Update info failed:", err);
+    }
   };
 
   const handleWarmResponse = async () => {
@@ -693,8 +731,24 @@ export const ArchivePage: React.FC = () => {
               </div>
             )}
           </div>
-          <h1 className="text-3xl font-black text-slate-800">
+          <h1 className="text-3xl font-black text-slate-800 flex items-center gap-2">
             {isMeMember ? "我的记忆档案" : `${displayName}的记忆档案`}
+            {(!member.isRegistered || isDemoMode(currentUser)) && (
+              <button
+                onClick={() => {
+                  setEditInfoForm({
+                    name: member.name || "",
+                    gender: member.gender || "male",
+                    birthday: member.birthDate || "",
+                    bio: member.bio || ""
+                  });
+                  setShowEditInfoModal(true);
+                }}
+                className="p-1 rounded-full bg-slate-50 text-slate-300 hover:text-[#eab308] hover:bg-[#eab308]/5 transition-all"
+              >
+                <Edit2 size={16} />
+              </button>
+            )}
           </h1>
           {!isMeMember && (
             <div className="flex items-center gap-2 mt-1">
@@ -1160,6 +1214,84 @@ export const ArchivePage: React.FC = () => {
             </div>
           )
         }
+        {showEditInfoModal && (
+          <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
+
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px] flex flex-col max-h-[85vh]"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-2xl font-bold">编辑档案资料</h3>
+                <button onClick={() => setShowEditInfoModal(false)} className="size-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-6 no-scrollbar pb-4 text-left">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">姓名</label>
+                  <input
+                    type="text"
+                    value={editInfoForm.name}
+                    onChange={(e) => setEditInfoForm({ ...editInfoForm, name: e.target.value })}
+                    className="w-full h-16 px-6 rounded-2xl bg-slate-50 border-none font-bold text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">生日</label>
+                  <input
+                    type="date"
+                    value={editInfoForm.birthday}
+                    onChange={(e) => setEditInfoForm({ ...editInfoForm, birthday: e.target.value })}
+                    className="w-full h-16 px-6 rounded-2xl bg-slate-50 border-none font-bold text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">简介</label>
+                  <textarea
+                    value={editInfoForm.bio}
+                    onChange={(e) => setEditInfoForm({ ...editInfoForm, bio: e.target.value })}
+                    className="w-full min-h-[100px] p-6 rounded-2xl bg-slate-50 border-none font-bold text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all resize-none"
+                    placeholder="写一点关于TA的介绍..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">性别</label>
+                  <div className="flex gap-4 px-2">
+                    {["male", "female"].map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setEditInfoForm({ ...editInfoForm, gender: g })}
+                        className={cn(
+                          "flex-1 py-4 rounded-2xl font-bold transition-all border-2",
+                          editInfoForm.gender === g
+                            ? "bg-[#eab308] border-[#eab308] text-black shadow-lg shadow-[#eab308]/20"
+                            : "bg-slate-50 border-transparent text-slate-400"
+                        )}
+                      >
+                        {g === "male" ? "男 (♂)" : "女 (♀)"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-8 grid grid-cols-2 gap-4">
+                <button onClick={() => setShowEditInfoModal(false)} className="py-5 bg-slate-100 rounded-3xl font-bold text-slate-500">取消</button>
+                <button
+                  onClick={handleUpdateInfo}
+                  className="py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-lg shadow-[#eab308]/20"
+                >
+                  保存修改
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </AnimatePresence>
     </div>
   );

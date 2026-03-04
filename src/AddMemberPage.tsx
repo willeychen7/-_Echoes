@@ -5,6 +5,7 @@ import { Button } from "./components/Button";
 import { motion, AnimatePresence } from "motion/react";
 import { deduceRole, RELATIONSHIP_OPTIONS } from "./lib/relationships";
 import { ImageCropper } from "./components/ImageCropper";
+import { getRelativeTime, cn } from "./lib/utils";
 import { isDemoMode } from "./demo-data";
 import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
 
@@ -15,6 +16,7 @@ export const AddMemberPage: React.FC = () => {
   const [relationship, setRelationship] = useState("");
   const [customRelationship, setCustomRelationship] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
+  const [gender, setGender] = useState<'male' | 'female'>('male');
   const [tempImage, setTempImage] = useState<string | null>(null);
   const [showCropper, setShowCropper] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,7 +74,8 @@ export const AddMemberPage: React.FC = () => {
           birthDate,
           familyId,
           createdByMemberId,
-          standardRole: deducedRole
+          standardRole: deducedRole,
+          gender
         })
       });
       const data = await response.json().catch(() => ({}));
@@ -90,7 +93,8 @@ export const AddMemberPage: React.FC = () => {
           birthDate,
           isRegistered: false,
           standardRole: deducedRole,
-          createdByMemberId: currentUser?.memberId
+          createdByMemberId: currentUser?.memberId,
+          gender
         });
         localStorage.setItem("demoCustomMembers", JSON.stringify(customMembers));
       } else if (!data.id) {
@@ -234,15 +238,34 @@ export const AddMemberPage: React.FC = () => {
           </div>
 
           <div className="space-y-3">
-            <label className="text-xl font-black px-1 flex items-center">
-              出生年月 <span className="text-sm font-normal text-slate-400 ml-2 tracking-widest">(选填)</span>
-            </label>
+            <label className="text-xl font-black px-1 block">出生年月 <span className="text-sm font-normal text-slate-400 ml-2 tracking-widest">(选填)</span></label>
             <input
               type="date"
               className="w-full h-16 px-6 rounded-2xl border-none bg-white shadow-md text-xl font-bold text-slate-700 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
               value={birthDate}
               onChange={(e) => setBirthDate(e.target.value)}
             />
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-xl font-black px-1 block">性别</label>
+            <div className="flex gap-4">
+              {['male', 'female'].map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setGender(g as 'male' | 'female')}
+                  className={cn(
+                    "flex-1 h-16 rounded-2xl font-bold text-lg transition-all border-2",
+                    gender === g
+                      ? "bg-[#eab308] border-[#eab308] text-black shadow-lg shadow-[#eab308]/20 scale-[1.02]"
+                      : "bg-white border-slate-50 text-slate-400 hover:border-slate-200"
+                  )}
+                >
+                  {g === 'male' ? "男 (♂)" : "女 (♀)"}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-4">

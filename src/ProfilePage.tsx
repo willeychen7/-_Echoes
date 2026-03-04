@@ -607,7 +607,7 @@ export const ProfilePage: React.FC = () => {
     {
       title: "系统信息",
       items: [
-        { icon: Clock, label: "当前版本: v1.2.7 (性别关系切换版)", color: "text-slate-400 bg-slate-50" },
+        { icon: Clock, label: "当前版本: v1.2.8 (UI优化+称谓增强)", color: "text-slate-400 bg-slate-50" },
       ]
     }
   ];
@@ -646,7 +646,17 @@ export const ProfilePage: React.FC = () => {
             </div>
           </div>
 
-          <h2 className="text-2xl font-bold text-slate-800 mb-1">{user.name}</h2>
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <h2 className="text-2xl font-bold text-slate-800">{user.name}</h2>
+            {user.gender && (
+              <span className={cn(
+                "px-2 py-0.5 rounded-full text-[10px] font-black shadow-sm",
+                user.gender === "女" ? "bg-rose-100 text-rose-500" : "bg-blue-100 text-blue-500"
+              )}>
+                {user.gender === "女" ? "♀" : "♂"}
+              </span>
+            )}
+          </div>
           <div
             className="flex items-center justify-center gap-2 mb-4 cursor-pointer group px-4 py-1 -mt-1 rounded-full hover:bg-slate-50 transition-colors"
             onClick={() => {
@@ -660,10 +670,9 @@ export const ProfilePage: React.FC = () => {
             </div>
           </div>
 
-          {(user.birthday || user.gender) && (
+          {user.birthday && (
             <div className="flex items-center justify-center gap-1.5 mb-6 text-xs font-bold text-slate-400 bg-slate-50 px-3 py-1 rounded-full max-w-max mx-auto shadow-sm">
-              {user.gender && <span className={user.gender === "女" ? "text-rose-400" : "text-blue-400"}>{user.gender === "女" ? "♀" : "♂"}</span>}
-              {user.birthday && <span>🎂 生日：{user.birthday}</span>}
+              <span>🎂 生日：{user.birthday}</span>
             </div>
           )}
 
@@ -1326,6 +1335,6 @@ export const ProfilePage: React.FC = () => {
           />
         )}
       </AnimatePresence>
-    </div>
+    </div >
   );
 };

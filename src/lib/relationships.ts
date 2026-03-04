@@ -239,7 +239,35 @@ export function getRigorousRelationship(
     // 情况 B: viewer 创建了 target，target 的 relationship 存的是“他是我的 XX”
     // 例如：陈阿妹(viewer)看k仔(target)。k仔记录里存的是“外甥”
     if (eq(tNode.createdByMemberId, vId)) {
-        return tNode.relationship || "创建者";
+        const raw = tNode.relationship || "创建者";
+        // 自动纠正性别敏感的称呼 (Gender-Correction for static labels)
+        const labels: Record<string, { male: string; female: string }> = {
+            "外甥": { male: "外甥", female: "外甥女" },
+            "外甥女": { male: "外甥", female: "外甥女" },
+            "侄子": { male: "侄子", female: "侄女" },
+            "侄女": { male: "侄子", female: "侄女" },
+            "儿子": { male: "儿子", female: "女儿" },
+            "女儿": { male: "儿子", female: "女儿" },
+            "哥哥": { male: "哥哥", female: "姐姐" },
+            "弟弟": { male: "弟弟", female: "妹妹" },
+            "姐姐": { male: "哥哥", female: "姐姐" },
+            "妹妹": { male: "弟弟", female: "妹妹" },
+            "老公": { male: "老公", female: "老婆" },
+            "老婆": { male: "老公", female: "老婆" },
+            "丈夫": { male: "丈夫", female: "妻子" },
+            "妻子": { male: "丈夫", female: "妻子" },
+            "爸爸": { male: "爸爸", female: "妈妈" },
+            "妈妈": { male: "爸爸", female: "妈妈" },
+            "爷爷": { male: "爷爷", female: "奶奶" },
+            "奶奶": { male: "爷爷", female: "奶奶" },
+            "外公": { male: "外公", female: "外婆" },
+            "外婆": { male: "外公", female: "外婆" },
+        };
+        const entry = labels[raw];
+        if (entry) {
+            return tNode.gender === "female" ? entry.female : entry.male;
+        }
+        return raw;
     }
 
     // --- 回退逻辑 ---
