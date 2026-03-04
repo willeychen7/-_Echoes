@@ -1207,33 +1207,10 @@ export const ProfilePage: React.FC = () => {
                         </div>
 
                         <div className="space-y-1.5 text-left w-full">
-                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">您的身份（我对他/她的称呼）</label>
-                          <div className="relative">
-                            <select
-                              className="w-full h-14 rounded-2xl bg-white border-2 border-slate-100 px-5 font-bold text-slate-800 appearance-none cursor-pointer focus:border-[#eab308] focus:ring-4 focus:ring-[#eab308]/10 transition-all shadow-sm"
-                              value={selectedRel}
-                              onChange={(e) => { setSelectedRel(e.target.value); setCustomRelText(""); }}
-                            >
-                              <option value="" disabled>选择关系</option>
-                              {relationships.map(rel => (
-                                <option key={rel.label} value={rel.label}>{rel.label}</option>
-                              ))}
-                            </select>
-                            <ChevronDown size={18} className="text-slate-400 absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">您的身份（邀请人对您的称呼）</label>
+                          <div className="w-full h-14 rounded-2xl bg-slate-50 border-2 border-slate-100 px-5 font-bold text-slate-500 shadow-sm flex items-center">
+                            <span>{selectedRel || (inviteData && inviteData.targetRole) || "未知身份"}</span>
                           </div>
-                          {selectedRel === "其他" && (
-                            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="relative mt-2">
-                              <input
-                                autoFocus
-                                type="text"
-                                className="w-full h-12 rounded-xl bg-white border-2 border-[#eab308] ring-2 ring-[#eab308]/10 px-5 font-bold text-slate-800 placeholder:text-slate-300 transition-all shadow-sm text-sm"
-                                value={customRelText}
-                                onChange={(e) => setCustomRelText(e.target.value)}
-                                placeholder="请输入具体的关系，例如：表哥、干爸"
-                                maxLength={20}
-                              />
-                            </motion.div>
-                          )}
                         </div>
                       </div>
                     </div>
