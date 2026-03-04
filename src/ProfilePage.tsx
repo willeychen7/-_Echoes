@@ -603,6 +603,12 @@ export const ProfilePage: React.FC = () => {
         },
         { icon: CheckCircle, label: "隐私与安全", color: "text-emerald-500 bg-emerald-50" },
       ]
+    },
+    {
+      title: "系统信息",
+      items: [
+        { icon: Clock, label: "当前版本: v1.2.5 (关系修复版)", color: "text-slate-400 bg-slate-50" },
+      ]
     }
   ];
 
