@@ -1968,6 +1968,51 @@ export async function createApp() {
             relationship: "我"
           }).eq("id", userId);
 
+          // --- 核心增强：反向迁移行李 (Reverse Migration) ---
+          // 当用户搬家离开时，把在这个家族里曾经创建过的“随行档案”（未注册成员）和对应的大事记一并带走
+          if (memberId && myArchive.family_id) {
+            console.log(`[LEAVE-FAMILY:REVERSE-MIGRATE] Moving assets for user ${userId} to new space ${myArchive.family_id}`);
+
+            // 1. 找到所有由我创建的、且尚未注册（随行状态）的成员
+            const { data: myCreatedMembers } = await supabase
+              .from("archive_memory_creators")
+              .select("member_id")
+              .eq("creator_member_id", memberId);
+
+            if (myCreatedMembers && myCreatedMembers.length > 0) {
+              const orphanIds = myCreatedMembers.map(m => m.member_id);
+
+              // 2. 检查这些成员是否真的还是“随行”状态（没注册）
+              const { data: orphans } = await supabase
+                .from("family_members")
+                .select("id")
+                .in("id", orphanIds)
+                .is("is_registered", false);
+
+              if (orphans && orphans.length > 0) {
+                const finalIds = orphans.map(o => o.id);
+                console.log(`[REVERSE-MIGRATE] Taking ${finalIds.length} followers back to private space.`);
+
+                // A. 转移成员归属
+                await supabase.from("family_members")
+                  .update({ family_id: myArchive.family_id })
+                  .in("id", finalIds);
+
+                // B. 转移对应的记忆创建者记录（更新 creator_member_id 到新的我）
+                await supabase.from("archive_memory_creators")
+                  .update({ creator_member_id: myArchive.id })
+                  .eq("creator_member_id", memberId);
+
+                // C. 找到并转移用户曾经在老家族里发的大事记 (Events)
+                // 注意：这里只转移作者是离开者的 Events
+                await supabase.from("events")
+                  .update({ family_id: myArchive.family_id })
+                  .eq("member_id", memberId);
+              }
+            }
+          }
+          // ---------------------------------------------
+
           return res.json({
             success: true,
             message: "已成功退出家族。您已回到个人的记忆档案空间。",
