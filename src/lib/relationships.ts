@@ -290,9 +290,13 @@ export function getRigorousRelationship(
         if (creator) {
             // 1. 获取中间人相对于观察者的实时称法 (可能是 "妈妈", 也可能是用户刚才改的 "舅妈")
             const cRel = getRigorousRelationship(viewer, creator, members);
-            const tRel = tNode.relationship || "";
 
-            // 2. 万能桥接表：[中间人身份][他在中间人那里的初始备注] -> [他在我眼中的身份]
+            // 2. 获取目标人物相对于其创建者的角色 (优先用原始备注，备选标准角色)
+            const tRel = (tNode.relationship || "").includes("女儿") || tNode.standardRole === "daughter" ? "女儿" :
+                (tNode.relationship || "").includes("儿子") || tNode.standardRole === "son" ? "儿子" :
+                    (tNode.relationship || "");
+
+            // 3. 万能桥接表：[中间人身份][他在中间人那里的身份] -> [他在我眼中的身份]
             const bridgeMap: Record<string, Record<string, string>> = {
                 "妈妈": { "儿子": "兄弟", "女儿": "姐妹" },
                 "爸爸": { "儿子": "兄弟", "女儿": "姐妹" },
@@ -300,6 +304,7 @@ export function getRigorousRelationship(
                 "舅妈": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
                 "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
                 "姨妈": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+                "姨婆": { "儿子": "表舅", "女儿": "表姨" },
                 "叔叔": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
                 "伯伯": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
                 "姑姑": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
@@ -312,12 +317,10 @@ export function getRigorousRelationship(
                 "妹妹": { "儿子": "外甥", "女儿": "外甥女" }
             };
 
-            // 3. 执行匹配
+            // 4. 执行匹配
             const tMap = bridgeMap[cRel];
-            if (tMap) {
-                for (const [tKey, finalRel] of Object.entries(tMap)) {
-                    if (tRel.includes(tKey)) return finalRel;
-                }
+            if (tMap && tMap[tRel]) {
+                return tMap[tRel];
             }
         }
     }
