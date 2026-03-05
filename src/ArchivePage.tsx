@@ -46,8 +46,6 @@ export const ArchivePage: React.FC = () => {
   const [archiveData, setArchiveData] = useState<MemoryArchive | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
-  const [isEditingRelation, setIsEditingRelation] = useState(false);
-  const [tempRelation, setTempRelation] = useState("");
   const [showShareModal, setShowShareModal] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(() => {
     const saved = localStorage.getItem("currentUser");
@@ -556,31 +554,6 @@ export const ArchivePage: React.FC = () => {
     }
   };
 
-  const handleUpdateRelation = async () => {
-    if (!tempRelation.trim()) return;
-    if (isDemoMode(currentUser)) {
-      setMember(prev => prev ? { ...prev, relationship: tempRelation } : null);
-      setIsEditingRelation(false);
-      return;
-    }
-    try {
-      const res = await fetch(`/api/family-members/${id}/relationship`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ relationship: tempRelation })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setMember(prev => prev ? { ...prev, relationship: data.relationship } : null);
-        setIsEditingRelation(false);
-        // Update member lists to ensure UI consistency
-        setMembers(prev => prev.map(m => String(m.id) === String(id) ? { ...m, relationship: data.relationship } : m));
-      }
-    } catch (e) {
-      console.error(e);
-      alert("更新失败");
-    }
-  };
 
   const handleDeleteMember = async () => {
     if (window.confirm("确定要删除这位亲人档案吗？此操作不可恢复。")) {
@@ -752,31 +725,9 @@ export const ArchivePage: React.FC = () => {
           </h1>
           {!isMeMember && (
             <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
-              {isEditingRelation ? (
-                <div className="flex items-center gap-1">
-                  <input
-                    autoFocus
-                    className="text-sm font-bold text-[#eab308] bg-[#eab308]/5 px-3 py-1 rounded-full border border-[#eab308] outline-none w-32"
-                    value={tempRelation}
-                    onChange={(e) => setTempRelation(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleUpdateRelation()}
-                    placeholder="输入称呼"
-                  />
-                  <button onClick={handleUpdateRelation} className="p-1 text-emerald-500"><CheckCircle size={18} /></button>
-                  <button onClick={() => setIsEditingRelation(false)} className="p-1 text-slate-300"><X size={18} /></button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => {
-                    setIsEditingRelation(true);
-                    setTempRelation(getRigorousRelationship(currentUser, member, members));
-                  }}
-                  className="text-sm font-bold text-[#eab308] bg-[#eab308]/5 px-3 py-1 rounded-full border border-[#eab308]/10 tracking-widest flex items-center gap-1.5 hover:bg-[#eab308]/10 transition-colors group"
-                >
-                  <Sparkles size={12} fill="currentColor" /> {getRigorousRelationship(currentUser, member, members)}
-                  <Edit2 size={10} className="opacity-0 group-hover:opacity-50 transition-opacity ml-1" />
-                </button>
-              )}
+              <span className="text-sm font-bold text-[#eab308] bg-[#eab308]/5 px-3 py-1 rounded-full border border-[#eab308]/10 tracking-widest flex items-center gap-1.5">
+                <Sparkles size={12} fill="currentColor" /> {getRigorousRelationship(currentUser, member, members)}
+              </span>
 
               {member.isRegistered ? (
                 <span className="px-3 py-1 bg-emerald-50 text-emerald-500 rounded-full text-[10px] font-black inline-flex items-center gap-1">

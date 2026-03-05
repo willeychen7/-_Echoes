@@ -607,7 +607,7 @@ export const ProfilePage: React.FC = () => {
     {
       title: "系统信息",
       items: [
-        { icon: Clock, label: "当前版本: v1.7.5 (规则驱动引擎版)", color: "text-slate-400 bg-slate-50" },
+        { icon: Clock, label: "当前版本: v1.8.0 (家族共识版)", color: "text-slate-400 bg-slate-50" },
       ]
     }
   ];
