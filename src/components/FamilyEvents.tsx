@@ -273,6 +273,7 @@ export const InlineBlessingPanel: React.FC<{
     const [aiSummary, setAiSummary] = useState("");
     const [showInput, setShowInput] = useState(!hasSentBlessing);
     const [playingId, setPlayingId] = useState<number | null>(null);
+    const [showSealAnimation, setShowSealAnimation] = useState(false);
 
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -515,6 +516,12 @@ export const InlineBlessingPanel: React.FC<{
         setShowWall(true);
         resetCurrentInputData();
         confetti({ particleCount: 80, spread: 50, origin: { y: 0.8 } });
+
+        // 触发情感封存反馈
+        if (inputMode === "voice") {
+            setShowSealAnimation(true);
+            setTimeout(() => setShowSealAnimation(false), 3500);
+        }
 
         // 后台执行上传与存储逻辑
         (async () => {
@@ -877,6 +884,36 @@ export const InlineBlessingPanel: React.FC<{
                                 >
                                     <Share2 size={12} /> 复制分享
                                 </button>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* 情感连接：封存提示 */}
+                <AnimatePresence>
+                    {showSealAnimation && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 1.05, filter: "blur(4px)" }}
+                            transition={{ type: "spring", bounce: 0.4 }}
+                            className="fixed inset-0 z-[200] flex items-center justify-center pointer-events-none px-6"
+                        >
+                            <div className="bg-slate-900/95 backdrop-blur-xl px-8 py-10 rounded-[2.5rem] shadow-2xl flex flex-col items-center gap-6 text-center w-full max-w-sm border border-slate-700">
+                                <div className="size-20 rounded-full bg-[#eab308]/20 flex items-center justify-center relative">
+                                    <motion.div
+                                        animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
+                                        transition={{ repeat: Infinity, duration: 2 }}
+                                        className="absolute inset-0 rounded-full border-2 border-[#eab308]/50"
+                                    />
+                                    <Mic size={36} className="text-[#eab308]" />
+                                </div>
+                                <div className="space-y-2">
+                                    <h3 className="text-2xl font-black text-white tracking-widest">声音已永久封存</h3>
+                                    <p className="text-sm text-slate-400 font-serif italic leading-relaxed">
+                                        这一刻的温度，已被收录至家族记忆胶囊。<br />任时光荏苒，岁月有迹可循。
+                                    </p>
+                                </div>
                             </div>
                         </motion.div>
                     )}
