@@ -236,24 +236,40 @@ export async function createApp() {
         return res.status(400).json({ error: "Missing familyId. Family isolation is strictly enforced." });
       }
 
-      const query = supabase.from("family_members").select("*").eq("family_id", familyId).order("id", { ascending: true });
+      // 核心增强：通过嵌入查询 (Embedded Select) 一次性抓取成员信息及对应的创建者 ID
+      // 感谢 Supabase，这可以代替复杂的 SQL Join
+      const { data, error } = await supabase
+        .from("family_members")
+        .select(`
+          *,
+          archive_memory_creators!member_id(creator_member_id)
+        `)
+        .eq("family_id", familyId)
+        .order("id", { ascending: true });
 
-      const { data, error } = await query;
       if (error) return res.status(500).json({ error: error.message });
 
-      // Map snake_case to camelCase for frontend compatibility if needed
-      const members = (data || []).map(m => ({
-        ...m,
-        userId: m.user_id,
-        isRegistered: m.is_registered,
-        inviteCode: m.invite_code,
-        avatarUrl: m.avatar_url,
-        birthDate: m.birth_date,
-        standardRole: m.standard_role,
-        fatherId: m.father_id,
-        motherId: m.mother_id,
-        spouseId: m.spouse_id
-      }));
+      // 扁平化处理：将嵌套的 creator_member_id 拍平到一级字段 createdByMemberId
+      const members = (data || []).map((m: any) => {
+        const creatorLink = m.archive_memory_creators;
+        const createdByMemberId = Array.isArray(creatorLink)
+          ? creatorLink[0]?.creator_member_id
+          : creatorLink?.creator_member_id;
+
+        return {
+          ...m,
+          userId: m.user_id,
+          isRegistered: m.is_registered,
+          inviteCode: m.invite_code,
+          avatarUrl: m.avatar_url,
+          birthDate: m.birth_date,
+          standardRole: m.standard_role,
+          fatherId: m.father_id,
+          motherId: m.mother_id,
+          spouseId: m.spouse_id,
+          createdByMemberId: createdByMemberId || null
+        };
+      });
       res.json(members);
     });
 
@@ -686,19 +702,8 @@ export async function createApp() {
           const ensureParent = async (memberId: number, gender: 'male' | 'female') => {
             const { data: m } = await supabase.from("family_members").select("*").eq("id", memberId).single();
             let pId = gender === 'male' ? m.father_id : m.mother_id;
-            if (!pId) {
-              const { data: nP } = await supabase.from("family_members").insert({
-                family_id: m.family_id,
-                name: `${m.name}的${gender === 'male' ? '父亲' : '母亲'}`,
-                gender: gender,
-                is_registered: false
-              }).select().single();
-              if (nP) {
-                pId = nP.id;
-                await supabase.from("family_members").update({ [gender === 'male' ? 'father_id' : 'mother_id']: pId }).eq("id", memberId);
-              }
-            }
-            return pId;
+            // NOTE: 移除“幽灵档案”自动生成逻辑，避免产生冗余档案记录。
+            return pId || null;
           };
 
           const ensureSiblingParents = async (memberId: number) => {
