@@ -414,11 +414,14 @@ export function getRigorousRelationship(
             const rawT = (tNode.relationship || "").replace(/\s+/g, "").toLowerCase();
             const sRole = (tNode.standardRole || tNode.standard_role || "").toLowerCase();
 
-            const tRel = (rawT.includes("女儿") || sRole === "daughter" || rawT === "daughter") ? "女儿" :
-                (rawT.includes("儿子") || sRole === "son" || rawT === "son") ? "儿子" :
-                    (rawT.includes("孙女") || sRole === "granddaughter" || rawT === "granddaughter") ? "孙女" :
-                        (rawT.includes("孙子") || sRole === "grandson" || rawT === "grandson") ? "孙子" :
-                            (tNode.relationship || "");
+            // 核心改进：优先识别标准角色，防止原始备注中的错误文字干扰推导
+            const tRel = (sRole === "daughter" || rawT.includes("女儿")) ? "女儿" :
+                (sRole === "son" || rawT.includes("儿子")) ? "儿子" :
+                    (sRole === "granddaughter" || rawT.includes("孙女")) ? "孙女" :
+                        (sRole === "grandson" || rawT.includes("孙子")) ? "孙子" :
+                            (sRole === "brother" || rawT.includes("哥") || rawT.includes("弟")) ? "儿子" : // 简化推导
+                                (sRole === "sister" || rawT.includes("姐") || rawT.includes("妹")) ? "女儿" : // 简化推导
+                                    (tNode.relationship || "");
 
             // 3. 终极级联推算映射表 (完全基于用户提供的“五代关系图谱”)
             // 逻辑：[清理后的中间人身份][TA对中间人备注] -> [TA对我称呼]
@@ -444,10 +447,10 @@ export function getRigorousRelationship(
                 "伯母": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
                 "姑姑": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
                 "姑父": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
-                "舅舅": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
-                "舅妈": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
-                "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
-                "姨妈": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+                "舅舅": { "儿子": "表哥/弟", "女儿": "表姐/妹", "表姐": "表姐/妹", "表妹": "表姐/妹", "表哥": "表哥/弟", "表弟": "表哥/弟" },
+                "舅妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "表姐": "表姐/妹", "表妹": "表姐/妹", "表哥": "表哥/弟", "表弟": "表哥/弟" },
+                "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹", "表姐": "表姐/妹", "表妹": "表姐/妹", "表哥": "表哥/弟", "表弟": "表哥/弟" },
+                "姨妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "表姐": "表姐/妹", "表妹": "表姐/妹", "表哥": "表哥/弟", "表弟": "表哥/弟" },
                 "表叔": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
                 "表姑": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
                 "表表": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
