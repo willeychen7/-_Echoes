@@ -23,6 +23,86 @@ export const AddMemberPage: React.FC = () => {
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [newMemberId, setNewMemberId] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [members, setMembers] = useState<any[]>([]);
+  const [parentId, setParentId] = useState<number | null>(null);
+  const [safetyStep, setSafetyStep] = useState<'none' | 'ask'>('none');
+  const [safetyChoice, setSafetyChoice] = useState<'real' | 'clan' | null>(null);
+  const [isCreatingVirtualParent, setIsCreatingVirtualParent] = useState(false);
+  const [virtualParentName, setVirtualParentName] = useState("");
+  const [memberType, setMemberType] = useState<'human' | 'pet'>('human');
+
+  React.useEffect(() => {
+    const savedUser = localStorage.getItem("currentUser");
+    const currentUser = savedUser ? JSON.parse(savedUser) : null;
+    if (isDemoMode(currentUser)) {
+      const demoMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
+      setMembers([...demoMembers]);
+    } else if (currentUser?.familyId) {
+      fetch(`/api/family-members?familyId=${currentUser.familyId}`)
+        .then(res => res.json())
+        .then(data => Array.isArray(data) && setMembers(data))
+        .catch(console.error);
+    }
+  }, []);
+
+  const candidateParents = React.useMemo(() => {
+    const rel = relationship === "其他" ? customRelationship : relationship;
+    if (!rel || members.length === 0) return [];
+    const role = deduceRole(rel);
+
+    // 严谨分流：如果用户做了亲疏选择，则精准过滤
+    if (safetyChoice === 'real') {
+      // 亲兄弟的父辈必须是观察者的亲爷爷 (grandfather_paternal)
+      const savedUser = localStorage.getItem("currentUser");
+      const currentUser = savedUser ? JSON.parse(savedUser) : null;
+      const me = members.find(m => Number(m.id) === Number(currentUser?.memberId));
+      const myFather = members.find(m => Number(m.id) === Number(me?.fatherId));
+      if (myFather?.fatherId) {
+        return members.filter(m => Number(m.id) === Number(myFather.fatherId));
+      }
+      return members.filter(m => m.standardRole === "grandfather_paternal" || m.relationship === "爷爷");
+    }
+
+    if (safetyChoice === 'clan') {
+      // 堂兄弟的父辈是我的叔公、伯公 (grand_uncle)
+      return members.filter(m => m.relationship.includes("叔公") || m.relationship.includes("伯公"));
+    }
+
+    // 默认逻辑
+    if (["uncle_paternal", "aunt_paternal", "father"].includes(role)) {
+      return members.filter(m => m.standardRole?.includes("grandfather_paternal") || m.relationship.includes("爷"));
+    }
+    if (["brother", "sister"].includes(role)) {
+      return members.filter(m => m.standardRole === "father" || m.relationship.includes("爸"));
+    }
+    if (["uncle_maternal", "aunt_maternal", "mother"].includes(role)) {
+      return members.filter(m => m.standardRole?.includes("grandfather_maternal") || m.relationship.includes("外公"));
+    }
+    if (role === "cousin" || rel.includes("堂") || rel.includes("表")) {
+      return members.filter(m => ["uncle_paternal", "aunt_paternal", "uncle_maternal", "aunt_maternal"].includes(m.standardRole || ""));
+    }
+    return [];
+  }, [relationship, customRelationship, members, safetyChoice]);
+
+  // 当关系变化时，判断是否需要触发安全检查
+  React.useEffect(() => {
+    const rel = relationship === "其他" ? customRelationship : relationship;
+    const ambiguous = ["叔叔", "伯伯", "堂叔", "二爸", "小叔", "叔伯"].some(k => rel.includes(k));
+    if (ambiguous) {
+      setSafetyStep('ask');
+    } else {
+      setSafetyStep('none');
+      setSafetyChoice(null);
+    }
+  }, [relationship, customRelationship]);
+
+  // 自动化：当需要创建虚拟父辈时，预填一个温情的名称
+  React.useEffect(() => {
+    if (safetyChoice === 'clan' && candidateParents.length === 0 && !virtualParentName && name) {
+      setVirtualParentName(`${name}的父亲`);
+      setIsCreatingVirtualParent(true);
+    }
+  }, [safetyChoice, candidateParents.length, name, virtualParentName]);
 
   React.useLayoutEffect(() => {
     const scrollContainer = document.querySelector('.scroll-container');
@@ -58,10 +138,39 @@ export const AddMemberPage: React.FC = () => {
     const createdByMemberId = currentUser?.memberId;
 
     const finalRelationship = relationship === "其他" ? customRelationship : relationship;
-    // deduceRole will check if finalRelationship matches any standard role strings (e.g. "爸爸", "奶奶")
     const deducedRole = deduceRole(finalRelationship);
 
     setIsSubmitting(true);
+    let currentParentId = parentId;
+
+    // 严谨：如果启用了虚拟父辈创建
+    if (isCreatingVirtualParent && virtualParentName.trim()) {
+      try {
+        const genNum = (currentUser.generationNum || 30) - 1; // 默认爷爷辈/上一辈
+        const vResponse = await fetch("/api/family-members", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: virtualParentName.trim(),
+            relationship: safetyChoice === 'clan' ? "叔公" : "长辈",
+            avatarUrl: `https://avatar.vercel.sh/${virtualParentName.trim()}.svg`,
+            familyId,
+            createdByMemberId,
+            isVirtual: true,
+            generationNum: genNum,
+            // 自动解析房头
+            ancestralHall: virtualParentName.includes("二") ? "二房" : virtualParentName.includes("大") ? "大房" : virtualParentName.includes("三") ? "三房" : null
+          })
+        });
+        const vData = await vResponse.json();
+        if (vData.id) currentParentId = vData.id;
+      } catch (err) {
+        console.error("Virtual parent creation failed:", err);
+      }
+    }
+
+    const parent = members.find(m => Number(m.id) === Number(currentParentId));
+
     try {
       const response = await fetch("/api/family-members", {
         method: "POST",
@@ -75,7 +184,10 @@ export const AddMemberPage: React.FC = () => {
           familyId,
           createdByMemberId,
           standardRole: deducedRole,
-          gender
+          gender,
+          memberType,
+          fatherId: currentParentId,
+          ancestralHall: parent?.ancestralHall || null // 自动继承父辈房头
         })
       });
       const data = await response.json().catch(() => ({}));
@@ -94,7 +206,8 @@ export const AddMemberPage: React.FC = () => {
           isRegistered: false,
           standardRole: deducedRole,
           createdByMemberId: currentUser?.memberId,
-          gender
+          gender,
+          memberType
         });
         localStorage.setItem("demoCustomMembers", JSON.stringify(customMembers));
       } else if (!data.id) {
@@ -268,6 +381,27 @@ export const AddMemberPage: React.FC = () => {
             </div>
           </div>
 
+          <div className="space-y-3">
+            <label className="text-xl font-black px-1 block">成员类型</label>
+            <div className="flex gap-4">
+              {['human', 'pet'].map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setMemberType(t as 'human' | 'pet')}
+                  className={cn(
+                    "flex-1 h-14 rounded-2xl font-bold transition-all border-2",
+                    memberType === t
+                      ? "bg-slate-800 border-slate-800 text-white shadow-lg scale-[1.02]"
+                      : "bg-white border-slate-50 text-slate-400 hover:border-slate-200"
+                  )}
+                >
+                  {t === 'human' ? "人类成员 👤" : "可爱宠物 🐾"}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-4">
             <label className="text-xl font-black px-1 block">新成员是我的 ____</label>
             <div className="grid grid-cols-3 gap-3">
@@ -303,6 +437,132 @@ export const AddMemberPage: React.FC = () => {
                 />
               </motion.div>
             )}
+
+            {/* 物理血缘指认 (Parent Identification) */}
+            <AnimatePresence mode="wait">
+              {safetyStep === 'ask' && !safetyChoice && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="bg-white p-6 rounded-[2rem] border-2 border-[#eab308]/20 shadow-xl space-y-6 relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none"><Check size={60} /></div>
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-black text-slate-800">确认亲疏关系</h3>
+                    <p className="text-sm text-slate-500">这位长辈是您父亲的亲兄弟，还是堂兄弟？</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      onClick={() => {
+                        setSafetyChoice('real');
+                        if (relationship === "叔叔" || relationship === "伯伯") {
+                          // 自动建议更亲密的称谓
+                          setRelationship(gender === 'male' ? "二爸" : "姑姑");
+                        }
+                      }}
+                      className="p-6 rounded-2xl border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all text-center group"
+                    >
+                      <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">🏡</div>
+                      <span className="font-black text-slate-800 block">亲兄弟</span>
+                      <span className="text-[10px] text-slate-400">亲爷爷的孩子</span>
+                    </button>
+                    <button
+                      onClick={() => setSafetyChoice('clan')}
+                      className="p-6 rounded-2xl border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all text-center group"
+                    >
+                      <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">祠</div>
+                      <span className="font-black text-slate-800 block">堂兄弟</span>
+                      <span className="text-[10px] text-slate-400">叔公/伯公的孩子</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {safetyChoice === 'clan' && candidateParents.length === 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-white p-6 rounded-[2rem] border-2 border-dashed border-amber-200 space-y-4"
+                >
+                  <div className="space-y-1">
+                    <p className="text-sm font-black text-amber-600">看来您的叔公们还没有加入广场</p>
+                    <p className="text-[10px] text-slate-400">为了理清房分，请问这位 {relationship} 的父亲（您的叔公）怎么称呼？</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className="flex-1 h-12 px-4 rounded-xl border-none bg-slate-50 text-sm font-bold focus:ring-2 focus:ring-[#eab308]/20"
+                      placeholder="如：二叔公、三叔公"
+                      value={virtualParentName}
+                      onChange={(e) => {
+                        setVirtualParentName(e.target.value);
+                        setIsCreatingVirtualParent(true);
+                      }}
+                    />
+                    <button onClick={() => setSafetyChoice(null)} className="px-4 text-xs font-bold text-slate-400">返回</button>
+                  </div>
+                </motion.div>
+              )}
+
+              {candidateParents.length > 0 && (safetyStep === 'none' || safetyChoice) && (
+                <motion.div
+                  key="picker"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="bg-amber-50/50 p-6 rounded-[2rem] border border-amber-100 space-y-4"
+                >
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm font-black text-amber-700/60 uppercase tracking-widest flex items-center gap-2">
+                      <Check className="size-4" /> 您正在添加 {relationship === "其他" ? customRelationship : relationship}，请指点他是谁的孩子？
+                    </p>
+                    {safetyChoice && (
+                      <button onClick={() => setSafetyChoice(null)} className="text-[10px] bg-amber-200/50 px-2 py-0.5 rounded-full text-amber-800 font-bold">重新选择亲疏</button>
+                    )}
+                  </div>
+                  <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+                    {candidateParents.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setParentId(parentId === p.id ? null : p.id);
+                          setIsCreatingVirtualParent(false);
+                        }}
+                        className={cn(
+                          "flex-shrink-0 flex flex-col items-center gap-2 transition-all p-2 rounded-2xl border-2",
+                          parentId === p.id ? "bg-white border-[#eab308] shadow-md scale-105" : "border-transparent opacity-60"
+                        )}
+                      >
+                        <img src={p.avatarUrl} className="size-14 rounded-full object-cover border-2 border-white shadow-sm" />
+                        <span className="text-xs font-black text-slate-800">{p.name} ({p.relationship})</span>
+                      </button>
+                    ))}
+                    {!isCreatingVirtualParent ? (
+                      <button
+                        onClick={() => setIsCreatingVirtualParent(true)}
+                        className="flex-shrink-0 flex flex-col items-center gap-2 transition-all p-2 rounded-2xl border-2 border-transparent opacity-40"
+                      >
+                        <div className="size-14 rounded-full bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400">+</div>
+                        <span className="text-xs font-bold">不在列表中</span>
+                      </button>
+                    ) : (
+                      <div className="flex-shrink-0 flex flex-col items-center gap-2 p-2">
+                        <input
+                          autoFocus
+                          type="text"
+                          className="w-24 h-14 rounded-2xl bg-white border-2 border-[#eab308] text-[10px] font-bold text-center px-1"
+                          placeholder="输入其父姓名"
+                          value={virtualParentName}
+                          onChange={(e) => setVirtualParentName(e.target.value)}
+                        />
+                        <span onClick={() => setIsCreatingVirtualParent(false)} className="text-[10px] text-red-400 font-bold">取消</span>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 

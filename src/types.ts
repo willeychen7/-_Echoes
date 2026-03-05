@@ -24,9 +24,16 @@ export interface FamilyMember {
   standardRole?: string;
   fatherId?: number;
   motherId?: number;
+  spouseId?: number;     // 配偶 ID
   gender?: string;
   createdByMemberId?: number;
   userId?: number | string;
+  // 以下为闽系家谱扩展字段
+  generationNum?: number; // 昭穆（辈分）绝对值
+  surname?: string;       // 姓氏
+  ancestralHall?: string; // 房头/房份 (例如：大房、二房)
+  isAdopted?: boolean;    // 是否为继嗣/祧子
+  memberType?: 'human' | 'pet'; // 成员类型：人类或宠物
 }
 
 export interface FamilyEvent {

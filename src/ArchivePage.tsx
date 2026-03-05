@@ -7,7 +7,7 @@ import { Button } from "./components/Button";
 import { Card } from "./components/Card";
 import { getRelativeTime, cn } from "./lib/utils";
 import { useAvatarCache, resolveAvatar, updateAvatarCache } from "./lib/useAvatarCache";
-import { getRelativeRelationship, getRigorousRelationship } from "./lib/relationships";
+import { getRelativeRelationship, getRigorousRelationship, getRelationType, getKinshipLabel } from "./lib/relationships";
 import confetti from "canvas-confetti";
 import { DEMO_MEMBERS, DEMO_EVENTS, isDemoMode } from "./demo-data";
 import { supabase } from "./lib/supabase";
@@ -704,45 +704,66 @@ export const ArchivePage: React.FC = () => {
               </div>
             )}
           </div>
-          <h1 className="text-3xl font-black text-slate-800 flex items-center gap-2">
-            {isMeMember ? "我的记忆档案" : `${displayName}的记忆档案`}
-            {(!member.isRegistered || isDemoMode(currentUser)) && (
-              <button
-                onClick={() => {
-                  setEditInfoForm({
-                    name: member.name || "",
-                    gender: member.gender || "male",
-                    birthday: member.birthDate || "",
-                    bio: member.bio || ""
-                  });
-                  setShowEditInfoModal(true);
-                }}
-                className="p-1 rounded-full bg-slate-50 text-slate-300 hover:text-[#eab308] hover:bg-[#eab308]/5 transition-all"
-              >
-                <Edit2 size={16} />
-              </button>
-            )}
-          </h1>
-          {!isMeMember && (
-            <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
-              <span className="text-sm font-bold text-[#eab308] bg-[#eab308]/5 px-3 py-1 rounded-full border border-[#eab308]/10 tracking-widest flex items-center gap-1.5">
-                <Sparkles size={12} fill="currentColor" /> {getRigorousRelationship(currentUser, member, members)}
-              </span>
+          {(() => {
+            const rel = getRigorousRelationship(currentUser, member, members);
+            const type = getRelationType(rel);
 
-              {member.isRegistered ? (
-                <span className="px-3 py-1 bg-emerald-50 text-emerald-500 rounded-full text-[10px] font-black inline-flex items-center gap-1">
-                  <CheckCircle size={12} fill="currentColor" /> 已注册
-                </span>
-              ) : (
-                <button
-                  onClick={() => setShowShareModal(true)}
-                  className="px-3 py-1 bg-[#eab308] text-black rounded-full text-[10px] font-black inline-flex items-center gap-1.5 hover:bg-[#d9a306] transition-all shadow-sm active:scale-95"
-                >
-                  邀请注册 <Share2 size={12} />
-                </button>
-              )}
-            </div>
-          )}
+            return (
+              <>
+                <h1 className={cn(
+                  "text-3xl font-black flex items-center gap-2",
+                  type === 'blood' ? "text-slate-900" :
+                    type === 'affinal' ? "text-[#8b5e34]" : "text-slate-400"
+                )}>
+                  {isMeMember ? "我的记忆档案" : `${displayName}的记忆档案`}
+                  {(!member.isRegistered || isDemoMode(currentUser)) && (
+                    <button
+                      onClick={() => {
+                        setEditInfoForm({
+                          name: member.name || "",
+                          gender: member.gender || "male",
+                          birthday: member.birthDate || "",
+                          bio: member.bio || ""
+                        });
+                        setShowEditInfoModal(true);
+                      }}
+                      className="p-1 rounded-full bg-slate-50 text-slate-300 hover:text-[#eab308] hover:bg-[#eab308]/5 transition-all"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                  )}
+                </h1>
+                {!isMeMember && (
+                  <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
+                    <span className={cn(
+                      "text-sm font-bold px-3 py-1 rounded-full border tracking-widest flex items-center gap-1.5 transition-colors",
+                      type === 'blood' ? "text-[#eab308] bg-[#eab308]/5 border-[#eab308]/10" :
+                        type === 'affinal' ? "text-[#8b5e34] bg-[#8b5e34]/5 border-[#8b5e34]/10" :
+                          "text-slate-300 bg-slate-50 border-slate-100"
+                    )}>
+                      <Sparkles size={12} fill="currentColor" /> {rel}
+                      {getKinshipLabel(currentUser, member, members) && (
+                        <span className="opacity-50 text-[10px] ml-1">· {getKinshipLabel(currentUser, member, members)?.replace(/【|】/g, '')}</span>
+                      )}
+                    </span>
+
+                    {member.isRegistered ? (
+                      <span className="px-3 py-1 bg-emerald-50 text-emerald-500 rounded-full text-[10px] font-black inline-flex items-center gap-1">
+                        <CheckCircle size={12} fill="currentColor" /> 已注册
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setShowShareModal(true)}
+                        className="px-3 py-1 bg-[#eab308] text-black rounded-full text-[10px] font-black inline-flex items-center gap-1.5 hover:bg-[#d9a306] transition-all shadow-sm active:scale-95"
+                      >
+                        邀请注册 <Share2 size={12} />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
+            );
+          })()}
           {displayBio && displayBio.trim() !== "" && (
             <p className="text-sm text-slate-400 italic mt-3 mb-2">“{displayBio}”</p>
           )}

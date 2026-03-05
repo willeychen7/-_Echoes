@@ -72,6 +72,12 @@ CREATE TABLE family_members (
     invite_code TEXT UNIQUE,
     is_registered BOOLEAN DEFAULT FALSE,
     standard_role TEXT,
+    -- 闽系家谱扩展字段
+    generation_num INTEGER, -- 昭穆（辈分）绝对值
+    surname TEXT,           -- 姓氏
+    ancestral_hall TEXT,    -- 房头/房份 (例如：大房、二房)
+    is_adopted BOOLEAN DEFAULT FALSE, -- 是否为继嗣/祧子
+    member_type TEXT DEFAULT 'human',  -- 成员类型：human | pet
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

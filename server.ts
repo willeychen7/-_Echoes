@@ -505,7 +505,7 @@ export async function createApp() {
 
     app.post("/api/family-members", async (req, res) => {
       try {
-        const { name, relationship, avatarUrl, bio, birthDate, standardRole, familyId, createdByMemberId } = req.body;
+        const { name, relationship, avatarUrl, bio, birthDate, standardRole, familyId, createdByMemberId, fatherId, ancestralHall, gender, memberType } = req.body;
         // NOTE: 不再生成旧的 FA- 格式邀请码
         // 邀请码统一使用前端动态生成的 INV-{targetId}-{inviterId} 格式
 
@@ -531,7 +531,11 @@ export async function createApp() {
             birth_date: birthDate || null,
             invite_code: null, // 不再存旧格式，前端用 INV- 动态生成
             is_registered: false,
-            standard_role: standardRole || ""
+            standard_role: standardRole || "",
+            father_id: fatherId || null,
+            ancestral_hall: ancestralHall || null,
+            gender: gender || null,
+            member_type: memberType || 'human'
           })
           .select()
           .single();
