@@ -12,6 +12,10 @@ export const STANDARD_ROLE_LABELS: Record<string, string> = {
     grandmother_paternal: "奶奶",
     grandfather_maternal: "外公",
     grandmother_maternal: "外婆",
+    great_great_grandfather: "高祖父",
+    great_great_grandmother: "高祖母",
+    great_grandfather: "曾祖父",
+    great_grandmother: "曾祖母",
     son: "儿子",
     daughter: "女儿",
     brother: "哥哥/弟弟",
@@ -26,7 +30,7 @@ export const STANDARD_ROLE_LABELS: Record<string, string> = {
     granddaughter: "孙女",
     nephew: "侄子/外甥",
     niece: "侄女/外甥女",
-    cousin: "表兄弟/堂兄弟",
+    cousin: "表亲/堂亲",
     family: "家人",
 };
 
@@ -60,27 +64,76 @@ export const RELATIONSHIP_OPTIONS = [
  * 根据关系字符串推断标准角色标识
  */
 export function deduceRole(relationship: string): string {
+    let clean = (relationship || "").trim();
+    if (!clean) return "family";
+
+    // 1. 定义排行词库（支持两位数推导）
+    const singlePrefixes = ["大", "二", "三", "四", "五", "六", "七", "八", "九", "十", "小", "老"];
+    const multiPrefixes = ["十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十"];
+
+    // 如果是“大伯”这种本身就是两个字的，需要特殊处理，不要把“大”去掉了
+    const specialTwoWords = ["大伯", "大爷", "大妈", "大娘", "大哥", "大姐", "小弟", "小妹", "老爸", "老妈", "老婆", "老公"];
+
+    if (!specialTwoWords.includes(clean)) {
+        // 优先匹配两位数前缀
+        let foundMulti = false;
+        for (const p of multiPrefixes) {
+            if (clean.startsWith(p) && clean.length > p.length) {
+                clean = clean.substring(p.length);
+                foundMulti = true;
+                break;
+            }
+        }
+        // 如果没匹配到两位数，再匹配单字前缀
+        if (!foundMulti) {
+            for (const p of singlePrefixes) {
+                if (clean.startsWith(p) && clean.length > 1) {
+                    clean = clean.substring(1);
+                    break;
+                }
+            }
+        }
+    }
+
     const map: Record<string, string> = {
+        "高祖父": "great_great_grandfather",
+        "高祖母": "great_great_grandmother",
+        "曾祖父": "great_grandfather",
+        "曾祖母": "great_grandmother",
+        "外曾祖父": "great_grandfather",
+        "外曾祖母": "great_grandmother",
         "爷爷": "grandfather_paternal",
         "奶奶": "grandmother_paternal",
         "外公": "grandfather_maternal",
         "外婆": "grandmother_maternal",
+        "伯公": "grand_uncle_paternal",
+        "叔公": "grand_uncle_paternal",
+        "姑婆": "grand_aunt_paternal",
+        "舅公": "grand_uncle_maternal",
+        "姨婆": "grand_aunt_maternal",
         "父亲": "father",
         "爸爸": "father",
         "母亲": "mother",
         "妈妈": "mother",
+        "大伯": "uncle_paternal",
+        "伯伯": "uncle_paternal",
+        "小叔": "uncle_paternal",
+        "叔叔": "uncle_paternal",
+        "大爷": "uncle_paternal",
         "丈夫": "husband",
         "妻子": "wife",
-        "老公": "husband",
         "老婆": "wife",
+        "老公": "husband",
         "兄弟": "brother",
         "哥哥": "brother",
+        "哥": "brother",
         "弟弟": "brother",
+        "弟": "brother",
+        "姐": "sister",
         "姐姐": "sister",
         "妹妹": "sister",
+        "妹": "sister",
         "姐妹": "sister",
-        "叔叔": "uncle_paternal",
-        "伯伯": "uncle_paternal",
         "姑姑": "aunt_paternal",
         "舅舅": "uncle_maternal",
         "阿姨": "aunt_maternal",
@@ -90,18 +143,34 @@ export function deduceRole(relationship: string): string {
         "姨妈": "aunt_maternal",
         "姑父": "uncle_paternal",
         "姨父": "uncle_maternal",
+        "堂兄": "cousin",
+        "堂弟": "cousin",
+        "堂姐": "cousin",
+        "堂妹": "cousin",
+        "堂伯": "cousin",
+        "堂叔": "cousin",
+        "堂姑": "cousin",
+        "表叔": "cousin",
+        "表姑": "cousin",
+        "表伯": "cousin",
+        "表哥": "cousin",
+        "表弟": "cousin",
+        "表姐": "cousin",
+        "表妹": "cousin",
         "儿子": "son",
         "女儿": "daughter",
         "孙子": "grandson",
         "孙女": "granddaughter",
+        "外孙": "grandson",
+        "外孙女": "granddaughter",
         "侄子": "nephew",
         "外甥": "nephew",
         "侄女": "niece",
         "外甥女": "niece",
-        "表亲": "cousin",
-        "堂亲": "cousin",
+        "表侄": "nephew",
+        "表侄女": "niece",
     };
-    return map[relationship] || "family";
+    return map[clean] || "family";
 }
 
 /**
@@ -112,6 +181,29 @@ function getParentIds(nodeId: any, members: any[]) {
     const node = members.find(m => Number(m.id) === Number(nodeId));
     if (!node) return { fId: null, mId: null };
     return { fId: node.fatherId, mId: node.motherId };
+}
+
+/**
+ * 根据生日计算排行前缀 (大, 二, 三, 小)
+ */
+function getRankPrefix(targetId: number, sibs: any[]) {
+    if (sibs.length <= 1) return "";
+
+    // 只对有生日的人进行排序
+    const sorted = [...sibs].sort((a, b) => {
+        const da = a.birthDate || a.birth_date || "9999-99-99";
+        const db = b.birthDate || b.birth_date || "9999-99-99";
+        return da.localeCompare(db);
+    });
+
+    const index = sorted.findIndex(s => Number(s.id) === Number(targetId));
+    if (index === -1) return "";
+
+    // 如果最后一位，且人数大于1，通常叫“小”
+    if (index === sorted.length - 1 && sorted.length > 1) return "小";
+
+    const chineseNumbers = ["", "大", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十"];
+    return chineseNumbers[index + 1] || `${index + 1}`;
 }
 
 /**
@@ -194,14 +286,16 @@ export function getRigorousRelationship(
         const { fId: vff, mId: vfm } = getParentIds(vf, members);
         const fSiblings = members.filter(m => (vff && eq(m.fatherId, vff)) || (vfm && eq(m.motherId, vfm)));
         if (fSiblings.some(s => eq(s.id, tId))) {
-            return tNode.gender === "female" ? "姑姑" : "叔伯";
+            const prefix = getRankPrefix(tId, fSiblings);
+            return tNode.gender === "female" ? `${prefix}姑姑` : (prefix === "大" ? "大伯" : `${prefix}叔伯`);
         }
     }
     if (vm) {
         const { fId: vmf, mId: vmm } = getParentIds(vm, members);
         const mSiblings = members.filter(m => (vmf && eq(m.fatherId, vmf)) || (vmm && eq(m.motherId, vmm)));
         if (mSiblings.some(s => eq(s.id, tId))) {
-            return tNode.gender === "female" ? "阿姨" : "舅舅";
+            const prefix = getRankPrefix(tId, mSiblings);
+            return tNode.gender === "female" ? `${prefix}阿姨` : `${prefix}舅舅`;
         }
     }
 
@@ -315,25 +409,53 @@ export function getRigorousRelationship(
                         (rawT.includes("孙子") || sRole === "grandson" || rawT === "grandson") ? "孙子" :
                             (tNode.relationship || "");
 
-            // 3. 级联推算映射表 (基于 cRel 的显示称谓进行二次映射)
+            // 3. 终极级联推算映射表 (完全基于用户提供的“五代关系图谱”)
+            // 逻辑：[中间人身份][TA对中间人备注] -> [TA对我称呼]
             const bridgeMap: Record<string, Record<string, string>> = {
-                "妈妈": { "儿子": "兄弟", "女儿": "姐妹", "孙子": "侄子/外甥", "孙女": "侄女/外甥女" },
+                "妈妈": { "儿子": "兄弟", "女儿": "姐妹", "孙子": "外甥/侄子", "孙女": "外甥/侄女" },
                 "爸爸": { "儿子": "兄弟", "女儿": "姐妹", "孙子": "侄子/外甥", "孙女": "侄女/外甥女" },
-                "舅舅": { "儿子": "表哥/弟", "女儿": "表姐/妹", "孙子": "表侄", "孙女": "表侄女" },
-                "舅妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "孙子": "表侄", "孙女": "表侄女" },
-                "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹", "孙子": "表外甥", "孙女": "表外甥女" },
-                "姨妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "孙子": "表外甥", "孙女": "表外甥女" },
-                "姨婆": { "儿子": "表舅", "女儿": "表姨" },
-                "叔叔": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "孙子": "堂侄", "孙女": "堂侄女" },
-                "伯伯": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "孙子": "堂侄", "孙女": "堂侄女" },
-                "姑姑": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "孙子": "堂侄", "孙女": "堂侄女" },
-                "婶婶": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "孙子": "堂侄", "孙女": "堂侄女" },
-                "伯母": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "孙子": "堂侄", "孙女": "堂侄女" },
-                "姑父": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "孙子": "堂侄", "孙女": "堂侄女" },
+                "爷爷": { "兄弟": "伯公/叔公", "姐妹": "姑婆", "本人": "爷爷" },
+                "奶奶": { "兄弟": "舅公", "姐妹": "姨婆", "本人": "奶奶" },
+                "外公": { "兄弟": "舅公", "姐妹": "姨婆", "本人": "外公" },
+                "外婆": { "兄弟": "舅公", "姐妹": "姨婆", "本人": "外婆" },
+                "伯公": { "儿子": "堂伯/叔", "女儿": "堂姑" },
+                "叔公": { "儿子": "堂伯/叔", "女儿": "堂姑" },
+                "姑婆": { "儿子": "表叔", "女儿": "表姑" },
+                "舅公": { "儿子": "表叔", "女儿": "表姑" },
+                "姨婆": { "儿子": "表叔", "女儿": "表姑" },
+                "堂伯": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "堂叔": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "堂姑": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "大伯": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
+                "叔叔": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
+                "伯伯": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
+                "婶婶": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
+                "伯母": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
+                "姑姑": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "姑父": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "舅舅": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+                "舅妈": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+                "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+                "姨妈": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+                "表叔": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "表姑": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "表表": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "表哥": { "儿子": "表侄子", "女儿": "表侄女" },
+                "表弟": { "儿子": "表侄子", "女儿": "表侄女" },
+                "表姐": { "儿子": "表侄子", "女儿": "表侄女" },
+                "表妹": { "儿子": "表侄子", "女儿": "表侄女" },
+                "堂兄": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "堂弟": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "堂姐": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "堂妹": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "兄弟": { "儿子": "侄子", "女儿": "侄女" },
                 "哥哥": { "儿子": "侄子", "女儿": "侄女" },
                 "弟弟": { "儿子": "侄子", "女儿": "侄女" },
+                "姐妹": { "儿子": "外甥", "女儿": "外甥女" },
                 "姐姐": { "儿子": "外甥", "女儿": "外甥女" },
-                "妹妹": { "儿子": "外甥", "女儿": "外甥女" }
+                "妹妹": { "儿子": "外甥", "女儿": "外甥女" },
+                "儿子": { "儿子": "孙子", "女儿": "孙女" },
+                "女儿": { "儿子": "外孙子", "女儿": "外孙女" }
             };
 
             // 4. 执行匹配

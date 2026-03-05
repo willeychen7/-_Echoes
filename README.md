@@ -20,4 +20,4 @@ View your app in AI Studio: https://ai.studio/apps/26e57d1a-673e-4c9e-ac42-79fa5
    `npm run dev`
 
 ---
-Deployment Sync: 2026-03-04 14:32 (Force Redeploy v1.4.5)
+Deployment Sync: 2026-03-04 20:17 (Force Redeploy v1.6.1 - 超大家庭智能排行)
