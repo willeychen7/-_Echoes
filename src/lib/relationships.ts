@@ -40,6 +40,8 @@ export const RELATIONSHIP_OPTIONS = [
     { value: "grandmother_paternal", label: "奶奶" },
     { value: "grandfather_maternal", label: "外公" },
     { value: "grandmother_maternal", label: "外婆" },
+    { value: "great_grandfather", label: "曾祖/外曾祖" },
+    { value: "great_great_grandfather", label: "高祖" },
     { value: "father", label: "父亲" },
     { value: "mother", label: "母亲" },
     { value: "husband", label: "丈夫" },
@@ -52,10 +54,8 @@ export const RELATIONSHIP_OPTIONS = [
     { value: "aunt_maternal", label: "阿姨" },
     { value: "son", label: "儿子" },
     { value: "daughter", label: "女儿" },
-    { value: "grandson", label: "孙子" },
-    { value: "granddaughter", label: "孙女" },
+    { value: "grandson", label: "孙子/外孙" },
     { value: "nephew", label: "侄子/外甥" },
-    { value: "niece", label: "侄女/外甥女" },
     { value: "cousin", label: "表亲/堂亲" },
     { value: "family", label: "其他家人" },
 ];
@@ -107,10 +107,15 @@ export function deduceRole(relationship: string): string {
         "外公": "grandfather_maternal",
         "外婆": "grandmother_maternal",
         "伯公": "grand_uncle_paternal",
+        "姆婆": "grand_aunt_paternal", // 伯公妻
         "叔公": "grand_uncle_paternal",
+        "婶婆": "grand_aunt_paternal", // 叔公妻
         "姑婆": "grand_aunt_paternal",
+        "姑公": "grand_uncle_paternal", // 姑婆夫
         "舅公": "grand_uncle_maternal",
+        "妗婆": "grand_aunt_maternal", // 舅公妻
         "姨婆": "grand_aunt_maternal",
+        "姨公": "grand_uncle_maternal", // 姨婆夫
         "父亲": "father",
         "爸爸": "father",
         "爸": "father",
@@ -147,6 +152,7 @@ export function deduceRole(relationship: string): string {
         "婶婶": "aunt_paternal",
         "伯母": "aunt_paternal",
         "姨妈": "aunt_maternal",
+        "小姨": "aunt_maternal",
         "姑父": "uncle_paternal",
         "姨父": "uncle_maternal",
         "堂兄": "cousin",
@@ -156,6 +162,8 @@ export function deduceRole(relationship: string): string {
         "堂伯": "cousin",
         "堂叔": "cousin",
         "堂姑": "cousin",
+        "堂侄": "nephew",
+        "堂外甥": "nephew",
         "表叔": "cousin",
         "表姑": "cousin",
         "表伯": "cousin",
@@ -163,6 +171,8 @@ export function deduceRole(relationship: string): string {
         "表弟": "cousin",
         "表姐": "cousin",
         "表妹": "cousin",
+        "表侄": "nephew",
+        "表外甥": "nephew",
         "儿": "son",
         "儿子": "son",
         "女": "daughter",
@@ -170,13 +180,12 @@ export function deduceRole(relationship: string): string {
         "孙子": "grandson",
         "孙女": "granddaughter",
         "外孙": "grandson",
+        "外孙子": "grandson",
         "外孙女": "granddaughter",
         "侄子": "nephew",
         "外甥": "nephew",
         "侄女": "niece",
         "外甥女": "niece",
-        "表侄": "nephew",
-        "表侄女": "niece",
     };
     return map[clean] || "family";
 }
@@ -213,8 +222,6 @@ function getRankPrefix(targetId: number, sibs: any[]) {
     const chineseNumbers = ["", "大", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十"];
     return chineseNumbers[index + 1] || `${index + 1}`;
 }
-
-export const RELATIONSHIP_UNRESOLVED = "[UNRESOLVED]";
 
 /**
  * 严谨的家族关系推导函数
@@ -425,51 +432,46 @@ export function getRigorousRelationship(
                                 (sRole === "sister" || rawT.includes("姐") || rawT.includes("妹")) ? "女儿" : // 简化推导
                                     (tNode.relationship || "");
 
-            // 3. 终极级联推算映射表 (完全基于用户提供的“五代关系图谱”)
-            // 逻辑：[清理后的中间人身份][TA对中间人备注] -> [TA对我称呼]
+            // 3. 终极级联推算映射表 (完全基于闽系五代家谱逻辑)
             const bridgeMap: Record<string, Record<string, string>> = {
-                "妈妈": { "儿子": "兄弟", "女儿": "姐妹", "孙子": "外甥/侄子", "孙女": "外甥/侄女" },
-                "爸爸": { "儿子": "兄弟", "女儿": "姐妹", "孙子": "侄子/外甥", "孙女": "侄女/外甥女" },
-                "爷爷": { "兄弟": "伯公/叔公", "姐妹": "姑婆", "本人": "爷爷" },
-                "奶奶": { "兄弟": "舅公", "姐妹": "姨婆", "本人": "奶奶" },
-                "外公": { "兄弟": "舅公", "姐妹": "姨婆", "本人": "外公" },
-                "外婆": { "兄弟": "舅公", "姐妹": "姨婆", "本人": "外婆" },
-                "伯公": { "儿子": "堂伯/叔", "女儿": "堂姑" },
-                "叔公": { "儿子": "堂伯/叔", "女儿": "堂姑" },
+                "妈妈": { "儿子": "兄弟", "女儿": "姐妹", "孙子": "外甥/外甥女", "孙女": "外甥/外甥女" },
+                "爸爸": { "儿子": "兄弟", "女儿": "姐妹", "孙子": "侄子/侄女", "孙女": "侄子/侄女" },
+                "爷爷": { "兄弟": "伯公/叔公", "姐妹": "姑婆" },
+                "奶奶": { "兄弟": "舅公", "姐妹": "姨婆" },
+                "外公": { "兄弟": "舅公", "姐妹": "姨婆" },
+                "外婆": { "兄弟": "舅公", "姐妹": "姨婆" },
+                "伯公": { "儿子": "堂伯", "女儿": "堂姑" },
+                "叔公": { "儿子": "堂叔", "女儿": "堂姑" },
                 "姑婆": { "儿子": "表叔", "女儿": "表姑" },
                 "舅公": { "儿子": "表叔", "女儿": "表姑" },
                 "姨婆": { "儿子": "表叔", "女儿": "表姑" },
-                "堂伯": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
-                "堂叔": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "堂伯": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
+                "堂叔": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
                 "堂姑": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
                 "大伯": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
                 "叔叔": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
-                "伯伯": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
-                "婶婶": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
-                "伯母": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
+                "小叔": { "儿子": "堂兄弟姐妹", "女儿": "堂兄弟姐妹" },
                 "姑姑": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
-                "姑父": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
-                "舅舅": { "儿子": "表哥/弟", "女儿": "表姐/妹", "表姐": "表姐/妹", "表妹": "表姐/妹", "表哥": "表哥/弟", "表弟": "表哥/弟" },
-                "舅妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "表姐": "表姐/妹", "表妹": "表姐/妹", "表哥": "表哥/弟", "表弟": "表哥/弟" },
-                "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹", "表姐": "表姐/妹", "表妹": "表姐/妹", "表哥": "表哥/弟", "表弟": "表哥/弟" },
-                "姨妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "表姐": "表姐/妹", "表妹": "表姐/妹", "表哥": "表哥/弟", "表弟": "表哥/弟" },
-                "表叔": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
-                "表姑": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
-                "表表": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "舅舅": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+                "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+                "堂兄弟": { "儿子": "堂侄子", "女儿": "堂侄女" },
+                "堂姐妹": { "儿子": "堂外甥", "女儿": "堂外甥女" },
+                "表兄弟": { "儿子": "表侄子", "女儿": "表侄女" },
+                "表姐妹": { "儿子": "表外甥", "女儿": "表外甥女" },
+                "兄弟": { "儿子": "侄子", "女儿": "侄女" },
+                "姐妹": { "儿子": "外甥", "女儿": "外甥女" },
+                "堂兄": { "儿子": "堂侄子", "女儿": "堂侄女" },
+                "堂弟": { "儿子": "堂侄子", "女儿": "堂侄女" },
+                "堂姐": { "儿子": "堂外甥", "女儿": "堂外甥女" },
+                "堂妹": { "儿子": "堂外甥", "女儿": "堂外甥女" },
                 "表哥": { "儿子": "表侄子", "女儿": "表侄女" },
                 "表弟": { "儿子": "表侄子", "女儿": "表侄女" },
-                "表姐": { "儿子": "表侄子", "女儿": "表侄女" },
-                "表妹": { "儿子": "表侄子", "女儿": "表侄女" },
-                "堂兄": { "儿子": "表侄子", "女儿": "表侄女" },
-                "堂弟": { "儿子": "表侄子", "女儿": "表侄女" },
-                "堂姐": { "儿子": "表侄子", "女儿": "表侄女" },
-                "堂妹": { "儿子": "表侄子", "女儿": "表侄女" },
-                "兄弟": { "儿子": "侄子", "女儿": "侄女" },
-                "哥哥": { "儿子": "侄子", "女儿": "侄女" },
-                "弟弟": { "儿子": "侄子", "女儿": "侄女" },
-                "姐妹": { "儿子": "外甥", "女儿": "外甥女" },
+                "表姐": { "儿子": "表外甥", "女儿": "表外甥女" },
+                "表妹": { "儿子": "表外甥", "女儿": "表外甥女" },
                 "姐姐": { "儿子": "外甥", "女儿": "外甥女" },
                 "妹妹": { "儿子": "外甥", "女儿": "外甥女" },
+                "哥哥": { "儿子": "侄子", "女儿": "侄女" },
+                "弟弟": { "儿子": "侄子", "女儿": "侄女" },
                 "儿子": { "儿子": "孙子", "女儿": "孙女" },
                 "女儿": { "儿子": "外孙子", "女儿": "外孙女" }
             };
@@ -487,7 +489,7 @@ export function getRigorousRelationship(
     if (tNode.createdByMemberId && !eq(tNode.createdByMemberId, vId)) {
         const creator = members.find(m => eq(m.id, tNode.createdByMemberId));
         if (creator && !["爸爸", "妈妈", "爷爷", "奶奶", "外公", "外婆"].includes(baseRel)) {
-            return `${RELATIONSHIP_UNRESOLVED}${creator.name}的${baseRel}`;
+            return `${creator.name}的${baseRel}`;
         }
     }
     return baseRel;

@@ -2253,6 +2253,7 @@ export async function createApp() {
     });
 
 
+
     app.put("/api/notifications/:id/read", async (req, res) => {
       try {
         const { error } = await supabase
@@ -2266,17 +2267,6 @@ export async function createApp() {
         console.error("[NOTIF] Read single error:", err.message);
         res.status(500).json({ error: err.message });
       }
-    });
-
-    // 记录无法自动推算的亲属路径，以便下个版本人工/AI 训练补齐
-    app.post("/api/relationship/telemetry", (req, res) => {
-      const { viewerId, targetId, viewerName, targetName, intermediateRel, rawTargetRel } = req.body;
-      console.warn("\x1b[33m%s\x1b[0m", "--- [关系推导断裂报告] ---");
-      console.warn(`观察者: ${viewerName} (ID:${viewerId})`);
-      console.warn(`目标: ${targetName} (ID:${targetId})`);
-      console.warn(`路径: ${viewerName}管中间人叫[${intermediateRel}], 中间人管目标叫[${rawTargetRel}]`);
-      console.warn("---------------------------");
-      res.json({ status: 'reported' });
     });
 
     return app;
