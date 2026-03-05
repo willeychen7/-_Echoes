@@ -61,39 +61,39 @@ export const RELATIONSHIP_OPTIONS = [
 ];
 
 /**
- * 根据关系字符串推断标准角色标识
+ * 清理排行前缀 (大, 二, 十一, 小等)，还原为基础称谓
  */
-export function deduceRole(relationship: string): string {
-    let clean = (relationship || "").trim();
-    if (!clean) return "family";
-
-    // 1. 定义排行词库（支持两位数推导）
+export function getCleanRelationship(rel: string): string {
     const singlePrefixes = ["大", "二", "三", "四", "五", "六", "七", "八", "九", "十", "小", "老"];
     const multiPrefixes = ["十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十"];
-
-    // 如果是“大伯”这种本身就是两个字的，需要特殊处理，不要把“大”去掉了
     const specialTwoWords = ["大伯", "大爷", "大妈", "大娘", "大哥", "大姐", "小弟", "小妹", "老爸", "老妈", "老婆", "老公"];
 
+    let clean = (rel || "").trim();
+    if (!clean) return "";
+
     if (!specialTwoWords.includes(clean)) {
-        // 优先匹配两位数前缀
-        let foundMulti = false;
+        // 优先匹配两位数
         for (const p of multiPrefixes) {
             if (clean.startsWith(p) && clean.length > p.length) {
-                clean = clean.substring(p.length);
-                foundMulti = true;
-                break;
+                return clean.substring(p.length);
             }
         }
-        // 如果没匹配到两位数，再匹配单字前缀
-        if (!foundMulti) {
-            for (const p of singlePrefixes) {
-                if (clean.startsWith(p) && clean.length > 1) {
-                    clean = clean.substring(1);
-                    break;
-                }
+        // 再匹配单字
+        for (const p of singlePrefixes) {
+            if (clean.startsWith(p) && clean.length > 1) {
+                return clean.substring(1);
             }
         }
     }
+    return clean;
+}
+
+/**
+ * 根据关系字符串推断标准角色标识
+ */
+export function deduceRole(relationship: string): string {
+    const clean = getCleanRelationship(relationship);
+    if (!clean) return "family";
 
     const map: Record<string, string> = {
         "高祖父": "great_great_grandfather",
@@ -113,12 +113,15 @@ export function deduceRole(relationship: string): string {
         "姨婆": "grand_aunt_maternal",
         "父亲": "father",
         "爸爸": "father",
+        "爸": "father",
         "母亲": "mother",
         "妈妈": "mother",
+        "妈": "mother",
         "大伯": "uncle_paternal",
         "伯伯": "uncle_paternal",
         "小叔": "uncle_paternal",
         "叔叔": "uncle_paternal",
+        "叔": "uncle_paternal",
         "大爷": "uncle_paternal",
         "丈夫": "husband",
         "妻子": "wife",
@@ -135,8 +138,11 @@ export function deduceRole(relationship: string): string {
         "妹": "sister",
         "姐妹": "sister",
         "姑姑": "aunt_paternal",
+        "姑": "aunt_paternal",
         "舅舅": "uncle_maternal",
+        "舅": "uncle_maternal",
         "阿姨": "aunt_maternal",
+        "姨": "aunt_maternal",
         "舅妈": "aunt_maternal",
         "婶婶": "aunt_paternal",
         "伯母": "aunt_paternal",
@@ -157,7 +163,9 @@ export function deduceRole(relationship: string): string {
         "表弟": "cousin",
         "表姐": "cousin",
         "表妹": "cousin",
+        "儿": "son",
         "儿子": "son",
+        "女": "daughter",
         "女儿": "daughter",
         "孙子": "grandson",
         "孙女": "granddaughter",
@@ -396,8 +404,11 @@ export function getRigorousRelationship(
     if (tNode.createdByMemberId && !eq(tNode.createdByMemberId, vId)) {
         const creator = members.find(m => eq(m.id, tNode.createdByMemberId));
         if (creator) {
-            // 1. 获取中间人相对于观察者的实时称法 (可能是 "妈妈", 也可能是用户刚才改的 "舅妈")
+            // 1. 获取中间人相对于观察者的实时称法 (可能是 "妈妈", 也可能是用户刚才改的 "二舅妈")
             const cRel = getRigorousRelationship(viewer, creator, members);
+
+            // 核心修复：清理中间人关系的前缀 (如 "二舅妈" -> "舅妈") 后再进行级联地图匹配
+            const cleanCRel = getCleanRelationship(cRel);
 
             // 2. 获取目标人物相对于其中间人的角色 (多维度识别: 备注/标准角色/英文字符串)
             const rawT = (tNode.relationship || "").replace(/\s+/g, "").toLowerCase();
@@ -410,7 +421,7 @@ export function getRigorousRelationship(
                             (tNode.relationship || "");
 
             // 3. 终极级联推算映射表 (完全基于用户提供的“五代关系图谱”)
-            // 逻辑：[中间人身份][TA对中间人备注] -> [TA对我称呼]
+            // 逻辑：[清理后的中间人身份][TA对中间人备注] -> [TA对我称呼]
             const bridgeMap: Record<string, Record<string, string>> = {
                 "妈妈": { "儿子": "兄弟", "女儿": "姐妹", "孙子": "外甥/侄子", "孙女": "外甥/侄女" },
                 "爸爸": { "儿子": "兄弟", "女儿": "姐妹", "孙子": "侄子/外甥", "孙女": "侄女/外甥女" },
@@ -444,10 +455,10 @@ export function getRigorousRelationship(
                 "表弟": { "儿子": "表侄子", "女儿": "表侄女" },
                 "表姐": { "儿子": "表侄子", "女儿": "表侄女" },
                 "表妹": { "儿子": "表侄子", "女儿": "表侄女" },
-                "堂兄": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
-                "堂弟": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
-                "堂姐": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
-                "堂妹": { "儿子": "表兄弟姐妹", "女儿": "表兄弟姐妹" },
+                "堂兄": { "儿子": "表侄子", "女儿": "表侄女" },
+                "堂弟": { "儿子": "表侄子", "女儿": "表侄女" },
+                "堂姐": { "儿子": "表侄子", "女儿": "表侄女" },
+                "堂妹": { "儿子": "表侄子", "女儿": "表侄女" },
                 "兄弟": { "儿子": "侄子", "女儿": "侄女" },
                 "哥哥": { "儿子": "侄子", "女儿": "侄女" },
                 "弟弟": { "儿子": "侄子", "女儿": "侄女" },
@@ -459,7 +470,7 @@ export function getRigorousRelationship(
             };
 
             // 4. 执行匹配
-            const tMap = bridgeMap[cRel];
+            const tMap = bridgeMap[cleanCRel];
             if (tMap && tMap[tRel]) {
                 return tMap[tRel];
             }
