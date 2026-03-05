@@ -7,7 +7,7 @@ import { Button } from "./components/Button";
 import { Card } from "./components/Card";
 import { getRelativeTime, cn } from "./lib/utils";
 import { useAvatarCache, resolveAvatar, updateAvatarCache } from "./lib/useAvatarCache";
-import { getRelativeRelationship, getRigorousRelationship } from "./lib/relationships";
+import { getRelativeRelationship, getRigorousRelationship, RELATIONSHIP_UNRESOLVED } from "./lib/relationships";
 import confetti from "canvas-confetti";
 import { DEMO_MEMBERS, DEMO_EVENTS, isDemoMode } from "./demo-data";
 import { supabase } from "./lib/supabase";
@@ -769,11 +769,32 @@ export const ArchivePage: React.FC = () => {
                 <button
                   onClick={() => {
                     setIsEditingRelation(true);
-                    setTempRelation(getRigorousRelationship(currentUser, member, members));
+                    const rel = getRigorousRelationship(currentUser, member, members);
+                    setTempRelation(rel.startsWith(RELATIONSHIP_UNRESOLVED) ? rel.replace(RELATIONSHIP_UNRESOLVED, "") : rel);
                   }}
                   className="text-sm font-bold text-[#eab308] bg-[#eab308]/5 px-3 py-1 rounded-full border border-[#eab308]/10 tracking-widest flex items-center gap-1.5 hover:bg-[#eab308]/10 transition-colors group"
                 >
-                  <Sparkles size={12} fill="currentColor" /> {getRigorousRelationship(currentUser, member, members)}
+                  <Sparkles size={12} fill="currentColor" />
+                  {(() => {
+                    const rel = getRigorousRelationship(currentUser, member, members);
+                    if (rel.startsWith(RELATIONSHIP_UNRESOLVED)) {
+                      // 触发静默上报
+                      fetch("/api/relationship/telemetry", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          viewerId: currentUser.memberId || currentUser.id,
+                          viewerName: currentUser.name,
+                          targetId: member.id,
+                          targetName: member.name,
+                          intermediateRel: "自动路径",
+                          rawTargetRel: rel.replace(RELATIONSHIP_UNRESOLVED, "")
+                        })
+                      }).catch(() => { });
+                      return "待校准关系";
+                    }
+                    return rel;
+                  })()}
                   <Edit2 size={10} className="opacity-0 group-hover:opacity-50 transition-opacity ml-1" />
                 </button>
               )}

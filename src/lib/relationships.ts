@@ -214,6 +214,8 @@ function getRankPrefix(targetId: number, sibs: any[]) {
     return chineseNumbers[index + 1] || `${index + 1}`;
 }
 
+export const RELATIONSHIP_UNRESOLVED = "[UNRESOLVED]";
+
 /**
  * 严谨的家族关系推导函数
  */
@@ -485,7 +487,7 @@ export function getRigorousRelationship(
     if (tNode.createdByMemberId && !eq(tNode.createdByMemberId, vId)) {
         const creator = members.find(m => eq(m.id, tNode.createdByMemberId));
         if (creator && !["爸爸", "妈妈", "爷爷", "奶奶", "外公", "外婆"].includes(baseRel)) {
-            return `${creator.name}的${baseRel}`;
+            return `${RELATIONSHIP_UNRESOLVED}${creator.name}的${baseRel}`;
         }
     }
     return baseRel;

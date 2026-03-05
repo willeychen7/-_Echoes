@@ -1,17 +1,22 @@
 import React, { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Card } from "./components/Card";
-import { Calendar as CalendarIcon, Phone, Gift, Plus, FolderOpen, Home, CheckCircle, Trash2, Mic, MessageSquare, Camera, Video, Send, X, Heart, Play, Sparkles, ChevronDown, ChevronUp, Share2, Copy } from "lucide-react";
+import {
+  Calendar as CalendarIcon, Phone, Gift, Plus, FolderOpen, Home, CheckCircle,
+  Trash2, Mic, MessageSquare, Camera, Video, Send, X, Heart, Play, Sparkles,
+  ChevronDown, ChevronUp, Share2, Copy, Search, Filter, Smile, Music,
+  MoreHorizontal, User, Star, ChevronRight
+} from "lucide-react";
 import { FamilyMember, FamilyEvent, Message, MessageType } from "./types";
 import { useNavigate, useLocation } from "react-router-dom";
 import { cn, getRelativeTime } from "./lib/utils";
-import { getRigorousRelationship } from "./lib/relationships";
+import { getRigorousRelationship, RELATIONSHIP_UNRESOLVED } from "./lib/relationships";
 import confetti from "canvas-confetti";
 import { DEMO_MEMBERS, DEMO_EVENTS, DEMO_DEFAULT_USER, isDemoMode } from "./demo-data";
 import { supabase } from "./lib/supabase";
 import { DEFAULT_AVATAR, getSafeAvatar } from "./constants";
 import { AudioBar, WallMessages, InlineBlessingPanel } from "./components/FamilyEvents";
-import { updateAvatarCache } from "./lib/useAvatarCache";
+import { resolveAvatar, updateAvatarCache } from "./lib/useAvatarCache";
 
 const getZodiac = (year: number) => {
   const zodiacs = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"];
@@ -124,7 +129,7 @@ export const FamilySquare: React.FC = () => {
         setEvents([...DEMO_EVENTS, ...customEvents]);
       } else if (modeParsed && modeParsed.familyId) {
         const familyId = parseInt(String(modeParsed.familyId));
-        fetch(`/api/family-members?familyId=${familyId}`).then(res => res.json()).then(data => {
+        fetch(`/ api / family - members ? familyId = ${familyId} `).then(res => res.json()).then(data => {
           if (Array.isArray(data)) {
             setMembers(data);
             data.forEach((m: any) => {
@@ -133,11 +138,11 @@ export const FamilySquare: React.FC = () => {
               }
             });
           }
-          fetch(`/api/events?familyId=${familyId}`).then(res => res.json()).then(data => {
+          fetch(`/ api / events ? familyId = ${familyId} `).then(res => res.json()).then(data => {
             if (Array.isArray(data)) setEvents(data);
           }).catch(console.error);
 
-          fetch(`/api/messages`).then(res => res.json()).then(data => {
+          fetch(`/ api / messages`).then(res => res.json()).then(data => {
             if (Array.isArray(data)) {
               const mySentIds = data
                 .filter((m: any) => m.authorName === (currentParsed?.name || parsed?.name) && m.eventId)
@@ -158,14 +163,14 @@ export const FamilySquare: React.FC = () => {
     let channel: any = null;
     if (parsed && parsed.familyId && !isDemoMode(parsed)) {
       channel = supabase
-        .channel(`family-${parsed.familyId}-sync`)
+        .channel(`family - ${parsed.familyId} -sync`)
         .on(
           'postgres_changes',
           {
             event: 'UPDATE',
             schema: 'public',
             table: 'family_members',
-            filter: `family_id=eq.${parsed.familyId}`
+            filter: `family_id = eq.${parsed.familyId} `
           },
           (payload) => {
             console.log('[REALTIME] Family member updated:', payload);
@@ -260,7 +265,7 @@ export const FamilySquare: React.FC = () => {
       }
     } catch (e: any) {
       console.error("[AI Summary Error]:", e);
-      setEventsSummary(`AI 生成失败: ${e.message || "未知错误"}`);
+      setEventsSummary(`AI 生成失败: ${e.message || "未知错误"} `);
     } finally {
       setSummaryLoading(false);
     }
@@ -277,7 +282,7 @@ export const FamilySquare: React.FC = () => {
       localStorage.setItem("demoCustomEvents", JSON.stringify(updated));
     } else {
       try {
-        const res = await fetch(`/api/events/${eventId}`, { method: "DELETE" });
+        const res = await fetch(`/ api / events / ${eventId} `, { method: "DELETE" });
         if (res.ok) setEvents(prev => prev.filter(e => e.id !== eventId));
       } catch (e) { console.error(e); }
     }
@@ -341,7 +346,7 @@ export const FamilySquare: React.FC = () => {
                 className="w-full py-4 bg-gradient-to-r from-[#eab308]/5 to-transparent border-2 border-dashed border-[#eab308]/30 rounded-[2rem] flex items-center justify-center gap-2 text-[#eab308] font-black group hover:bg-[#eab308]/10 transition-all active:scale-[0.98]"
               >
                 <Sparkles size={20} className={cn(summaryLoading && "animate-spin")} />
-                {summaryLoading ? "AI 总结中..." : `本${eventRange === "week" ? "周" : eventRange === "month" ? "月" : "年"}事件总结`}
+                {summaryLoading ? "AI 总结中..." : `本${eventRange === "week" ? "周" : eventRange === "month" ? "月" : "年"} 事件总结`}
               </button>
 
               <AnimatePresence>
@@ -397,7 +402,7 @@ export const FamilySquare: React.FC = () => {
                     : (linkedMember ? [linkedMember] : []);
 
                   const displayName = linkedMembers.length > 0
-                    ? (linkedMembers.length > 3 ? `${linkedMembers.slice(0, 3).map(m => m.name).join("、")}等${linkedMembers.length}人` : linkedMembers.map(m => m.name).join("、"))
+                    ? (linkedMembers.length > 3 ? `${linkedMembers.slice(0, 3).map(m => m.name).join("、")}等${linkedMembers.length} 人` : linkedMembers.map(m => m.name).join("、"))
                     : (event.customMemberName || null);
 
                   const fullNotes = event.notes || "";
@@ -406,7 +411,6 @@ export const FamilySquare: React.FC = () => {
                   const displayTip = (isNoteTooLong && !isNoteExpanded) ? fullNotes.slice(0, 38) + "..." : fullNotes;
                   const getEventInfo = (type: string, title: string) => {
                     if (type === "birthday") return { label: "生日", color: "bg-pink-50 text-pink-500" };
-                    if (type === "graduation") return { label: "毕业礼", color: "bg-blue-50 text-blue-500" };
                     if (title.includes("纪念日") || type === "anniversary") return { label: "纪念日", color: "bg-amber-50 text-amber-500" };
                     return { label: "大事记", color: "bg-emerald-50 text-emerald-500" };
                   };
@@ -453,10 +457,10 @@ export const FamilySquare: React.FC = () => {
                           {/* Row 2: Tag & Days Remaining */}
                           <div className="flex items-center justify-between mb-3">
                             <div className={cn("px-5 py-2 rounded-full text-lg font-black tracking-tight", eventInfo.color)}>
-                              {displayName ? (event.title.replace(new RegExp(`^${displayName}(的)?`), '') || eventInfo.label) : eventInfo.label}
+                              {displayName ? (event.title.replace(new RegExp(`^ ${displayName} (的) ? `), '') || eventInfo.label) : eventInfo.label}
                             </div>
                             <div className="text-lg font-black text-[#eab308] bg-[#eab308]/5 px-5 py-2 rounded-full whitespace-nowrap">
-                              {event.daysRemaining === 0 ? "今天" : `剩${event.daysRemaining}天`}
+                              {event.daysRemaining === 0 ? "今天" : `剩${event.daysRemaining} 天`}
                             </div>
                           </div>
 
@@ -590,7 +594,7 @@ export const FamilySquare: React.FC = () => {
                 <Card
                   key={member.id}
                   className="p-4 border-none shadow-xl shadow-slate-200/40 bg-white rounded-[2.5rem] cursor-pointer hover:shadow-2xl transition-all group overflow-hidden relative"
-                  onClick={() => navigate(`/archive/${member.id}`)}
+                  onClick={() => navigate(`/ archive / ${member.id} `)}
                 >
                   <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><FolderOpen size={80} /></div>
                   <div className="relative z-10 flex flex-col items-center">
@@ -636,7 +640,10 @@ export const FamilySquare: React.FC = () => {
                       </div>
                     </div>
                     <p className="text-lg text-slate-400 font-bold uppercase tracking-widest leading-none mt-1">
-                      {getRigorousRelationship(currentUser, member, members)}
+                      {(() => {
+                        const rel = getRigorousRelationship(currentUser, member, members);
+                        return rel.startsWith(RELATIONSHIP_UNRESOLVED) ? "待校准" : rel;
+                      })()}
                     </p>
                   </div>
                 </Card>
@@ -682,9 +689,9 @@ export const FamilySquare: React.FC = () => {
                       alt="Join QR Code"
                       className="w-full h-full object-contain mix-blend-multiply"
                     />
-                  </div>
+                  </div >
                   <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest leading-none">扫码直接注册</span>
-                </div>
+                </div >
 
                 <div className="bg-slate-50 rounded-2xl p-6 border-2 border-dashed border-slate-200">
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">专属邀请码</p>
@@ -702,11 +709,11 @@ export const FamilySquare: React.FC = () => {
                 >
                   <Copy size={18} /> 仅复制邀请码
                 </button>
-              </div>
-            </motion.div>
-          </div>
+              </div >
+            </motion.div >
+          </div >
         )}
-      </AnimatePresence>
+      </AnimatePresence >
     </>
   );
 };
