@@ -521,7 +521,6 @@ export function getRigorousRelationship(
 
         // --- 映射常量 (置于全局以优化递归性能并修复作用域报错) ---
 
-        // 逆向称谓映射表：目标角色 -> 观察者应该看到的称谓 (支持多路径分解)
         const inverseMap: Record<string, { male: string; female: string }> = {
             "儿子": { male: "爸爸", female: "妈妈" },
             "女儿": { male: "爸爸", female: "妈妈" },
@@ -548,6 +547,46 @@ export function getRigorousRelationship(
             "岳母": { male: "女婿", female: "女婿" },
             "丈夫": { male: "丈夫", female: "妻子" },
             "妻子": { male: "丈夫", female: "妻子" },
+            // 新增扩展：兄弟姐妹及旁系逆向
+            "哥哥": { male: "弟弟", female: "妹妹" },
+            "弟弟": { male: "哥哥", female: "姐姐" },
+            "姐姐": { male: "弟弟", female: "妹妹" },
+            "妹妹": { male: "哥哥", female: "姐姐" },
+            "哥": { male: "弟弟", female: "妹妹" },
+            "弟": { male: "哥哥", female: "姐姐" },
+            "姐": { male: "弟弟", female: "妹妹" },
+            "妹": { male: "哥哥", female: "姐姐" },
+            "表哥": { male: "表弟", female: "表妹" },
+            "表弟": { male: "表哥", female: "表姐" },
+            "表姐": { male: "表弟", female: "表妹" },
+            "表妹": { male: "表哥", female: "表姐" },
+            "堂哥": { male: "堂弟", female: "堂妹" },
+            "堂弟": { male: "堂哥", female: "堂姐" },
+            "堂姐": { male: "堂弟", female: "堂妹" },
+            "堂妹": { male: "堂哥", female: "堂姐" },
+            "大伯": { male: "侄子", female: "侄女" },
+            "叔叔": { male: "侄子", female: "侄女" },
+            "伯伯": { male: "侄子", female: "侄女" },
+            "姑姑": { male: "内侄", female: "内侄女" },
+            "舅舅": { male: "外甥", female: "外甥女" },
+            "阿姨": { male: "外甥", female: "外甥女" },
+            "姨妈": { male: "外甥", female: "外甥女" },
+            "表伯": { male: "表侄子", female: "表侄女" },
+            "表叔": { male: "表侄子", female: "表侄女" },
+            "表姑": { male: "表侄子", female: "表侄女" },
+            "表阿姨": { male: "表外甥", female: "表外甥女" },
+            "表姨": { male: "表外甥", female: "表外甥女" },
+            "表舅": { male: "表外甥", female: "表外甥女" },
+            "堂阿姨": { male: "堂外甥", female: "堂外甥女" },
+            "堂舅": { male: "堂外甥", female: "堂外甥女" },
+            "表外甥": { male: "表舅", female: "表姨" },
+            "表外甥女": { male: "表舅", female: "表姨" },
+            "堂外甥": { male: "堂舅", female: "堂姨" },
+            "堂外甥女": { male: "堂舅", female: "堂姨" },
+            "表侄": { male: "表伯/表叔", female: "表姑" },
+            "表侄女": { male: "表伯/表叔", female: "表姑" },
+            "堂侄": { male: "堂伯/堂叔", female: "堂姑" },
+            "堂侄女": { male: "堂伯/堂叔", female: "堂姑" },
         };
 
         // 姻亲改口映射表 (观察者相对于配偶家人的称呼)
@@ -575,18 +614,20 @@ export function getRigorousRelationship(
             "舅公": { "儿子": "表叔/表伯", "女儿": "表姑" },
             "姑婆": { "儿子": "表叔", "女儿": "表姑", "孙子": "表哥/弟/姐/妹", "孙女": "表哥/弟/姐/妹" },
             "姨婆": { "儿子": "表叔", "女儿": "表姑" },
-            "亲伯": { "儿子": "哥/弟/姐/妹", "女儿": "哥/弟/姐/妹" },
-            "亲叔": { "儿子": "哥/弟/姐/妹", "女儿": "哥/弟/姐/妹" },
-            "亲姑": { "儿子": "表哥/弟/姐/妹", "女儿": "表哥/弟/姐/妹", "丈夫": "姑父" },
-            "大伯": { "儿子": "哥/弟", "女儿": "姐/妹", "妻子": "伯母" },
-            "伯母": { "儿子": "哥/弟", "女儿": "姐/妹" },
-            "伯伯": { "儿子": "哥/弟", "女儿": "姐/妹", "妻子": "伯母" },
-            "叔叔": { "儿子": "哥/弟", "女儿": "姐/妹", "妻子": "婶婶" },
-            "小叔": { "儿子": "哥/弟", "女儿": "姐/妹", "妻子": "婶婶" },
-            "婶婶": { "儿子": "哥/弟", "女儿": "姐/妹" },
+            "亲伯": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
+            "亲叔": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
+            "亲姑": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姑父" },
+            "大伯": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "妻子": "伯母" },
+            "伯母": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
+            "伯伯": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "妻子": "伯母" },
+            "叔叔": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "妻子": "婶婶" },
+            "小叔": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "妻子": "婶婶" },
+            "婶婶": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
             "姑姑": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姑父" },
-            "堂哥": { "儿子": "堂侄", "女儿": "堂侄女", "妻子": "堂嫂" },
-            "堂弟": { "儿子": "堂侄", "女儿": "堂侄女", "妻子": "堂弟媳" },
+            "堂哥": { "儿子": "堂侄子", "女儿": "堂侄女", "妻子": "堂嫂" },
+            "堂弟": { "儿子": "堂侄子", "女儿": "堂侄女", "妻子": "堂弟媳" },
+            "堂姐": { "儿子": "堂外甥", "女儿": "堂外甥女", "丈夫": "堂姐夫" },
+            "堂妹": { "儿子": "堂外甥", "女儿": "堂外甥女", "丈夫": "堂妹夫" },
             "堂叔": { "儿子": "堂兄弟", "女儿": "堂姐妹", "妻子": "堂婶" },
             "堂伯": { "儿子": "堂兄弟", "女儿": "堂姐妹", "妻子": "堂伯母" },
             "亲兄弟": { "儿子": "亲侄子", "女儿": "亲侄女", "孙子": "侄孙", "孙女": "侄孙女" },
@@ -599,33 +640,33 @@ export function getRigorousRelationship(
             "表兄弟": { "儿子": "表侄", "女儿": "表侄女" },
             "表姐妹": { "儿子": "表外甥", "女儿": "表外甥女" },
             "表兄弟姐妹": { "儿子": "表侄/表外甥", "女儿": "表侄/表外甥" },
-            "表伯": { "儿子": "表侄子", "女儿": "表侄女" },
-            "表叔": { "儿子": "表侄子", "女儿": "表侄女" },
-            "表姑": { "儿子": "表外甥", "女儿": "表外甥女" },
+            "表伯": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+            "表叔": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+            "表姑": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
             "舅舅": { "儿子": "表哥/弟", "女儿": "表姐/妹", "妻子": "舅妈" },
             "舅妈": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
             "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姨父" },
             "姨妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姨父" },
-            "兄弟": { "儿子": "亲侄子", "女儿": "亲侄女" },
-            "姐妹": { "儿子": "亲外甥", "女儿": "亲外甥女" },
-            "哥哥": { "儿子": "亲侄子", "女儿": "亲侄女" },
-            "弟弟": { "儿子": "亲侄子", "女儿": "亲侄女" },
-            "姐姐": { "儿子": "亲外甥", "女儿": "亲外甥女" },
-            "妹妹": { "儿子": "亲外甥", "女儿": "亲外甥女" },
-            "哥": { "儿子": "亲侄子", "女儿": "亲侄女" },
-            "弟": { "儿子": "亲侄子", "女儿": "亲侄女" },
-            "姐": { "儿子": "亲外甥", "女儿": "亲外甥女" },
-            "妹": { "儿子": "亲外甥", "女儿": "亲外甥女" },
-            "姐/妹": { "儿子": "亲外甥", "女儿": "亲外甥女" },
-            "哥/弟": { "儿子": "亲侄子", "女儿": "亲侄女" },
+            "兄弟": { "儿子": "侄子", "女儿": "侄女" },
+            "姐妹": { "儿子": "外甥", "女儿": "外甥女" },
+            "哥哥": { "儿子": "侄子", "女儿": "侄女", "妻子": "嫂子" },
+            "弟弟": { "儿子": "侄子", "女儿": "侄女", "妻子": "弟媳" },
+            "姐姐": { "儿子": "外甥", "女儿": "外甥女", "丈夫": "姐夫" },
+            "妹妹": { "儿子": "外甥", "女儿": "外甥女", "丈夫": "妹夫" },
+            "哥": { "儿子": "侄子", "女儿": "侄女" },
+            "弟": { "儿子": "侄子", "女儿": "侄女" },
+            "姐": { "儿子": "外甥", "女儿": "外甥女" },
+            "妹": { "儿子": "外甥", "女儿": "外甥女" },
+            "姐/妹": { "儿子": "外甥", "女儿": "外甥女" },
+            "哥/弟": { "儿子": "侄子", "女儿": "侄女" },
             "儿子": { "妻子": "儿媳", "儿子": "孙子", "女儿": "孙女", "孙辈": "曾孙" },
             "女儿": { "丈夫": "女婿", "儿子": "外孙", "女儿": "外孙女", "孙辈": "外曾孙" },
             "孙子": { "儿子": "曾孙", "女儿": "曾孙女" },
             "外孙": { "儿子": "外曾孙", "女儿": "外曾孙女" },
             "亲侄子": { "妻子": "侄媳妇" },
             "亲外甥": { "妻子": "外甥媳妇" },
-            "二爸": { "妻子": "二妈/婶婶", "儿子": "哥/弟" },
-            "大爸": { "妻子": "大妈/伯母", "儿子": "哥/弟" },
+            "二爸": { "妻子": "二妈/婶婶", "儿子": "堂哥/弟" },
+            "大爸": { "妻子": "大妈/伯母", "儿子": "堂哥/弟" },
             "丈夫": { "爸爸": "公公", "妈妈": "婆婆", "兄弟": "夫家大伯/夫家小叔", "姐妹": "大姑/小姑" },
             "妻子": { "爸爸": "岳父", "妈妈": "岳母", "兄弟": "大舅子/小舅子", "姐妹": "大姨子/小姨子" },
             "夫家大伯": { "儿子": "内侄", "女儿": "内侄女" },
@@ -741,13 +782,14 @@ export function getRigorousRelationship(
                 const sRole = (tNode.standardRole || tNode.standard_role || "").toLowerCase();
 
                 // 核心改进：优先识别标准角色，防止原始备注中的错误文字干扰推导
-                const tRel = (sRole === "daughter" || rawT.includes("女儿")) ? "女儿" :
-                    (sRole === "son" || rawT.includes("儿子")) ? "儿子" :
-                        (sRole === "granddaughter" || rawT.includes("孙女")) ? "孙女" :
-                            (sRole === "grandson" || rawT.includes("孙子")) ? "孙子" :
-                                (sRole === "brother" || rawT.includes("哥") || rawT.includes("弟")) ? "儿子" : // 简化推导
-                                    (sRole === "sister" || rawT.includes("姐") || rawT.includes("妹")) ? "女儿" : // 简化推导
-                                        (tNode.relationship || "");
+                let tRel = "";
+                if (sRole === "daughter" || rawT === "女儿" || rawT === "女" || rawT.endsWith("女儿")) tRel = "女儿";
+                else if (sRole === "son" || rawT === "儿子" || rawT === "子" || rawT.endsWith("儿子")) tRel = "儿子";
+                else if (sRole === "granddaughter" || rawT.includes("孙女")) tRel = "孙女";
+                else if (sRole === "grandson" || rawT.includes("孙子")) tRel = "孙子";
+                else if (sRole === "brother" || rawT.includes("哥") || rawT.includes("弟")) tRel = "儿子"; // 简化推导，同级挂载为儿子方便级联
+                else if (sRole === "sister" || rawT.includes("姐") || rawT.includes("妹")) tRel = "女儿"; // 简化推导
+                else tRel = getCleanRelationship(tNode.relationship || ""); // 如果都不是，尝试直接取基础关系
 
                 // 3. 核心增强：执行多重身份拆解判定 (全局 bridgeMap 匹配)
                 const cRelOptions = cRel.split("/").map(s => getCleanRelationship(s));
@@ -799,6 +841,50 @@ export function getRigorousRelationship(
                 return `${finalTitle} (${rawRemark})`;
             }
             return finalTitle;
+        }
+
+        // 4. 情况 D: 终极反转推演 (Inverse Deduction)
+        // 如果上面都没推出来，意味着从 V 看 T 找不到桥梁。
+        // 我们尝试反转视角，用 t 作为 viewer 来看 v（只在第一层执行以避免死循环）
+        if (depth === 0) {
+            const tToV = getRigorousRelationship(tNode, vNode, members, 99); // depth设为99阻止无限反转
+            const cleanTToV = getCleanRelationship(tToV);
+
+            // 如果 T 认识 V，尝试查 inverseMap 来反向推导 V 对 T 的称呼
+            if (cleanTToV && cleanTToV !== "家人" && cleanTToV !== "我") {
+                // 先全字匹配
+                let inverseMatch = inverseMap[cleanTToV];
+
+                // 没找到全字，尝试拆分查找 (例如 "舅舅/姨丈" 会匹配 "外甥女")
+                if (!inverseMatch) {
+                    for (const [key, val] of Object.entries(inverseMap)) {
+                        if (cleanTToV.includes(val.male) || cleanTToV.includes(val.female) || val.female.includes(cleanTToV)) {
+                            // The val tells us what tNode calls vNode. We need the KEY which is what vNode calls tNode!
+                            // Wait, inverseMap maps "Target Role" -> "What Viewer Calls Target".
+                            // Here tToV is what T calls V. So V's role in the eyes of T is tToV.
+                            // But inverseMap maps "Target's Relation" -> "Inverse Relation". 
+                            // Example: inverseMap["儿子"] = "爸爸". If T calls V "儿子", V calls T "爸爸".
+                        }
+                    }
+                }
+
+                // 正确的做法：T称呼V为 tToV。也就是说，V是T的 tToV。
+                // 那么查 inverseMap[tToV] 即可知道 V 该怎么叫 T。
+                if (!inverseMatch) {
+                    // 尝试从基础 key 匹配
+                    for (const key of Object.keys(inverseMap)) {
+                        if (tToV.includes(key)) {
+                            inverseMatch = inverseMap[key];
+                            break;
+                        }
+                    }
+                }
+
+                if (inverseMatch) {
+                    const finalTitle = tNode.gender === "female" ? inverseMatch.female : inverseMatch.male;
+                    return injectRankingAndRemark(finalTitle, tNode, members);
+                }
+            }
         }
 
         // --- 回退逻辑强化版 ---
