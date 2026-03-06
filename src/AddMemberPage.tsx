@@ -54,7 +54,6 @@ export const AddMemberPage: React.FC = () => {
     rankables.forEach(r => {
       ranks.forEach(prefix => {
         expanded.push(`${prefix}${r}`);
-        if (r === "哥" || r === "姐") expanded.push(`${prefix}${r}${r}`); // 大哥哥, 二姐姐 etc
       });
     });
     return Array.from(new Set(expanded));
@@ -171,8 +170,37 @@ export const AddMemberPage: React.FC = () => {
     const finalRelationship = relationship === "其他" ? customRelationship : relationship;
     let resolvedRelationship = finalRelationship;
 
-    // 如果还没确认过这一步
-    if (!selectedBranch) {
+    // 逻辑分流判定器 (智能推理：如果已经选择了父母，直接推断血统，不弹出询问)
+    let autoInferredBranch = selectedBranch;
+    if (!autoInferredBranch && parentId) {
+      const parent = members.find(m => Number(m.id) === Number(parentId));
+      if (parent) {
+        const parentRel = (parent.relationship || "").trim();
+        const parentRole = parent.standardRole || "";
+        const isMyDirectParent = ["父亲", "母亲", "爸", "妈", "爸爸", "妈妈", "老爸", "老妈"].some(k => parentRel.includes(k)) || ["father", "mother"].includes(parentRole);
+
+        if (isMyDirectParent) {
+          if (["哥", "姐", "弟", "妹", "兄"].some(k => finalRelationship.includes(k))) autoInferredBranch = "亲生";
+          if (["甥", "侄", "孙"].some(k => finalRelationship.includes(k))) autoInferredBranch = "血亲";
+        }
+      }
+    }
+
+    // 防错校验：如果手动选的分支与已选父母冲突 (如选了亲爹却非说是堂亲)
+    if (parentId && selectedBranch) {
+      const parent = members.find(m => Number(m.id) === Number(parentId));
+      const parentRel = (parent?.relationship || "").trim();
+      const parentRole = parent?.standardRole || "";
+      const isMyDirectParent = ["父亲", "母亲", "爸", "妈", "爸爸", "妈妈", "老爸", "老妈"].some(k => parentRel.includes(k)) || ["father", "mother"].includes(parentRole);
+
+      if (isMyDirectParent && ["堂", "表", "姻亲", "社会好友"].includes(selectedBranch)) {
+        alert(`逻辑矛盾：您选择了“${parent?.name}(${parentRel})”作为其父亲，这意味着TA是您的亲缘手足，不能被标记为“${selectedBranch}”。请重新确认名分归属。`);
+        setSelectedBranch(null);
+        return;
+      }
+    }
+
+    if (!autoInferredBranch) {
       if (["外甥", "侄", "孙", "孙辈"].some(k => finalRelationship.includes(k))) {
         setBranchMode('lineage');
         setBranchStage('type');
@@ -193,9 +221,11 @@ export const AddMemberPage: React.FC = () => {
       }
     }
 
+    const currentBranch = selectedBranch || autoInferredBranch;
+
     // 检查是否需要询问排行 (针对已经选了分类但未指明排行且非社交关系的)
     const hasRank = /^(大|二|三|四|五|小|幺|老|一|十)/.test(finalRelationship);
-    if (!selectedRank && !hasRank && selectedBranch !== "社会好友" && ["哥", "姐", "弟", "妹", "甥", "侄", "孙"].some(k => finalRelationship.includes(k))) {
+    if (!selectedRank && !hasRank && currentBranch !== "社会好友" && ["哥", "姐", "弟", "妹", "甥", "侄", "孙"].some(k => finalRelationship.includes(k))) {
       setBranchStage('rank');
       setShowBranchAsk(true);
       return;
@@ -203,7 +233,7 @@ export const AddMemberPage: React.FC = () => {
 
     if (finalRelationship.includes("/")) {
       const parts = finalRelationship.split("/");
-      if (['母家', '表', '姻亲'].includes(selectedBranch || '')) {
+      if (['母家', '表', '姻亲'].includes(currentBranch || '')) {
         // 通常 / 后面的词是母家、表亲或姻亲称谓 (如 侄子/外甥，外甥是母系)
         resolvedRelationship = parts[1] || parts[parts.length - 1];
       } else {
@@ -213,8 +243,8 @@ export const AddMemberPage: React.FC = () => {
     }
 
     // 组合最终关系
-    let relationshipToStore = selectedBranch
-      ? `${resolvedRelationship}(${selectedBranch})`
+    let relationshipToStore = currentBranch
+      ? `${resolvedRelationship}(${currentBranch})`
       : resolvedRelationship;
 
     if (selectedRank) {
@@ -803,8 +833,8 @@ export const AddMemberPage: React.FC = () => {
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">🩸</span>
                       <div className="text-left">
-                        <span className="font-black text-slate-800 block">打断骨头连着筋的血亲</span>
-                        <span className="text-[10px] text-slate-400">比如：我爸亲哥（大伯）</span>
+                        <span className="font-black text-slate-800 block">血亲亲属</span>
+                        <span className="text-[10px] text-slate-400">比如：你爸爸的亲兄弟（伯伯/叔叔）</span>
                       </div>
                     </button>
                     <button
@@ -813,8 +843,8 @@ export const AddMemberPage: React.FC = () => {
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">💍</span>
                       <div className="text-left">
-                        <span className="font-black text-slate-800 block">通过结婚进门的亲戚</span>
-                        <span className="text-[10px] text-slate-400">比如：姑姑的老公（姑父）</span>
+                        <span className="font-black text-slate-800 block">姻亲眷属</span>
+                        <span className="text-[10px] text-slate-400">比如：姑姑的丈夫（姑父）、舅舅的妻子（舅妈）</span>
                       </div>
                     </button>
                     <button
@@ -823,8 +853,8 @@ export const AddMemberPage: React.FC = () => {
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👩‍👦</span>
                       <div className="text-left">
-                        <span className="font-black text-slate-800 block">我妈妈那边的亲兄弟</span>
-                        <span className="text-[10px] text-slate-400">比如：亲舅舅</span>
+                        <span className="font-black text-slate-800 block">我妈妈的娘家人</span>
+                        <span className="text-[10px] text-slate-400">比如：亲舅舅（妈妈的亲哥哥/弟弟）</span>
                       </div>
                     </button>
                   </>
