@@ -94,8 +94,8 @@ export function getCleanRelationship(rel: string): string {
     let clean = (rel || "").trim();
     if (!clean || specialTwoWords.includes(clean)) return clean;
 
-    // 匹配中文数字排行前缀 (如 十一, 二十, 三, 大, 小)
-    const rankRegex = /^(大|小|老|一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|二十一|二十二|二十三|二十四|二十五|二十六|二十七|二十八|二十九|三十)+/;
+    // 匹配中文数字排行前缀 (支持口语化：排行老三、细妹、幺儿等)
+    const rankRegex = /^(大|小|老|一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|二十一|二十二|二十三|二十四|二十五|二十六|二十七|二十八|二十九|三十|排行|排行老|细|幺)+/;
     const match = clean.match(rankRegex);
 
     if (match && clean.length > match[0].length) {
@@ -285,9 +285,13 @@ export function isClan(vNode: any, tNode: any): boolean {
 function getRankPrefix(targetNode: any, members: any[]) {
     // --- 逻辑 A：名分优先 (针对“二爸”、“老小姨”) ---
     const rawRemark = (targetNode.relationship || "").trim();
-    const explicitRankMatch = rawRemark.match(/^(大|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|小|老)/);
+    const explicitRankMatch = rawRemark.match(/^(大|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|小|老|排行老|细|幺)/);
     if (explicitRankMatch) {
-        return explicitRankMatch[0];
+        let rank = explicitRankMatch[0];
+        // 归一化处理：如果包含“排行老”，提取最后的数字/称呼
+        if (rank.startsWith("排行老")) rank = rank.substring(3);
+        else if (rank.startsWith("排行")) rank = rank.substring(2);
+        return rank;
     }
 
     // --- 逻辑 B：生物学排序 (修正：防止缺失代数导致的全员大排行) ---
@@ -696,8 +700,8 @@ export function getRigorousRelationship(
             "表姑": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "表姑父" },
             "舅舅": { "儿子": "表哥/弟", "女儿": "表姐/妹", "妻子": "舅妈" },
             "舅妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "舅舅" },
-            "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姨父" },
-            "姨妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姨父" },
+            "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姨父", "孙子": "表外甥", "孙女": "表外甥女" },
+            "姨妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姨父", "孙子": "表外甥", "孙女": "表外甥女" },
             "兄弟": { "儿子": "亲侄子", "女儿": "亲侄女" },
             "姐妹": { "儿子": "亲外甥", "女儿": "亲外甥女" },
             "哥哥": { "儿子": "亲侄子", "女儿": "亲侄女", "妻子": "嫂子" },

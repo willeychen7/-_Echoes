@@ -139,7 +139,8 @@ export const AddMemberPage: React.FC = () => {
   React.useEffect(() => {
     const rel = (relationship === "其他" ? customRelationship : relationship) || "";
     // 不仅是长辈，平辈和晚辈中的“堂/表/侄/甥/孙”也需要追问父辈关系来锚定
-    const ambiguous = ["叔", "伯", "舅", "姨", "堂", "表", "侄", "甥", "孙", "外孙"].some(k => rel.includes(k));
+    const isDirectFatherOfSomethingElse = rel.includes("爸") && !["父亲", "爸", "爸爸", "老爸", "亲爸"].includes(rel);
+    const ambiguous = ["叔", "伯", "舅", "姨", "堂", "表", "侄", "甥", "孙", "外孙"].some(k => rel.includes(k)) || isDirectFatherOfSomethingElse;
     if (ambiguous) {
       setSafetyStep('ask');
     } else {
@@ -213,9 +214,9 @@ export const AddMemberPage: React.FC = () => {
       }
     }
 
-    // 继续提取排行
+    // 继续提取排行 (支持更多口语化：排行老三、细妹、幺儿等)
     if (!autoInferredRank) {
-      const rankMatch = resolvedRelationship.match(/^(大|二|三|四|五|六|小|幺|老|第一|第二|第三)/);
+      const rankMatch = resolvedRelationship.match(/^(二|三|四|五|六|七|八|九|十|大|小|幺|老|排行老|排行|细|第一|第二|第三)/);
       if (rankMatch) {
         autoInferredRank = rankMatch[0];
         resolvedRelationship = resolvedRelationship.substring(rankMatch[0].length);
@@ -351,9 +352,12 @@ export const AddMemberPage: React.FC = () => {
             familyId,
             createdByMemberId,
             memberType: 'virtual',
+            is_placeholder: true,
             generationNum: genNum,
-            // 自动解析房头
-            ancestralHall: connectingRank ? `${connectingRank}房` : (finalVirtualName.includes("二") ? "二房" : finalVirtualName.includes("大") ? "大房" : null)
+            // 房头锚定：如果指明了排行，则直接确定房头
+            ancestralHall: connectingRank && connectingRank !== '无'
+              ? `${connectingRank}房`
+              : (finalVirtualName.includes("二") ? "二房" : finalVirtualName.includes("大") ? "大房" : null)
           })
         });
         const vData = await vResponse.json();
@@ -381,7 +385,7 @@ export const AddMemberPage: React.FC = () => {
           gender,
           memberType,
           fatherId: currentParentId,
-          ancestralHall: parent?.ancestralHall || null // 自动继承父辈房头
+          ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null))
         })
       });
       const data = await response.json().catch(() => ({}));
@@ -401,7 +405,9 @@ export const AddMemberPage: React.FC = () => {
           standardRole: deducedRole,
           createdByMemberId: currentUser?.memberId,
           gender,
-          memberType
+          memberType,
+          fatherId: currentParentId,
+          ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null))
         });
         localStorage.setItem("demoCustomMembers", JSON.stringify(customMembers));
       } else if (!data.id) {
