@@ -31,11 +31,15 @@ export const AddMemberPage: React.FC = () => {
   const [virtualParentName, setVirtualParentName] = useState("");
   const [memberType, setMemberType] = useState<'human' | 'pet'>('human');
   const [showBranchAsk, setShowBranchAsk] = useState(false);
-  const [selectedBranch, setSelectedBranch] = useState<'paternal' | 'maternal' | null>(null);
+  const [branchMode, setBranchMode] = useState<'lineage' | 'closeness' | 'nature' | null>(null);
+  const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
 
-  // 需要触发分流询问的模糊称谓词
-  // 需要触发分流询问的模糊称谓词 (含孙辈、旁系)
-  const AMBIGUOUS_RELATIONS = ["外甥", "侄", "孙子", "孙女", "外孙", "孙辈"];
+  // 全面涵盖：孙辈、旁系、长辈、以及平辈的潜在歧义词
+  const AMBIGUOUS_RELATIONS = [
+    "外甥", "侄", "孙", "辈",      // 孙辈/后辈
+    "哥", "姐", "弟", "妹",         // 平辈 (堂/表/亲)
+    "叔", "伯", "姑", "舅", "姨"    // 长辈 (血路/姻路)
+  ];
 
   React.useEffect(() => {
     const savedUser = localStorage.getItem("currentUser");
@@ -145,14 +149,27 @@ export const AddMemberPage: React.FC = () => {
 
     const finalRelationship = relationship === "其他" ? customRelationship : relationship;
 
-    // 如果是模糊词且还没选分支，先弹窗询问亲疏路径 (移除且关系 !== "其他" 的限制, 使手动输入也生效)
-    if (AMBIGUOUS_RELATIONS.some(rel => finalRelationship.includes(rel)) && !selectedBranch) {
-      setShowBranchAsk(true);
-      return;
+    // 逻辑分流判定器
+    if (!selectedBranch) {
+      if (["外甥", "侄", "孙", "孙辈"].some(k => finalRelationship.includes(k))) {
+        setBranchMode('lineage');
+        setShowBranchAsk(true);
+        return;
+      }
+      if (["哥", "姐", "弟", "妹"].some(k => finalRelationship.includes(k))) {
+        setBranchMode('closeness');
+        setShowBranchAsk(true);
+        return;
+      }
+      if (["叔", "伯", "姑", "舅", "姨"].some(k => finalRelationship.includes(k))) {
+        setBranchMode('nature');
+        setShowBranchAsk(true);
+        return;
+      }
     }
 
     const relationshipToStore = selectedBranch
-      ? `${finalRelationship}(${selectedBranch === 'maternal' ? '母系' : '父系'})`
+      ? `${finalRelationship}(${selectedBranch})`
       : finalRelationship;
 
     const deducedRole = deduceRole(finalRelationship);
@@ -613,32 +630,109 @@ export const AddMemberPage: React.FC = () => {
               className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl relative z-10 space-y-6"
             >
               <div className="space-y-2 text-center">
-                <h3 className="text-2xl font-black text-slate-800">确认血缘归属</h3>
-                <p className="text-sm text-slate-500">为了精准计算辈分，这位 {relationship} 是：</p>
+                <h3 className="text-2xl font-black text-slate-800">确认名分归属</h3>
+                <p className="text-sm text-slate-500">
+                  {branchMode === 'lineage' && `确认这位 ${relationship} 的归属方向：`}
+                  {branchMode === 'closeness' && `确认这位 ${relationship} 的亲疏程度：`}
+                  {branchMode === 'nature' && `确认这位 ${relationship} 的血缘路径：`}
+                </p>
               </div>
 
               <div className="grid grid-cols-1 gap-3">
-                <button
-                  onClick={() => { setSelectedBranch('maternal'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
-                  className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
-                >
-                  <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👩‍👦</span>
-                  <div className="text-left">
-                    <span className="font-black text-slate-800 block">我母亲家 (母系)</span>
-                    <span className="text-[10px] text-slate-400">对应：TA该叫您“舅舅/阿姨”</span>
-                  </div>
-                </button>
+                {branchMode === 'lineage' && (
+                  <>
+                    <button
+                      onClick={() => { setSelectedBranch('母系'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
+                    >
+                      <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👩‍👦</span>
+                      <div className="text-left">
+                        <span className="font-black text-slate-800 block">我母亲家 (母系)</span>
+                        <span className="text-[10px] text-slate-400">对应：TA该叫您“舅舅/姨妈”</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { setSelectedBranch('父系'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
+                    >
+                      <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👨‍👦</span>
+                      <div className="text-left">
+                        <span className="font-black text-slate-800 block">我父亲家 (父系)</span>
+                        <span className="text-[10px] text-slate-400">对应：TA该叫您“叔父/姑姑”</span>
+                      </div>
+                    </button>
+                  </>
+                )}
 
-                <button
-                  onClick={() => { setSelectedBranch('paternal'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
-                  className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
-                >
-                  <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👨‍👦</span>
-                  <div className="text-left">
-                    <span className="font-black text-slate-800 block">我父亲家 (父系)</span>
-                    <span className="text-[10px] text-slate-400">对应：TA该叫您“叔父/姑姑”</span>
-                  </div>
-                </button>
+                {branchMode === 'closeness' && (
+                  <>
+                    <button
+                      onClick={() => { setSelectedBranch('亲生'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
+                    >
+                      <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">🏠</span>
+                      <div className="text-left">
+                        <span className="font-black text-slate-800 block">亲兄弟姐妹</span>
+                        <span className="text-[10px] text-slate-400">同父同母的直系手足</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { setSelectedBranch('堂'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
+                    >
+                      <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">祠</span>
+                      <div className="text-left">
+                        <span className="font-black text-slate-800 block">堂兄弟姐妹 (父系)</span>
+                        <span className="text-[10px] text-slate-400">同祖父不同父的血亲</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { setSelectedBranch('表'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
+                    >
+                      <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">🍎</span>
+                      <div className="text-left">
+                        <span className="font-black text-slate-800 block">表兄弟姐妹 (姻亲)</span>
+                        <span className="text-[10px] text-slate-400">姑舅姨家的异姓亲戚</span>
+                      </div>
+                    </button>
+                  </>
+                )}
+
+                {branchMode === 'nature' && (
+                  <>
+                    <button
+                      onClick={() => { setSelectedBranch('血亲'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
+                    >
+                      <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">🩸</span>
+                      <div className="text-left">
+                        <span className="font-black text-slate-800 block">原本血亲</span>
+                        <span className="text-[10px] text-slate-400">如：父亲的亲哥哥 (大伯)</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { setSelectedBranch('姻亲'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
+                    >
+                      <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">💍</span>
+                      <div className="text-left">
+                        <span className="font-black text-slate-800 block">婚姻关联</span>
+                        <span className="text-[10px] text-slate-400">如：姑姑的丈夫 (姑父)</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { setSelectedBranch('母系'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
+                    >
+                      <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👩‍👦</span>
+                      <div className="text-left">
+                        <span className="font-black text-slate-800 block">母亲家 (母系)</span>
+                        <span className="text-[10px] text-slate-400">如：母亲的兄弟 (舅舅)</span>
+                      </div>
+                    </button>
+                  </>
+                )}
               </div>
 
               <button

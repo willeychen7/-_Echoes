@@ -72,8 +72,15 @@ export function isFemale(node: any): boolean {
 
     const rawR = (node.relationship || "").trim();
     const name = (node.name || "").trim();
-    const femaleKeywords = ["阿姨", "姑姑", "妈", "姐", "妹", "婆", "娘", "奶", "嫂", "侄女", "外甥女", "表姐", "表妹", "堂姐", "堂妹", "内侄女", "女"];
-    return femaleKeywords.some(word => rawR.includes(word) || name.includes(word));
+    const femaleKeywords = ["阿姨", "姑姑", "母", "妈", "娘", "奶", "婆", "姐", "妹", "嫂", "侄女", "外甥女", "表姐", "表妹", "堂姐", "堂妹", "内侄女", "女"];
+    if (femaleKeywords.some(word => rawR.includes(word))) return true;
+
+    // 特殊处理：如果是“侄/外甥/孙”且备注中有女/姐/妹字
+    if (["侄", "外甥", "孙"].some(k => rawR.includes(k))) {
+        if (["女", "妹", "姐"].some(k => rawR.includes(k))) return true;
+    }
+
+    return femaleKeywords.some(word => name.includes(word));
 }
 
 /**
@@ -94,7 +101,10 @@ export function getCleanRelationship(rel: string): string {
     }
 
     // 移除手动分流打标
-    clean = clean.replace(/\(母系\)/g, "").replace(/\(父系\)/g, "");
+    const tags = ["(母系)", "(父系)", "(亲生)", "(堂)", "(表)", "(血亲)", "(姻亲)"];
+    tags.forEach(t => {
+        clean = clean.split(t).join("");
+    });
 
     return clean;
 }
@@ -854,6 +864,16 @@ export function getRigorousRelationship(
                         finalTitleRaw = isFemale(tNode) ? "姨妈" : "舅舅";
                     } else if (rawT.includes("父系")) {
                         finalTitleRaw = isFemale(tNode) ? "姑姑" : "叔叔";
+                    } else if (rawT.includes("血亲")) {
+                        // 如果是长辈辈分反转
+                        const isElder = ["叔", "伯", "姑", "舅", "姨"].some(k => inverseMatch.female.includes(k) || inverseMatch.male.includes(k));
+                        if (isElder) {
+                            if (isFemale(tNode)) finalTitleRaw = rawT.includes("妈") ? "姨妈" : "姑姑";
+                            else finalTitleRaw = rawT.includes("爸") ? "叔叔" : "舅舅";
+                        }
+                    } else if (rawT.includes("姻亲")) {
+                        if (isFemale(tNode)) finalTitleRaw = "舅妈";
+                        else finalTitleRaw = "姑父";
                     } else if (rawT.includes("舅妈")) {
                         finalTitleRaw = "舅妈";
                     } else if (rawT.includes("舅舅")) {
