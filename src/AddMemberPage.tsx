@@ -1064,15 +1064,21 @@ export const AddMemberPage: React.FC = () => {
                   </div>
 
                   <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 space-y-3">
-                    <p className="text-[15px] font-bold text-slate-800 leading-relaxed text-center">
+                    <p className="text-[15px] font-bold text-slate-800 leading-normal text-center flex flex-wrap items-center justify-center gap-y-1">
                       {(() => {
                         const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship));
-                        if (["孙", "外孙"].some(k => relText.includes(k))) return `您的第几个孩子，是 ${name || '这位晚辈'} 的父母？`;
+                        if (["孙", "外孙"].some(k => relText.includes(k))) return (
+                          <>您的<span className="text-lg text-rose-500 mx-1 px-1 bg-rose-50 rounded-lg">第几个孩子</span>，是 {name || '这位晚辈'} 的父母？</>
+                        );
 
                         if (lineageSide === 'paternal') {
-                          return `那位 ${relText} 的父亲，在您的父辈中排行老几？`;
+                          return (
+                            <>那位 {relText} 的<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">父亲</span>，在您的<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">父辈</span>中排行老几？</>
+                          );
                         } else {
-                          return `那位 ${relText} 的父/母，在您的母系长辈中排行老几？`;
+                          return (
+                            <>那位 {relText} 的<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">父/母</span>，在您的<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">母系长辈</span>中排行老几？</>
+                          );
                         }
                       })()}
                     </p>
