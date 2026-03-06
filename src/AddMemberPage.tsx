@@ -276,15 +276,21 @@ export const AddMemberPage: React.FC = () => {
 
     // 3. 深度安全检查 (Safety Step)：处理堂/表等需要锚定父辈关系的情况
     if (safetyStep === 'ask' && !parentId) {
-      if (!safetyChoice) return; // 还没选亲疏
-      if (safetyChoice === 'real' && !connectingRank) return; // 选了亲支但还没选排行
+      if (!safetyChoice) {
+        alert("请先确认该亲属的血缘分类（亲生/堂表等）");
+        return;
+      }
+      if (safetyChoice === 'real' && !connectingRank) {
+        alert("请指点该亲属的父辈在您家中的排行（如：是二叔还是三叔家的？）");
+        return;
+      }
     }
 
     // 4. 终极兜底：如果系统现在还是无法判定属于哪个支系 (Branch)，强制弹出询问，不准含糊
     if (!autoInferredBranch && !selectedBranch && relationship !== "挚友/其他" && !parentId) {
-      // 只要包含了任何亲属关键词但还没定论，就强制进入分类询问
       if (["表", "堂", "亲", "姑", "姨", "舅", "叔", "伯", "侄", "甥", "孙"].some(k => finalRelationship.includes(k))) {
-        setBranchMode('lineage'); // 默认使用血缘/分房模式询问
+        alert("该称谓涉及分支归属，请先完成下方的亲疏确认。");
+        setBranchMode('lineage');
         setBranchStage('type');
         setShowBranchAsk(true);
         return;
