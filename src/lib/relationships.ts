@@ -162,15 +162,20 @@ export function deduceRole(relationship: string): string {
         "外公": "grandfather_maternal",
         "外婆": "grandmother_maternal",
         "伯公": "grand_uncle_paternal",
+        "伯婆": "grand_aunt_paternal", // 伯公妻
         "姆婆": "grand_aunt_paternal", // 伯公妻
         "叔公": "grand_uncle_paternal",
+        "叔婆": "grand_aunt_paternal", // 叔公妻
         "婶婆": "grand_aunt_paternal", // 叔公妻
         "姑婆": "grand_aunt_paternal",
+        "姑丈公": "grand_uncle_paternal", // 姑婆夫
         "姑公": "grand_uncle_paternal", // 姑婆夫
         "舅公": "grand_uncle_maternal",
         "妗婆": "grand_aunt_maternal", // 舅公妻
         "姨婆": "grand_aunt_maternal",
+        "姨丈公": "grand_uncle_maternal", // 姨婆夫
         "姨公": "grand_uncle_maternal", // 姨婆夫
+        "舅婆": "grand_aunt_maternal", // 舅公妻
         "阿公": "grandfather_paternal",
         "阿嬷": "grandmother_paternal",
         "外嬷": "grandmother_maternal",
@@ -215,6 +220,8 @@ export function deduceRole(relationship: string): string {
         "妹": "sister",
         "姐妹": "sister",
         "姑姑": "aunt_paternal",
+        "姑妈": "aunt_paternal",
+        "姑姐": "aunt_paternal",
         "姑": "aunt_paternal",
         "舅舅": "uncle_maternal",
         "舅": "uncle_maternal",
@@ -234,6 +241,17 @@ export function deduceRole(relationship: string): string {
         "亲伯": "cousin",
         "亲叔": "cousin",
         "亲姑": "cousin",
+        "头房": "cousin",
+        "太爷": "great_grandfather",
+        "太奶": "great_grandmother",
+        "堂伯": "cousin",
+        "堂叔": "cousin",
+        "堂哥": "cousin",
+        "堂弟": "cousin",
+        "堂姐": "cousin",
+        "堂妹": "cousin",
+        "堂侄": "nephew",
+        "堂侄女": "niece",
         "亲侄": "nephew",
         "亲外甥": "nephew",
         "表叔": "cousin",
@@ -244,7 +262,9 @@ export function deduceRole(relationship: string): string {
         "表姐": "cousin",
         "表妹": "cousin",
         "表侄": "nephew",
+        "表侄女": "niece",
         "表外甥": "nephew",
+        "表外甥女": "niece",
         "儿": "son",
         "儿子": "son",
         "女儿": "daughter",
