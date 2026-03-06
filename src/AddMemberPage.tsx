@@ -27,6 +27,7 @@ export const AddMemberPage: React.FC = () => {
   const [parentId, setParentId] = useState<number | null>(null);
   const [safetyStep, setSafetyStep] = useState<'none' | 'ask'>('none');
   const [safetyChoice, setSafetyChoice] = useState<'real' | 'clan' | null>(null);
+  const [connectingRank, setConnectingRank] = useState<string | null>(null); // 衔接人的排行 (如: 大伯、二叔)
   const [isCreatingVirtualParent, setIsCreatingVirtualParent] = useState(false);
   const [virtualParentName, setVirtualParentName] = useState("");
   const [memberType, setMemberType] = useState<'human' | 'pet'>('human');
@@ -148,6 +149,8 @@ export const AddMemberPage: React.FC = () => {
     // 重置分流与排行状态
     setSelectedBranch(null);
     setSelectedRank(null);
+    setConnectingRank(null);
+    setSafetyChoice(null);
     setBranchStage('type');
   }, [relationship, customRelationship]);
 
@@ -269,6 +272,12 @@ export const AddMemberPage: React.FC = () => {
       }
     }
 
+    // 3. 深度安全检查 (Safety Step)：处理堂/表等需要锚定父辈关系的情况
+    if (safetyStep === 'ask' && !parentId) {
+      if (!safetyChoice) return; // 还没选亲疏
+      if (safetyChoice === 'real' && !connectingRank) return; // 选了亲支但还没选排行
+    }
+
     const currentBranch = selectedBranch || autoInferredBranch;
     const currentRank = (selectedRank === "none" ? null : (selectedRank || autoInferredRank));
 
@@ -302,23 +311,38 @@ export const AddMemberPage: React.FC = () => {
     setIsSubmitting(true);
     let currentParentId = parentId;
 
-    // 严谨：如果启用了虚拟父辈创建
-    if (isCreatingVirtualParent && virtualParentName.trim()) {
+    // 严谨：如果启用了虚拟父辈创建 (即没有在现有列表中选到父辈)
+    if ((isCreatingVirtualParent || (safetyStep === 'ask' && !parentId)) && !currentParentId) {
       try {
-        const genNum = (currentUser.generationNum || 30) - 1; // 默认爷爷辈/上一辈
+        const isMaternal = ["舅", "姨", "表"].some(k => finalRelationship.includes(k));
+        let baseRel = isMaternal ? "姨/舅" : "伯/叔";
+        if (safetyChoice === 'clan') baseRel = isMaternal ? "表姨/表舅" : "叔公/伯公";
+
+        // 组合具体的虚拟父辈名称
+        let finalVirtualName = virtualParentName.trim() || `${name}的父亲`;
+        if (safetyChoice === 'real' && connectingRank && connectingRank !== '无') {
+          // 如果是亲兄弟且指明了排行，自动修正名字
+          if (isMaternal) {
+            finalVirtualName = relationship.includes("舅") ? `${connectingRank}舅` : `${connectingRank}姨`;
+          } else {
+            finalVirtualName = (connectingRank === "大" || connectingRank === "一") ? "大伯" : `${connectingRank}叔`;
+          }
+        }
+
+        const genNum = (currentUser.generationNum || 30) - 1;
         const vResponse = await fetch("/api/family-members", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: virtualParentName.trim(),
-            relationship: safetyChoice === 'clan' ? "叔公" : "长辈",
-            avatarUrl: `https://avatar.vercel.sh/${virtualParentName.trim()}.svg`,
+            name: finalVirtualName,
+            relationship: safetyChoice === 'clan' ? (isMaternal ? "表亲" : "叔公") : baseRel,
+            avatarUrl: `https://avatar.vercel.sh/${finalVirtualName}.svg`,
             familyId,
             createdByMemberId,
             memberType: 'virtual',
             generationNum: genNum,
             // 自动解析房头
-            ancestralHall: virtualParentName.includes("二") ? "二房" : virtualParentName.includes("大") ? "大房" : virtualParentName.includes("三") ? "三房" : null
+            ancestralHall: connectingRank ? `${connectingRank}房` : (finalVirtualName.includes("二") ? "二房" : finalVirtualName.includes("大") ? "大房" : null)
           })
         });
         const vData = await vResponse.json();
@@ -663,26 +687,43 @@ export const AddMemberPage: React.FC = () => {
                   <button
                     onClick={() => {
                       setSafetyChoice('real');
-                      if (relationship === "叔叔" || relationship === "伯伯") {
-                        // 自动建议更亲密的称谓
-                        setRelationship(gender === 'male' ? "二爸" : "姑姑");
-                      }
                     }}
-                    className="p-6 rounded-2xl border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all text-center group"
+                    className={`p-6 rounded-2xl border-2 transition-all text-center group ${safetyChoice === 'real' ? 'border-[#eab308] bg-white' : 'border-slate-50 bg-slate-50 hover:border-slate-200'}`}
                   >
                     <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">🏡</div>
-                    <span className="font-black text-slate-800 block">亲兄弟</span>
-                    <span className="text-[10px] text-slate-400">亲爷爷的孩子</span>
+                    <span className="font-black text-slate-800 block">亲兄弟姐妹</span>
+                    <span className="text-[10px] text-slate-400">同父母出的</span>
                   </button>
                   <button
                     onClick={() => setSafetyChoice('clan')}
-                    className="p-6 rounded-2xl border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all text-center group"
+                    className={`p-6 rounded-2xl border-2 transition-all text-center group ${safetyChoice === 'clan' ? 'border-[#eab308] bg-white' : 'border-slate-50 bg-slate-50 hover:border-slate-200'}`}
                   >
                     <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">祠</div>
-                    <span className="font-black text-slate-800 block">堂兄弟</span>
-                    <span className="text-[10px] text-slate-400">叔公/伯公的孩子</span>
+                    <span className="font-black text-slate-800 block">不清楚/稍远</span>
+                    <span className="text-[10px] text-slate-400">可能是从祖/曾祖辈分支</span>
                   </button>
                 </div>
+
+                {safetyChoice === 'real' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="pt-4 border-t border-slate-100 space-y-4"
+                  >
+                    <p className="text-center text-xs font-bold text-slate-500">那是您父亲/母亲那边的 排行老几？</p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {["大", "二", "三", "四", "五", "小", "无"].map(rk => (
+                        <button
+                          key={rk}
+                          onClick={() => setConnectingRank(rk)}
+                          className={`py-3 rounded-xl border-2 text-xs font-black transition-all ${connectingRank === rk ? 'border-[#eab308] bg-white text-black' : 'bg-slate-50 border-transparent text-slate-400'}`}
+                        >
+                          {rk === "无" ? "不知" : rk}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
               </motion.div>
             )}
 
