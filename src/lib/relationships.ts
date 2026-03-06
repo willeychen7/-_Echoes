@@ -139,26 +139,19 @@ export function deduceRole(relationship: string): string {
     }
 
     const map: Record<string, string> = {
-        "太公": "great_grandfather",
-        "太婆": "great_grandmother",
-        "太太": "great_grandmother",
-        "老祖公": "great_great_grandfather",
-        "老祖婆": "great_great_grandmother",
-        "老祖": "great_great_grandfather",
+        "老爸": "father",
+        "亲爸": "father",
         "爸爸": "father",
         "父亲": "father",
         "阿爸": "father",
         "亚爸": "father",
         "爸": "father",
-        "爹": "father",
+        "老妈": "mother",
         "亲妈": "mother",
         "妈妈": "mother",
         "母亲": "mother",
         "阿妈": "mother",
         "妈": "mother",
-        "老爸": "father",
-        "亲爸": "father",
-        "老妈": "mother",
         "高祖父": "great_great_grandfather",
         "高祖母": "great_great_grandmother",
         "曾祖父": "great_grandfather",
@@ -202,6 +195,7 @@ export function deduceRole(relationship: string): string {
         "嗣子": "son",
         "祧子": "son",
         "大伯": "uncle_paternal",
+        "小叔": "uncle_paternal",
         "叔叔": "uncle_paternal",
         "伯伯": "uncle_paternal",
         "叔": "uncle_paternal",
@@ -319,6 +313,8 @@ export function deduceRole(relationship: string): string {
         "外孙女": "granddaughter",
         "曾孙": "grandson",
         "曾孙女": "granddaughter",
+        "外曾孙": "grandson",
+        "侄子": "nephew",
         "外甥": "nephew",
         "姨甥": "nephew",
         "甥": "nephew",
@@ -332,12 +328,49 @@ export function deduceRole(relationship: string): string {
     return map[clean] || "family";
 }
 
+// --- 性能与缓存优化 (文化策略模式 & 递归缓存) ---
+export interface DialectConfig {
+    name: "standard" | "hokkien" | "cantonese";
+}
+
+export interface KinshipContext {
+    membersMap: Map<number, any>;
+    memo: Map<string, string>;
+    dialect: DialectConfig;
+}
+
+const engineCache = new WeakMap<any[], KinshipContext>();
+
+export function getKinshipContext(members: any[]): KinshipContext {
+    if (engineCache.has(members)) return engineCache.get(members)!;
+
+    const membersMap = new Map<number, any>();
+    for (const m of members) {
+        // 数据规范化 (Schema Normalization)
+        membersMap.set(Number(m.id), {
+            ...m,
+            fatherId: m.fatherId || m.father_id,
+            motherId: m.motherId || m.mother_id,
+            birthDate: m.birthDate || m.birth_date,
+            id: Number(m.id)
+        });
+    }
+
+    const ctx: KinshipContext = {
+        membersMap,
+        memo: new Map(),
+        dialect: { name: "hokkien" }
+    };
+    engineCache.set(members, ctx);
+    return ctx;
+}
+
 /**
  * 核心：获取一个人的父母 ID 集合
  */
 function getParentIds(nodeId: any, members: any[]) {
-    // 强制转为数字比较，防止 string vs number
-    const node = members.find(m => Number(m.id) === Number(nodeId));
+    const ctx = getKinshipContext(members);
+    const node = ctx.membersMap.get(Number(nodeId));
     if (!node) return { fId: null, mId: null };
     return { fId: node.fatherId, mId: node.motherId };
 }
@@ -416,7 +449,7 @@ function getRankPrefix(targetNode: any, members: any[]) {
 }
 
 /**
- * 严谨的家族关系推导函数
+ * 严谨的家族关系推导函数 (核心缓存外壳)
  */
 export function getRigorousRelationship(
     viewer: any,
@@ -424,23 +457,40 @@ export function getRigorousRelationship(
     members: any[],
     depth: number = 0
 ): string {
+    const ctx = getKinshipContext(members);
+    let vId = viewer?.memberId ? Number(viewer.memberId) : (viewer?.id ? Number(viewer.id) : null);
+    const tId = target?.id ? Number(target.id) : null;
+
+    if (vId && !ctx.membersMap.has(vId)) {
+        const boundMember = Array.from(ctx.membersMap.values()).find(m => Number(m.userId) === vId);
+        if (boundMember) vId = Number(boundMember.id);
+    }
+
+    if (tId === null || vId === null) return target?.relationship || "家人";
+
+    const cacheKey = `${vId}_${tId}_${depth}`;
+    if (ctx.memo.has(cacheKey)) return ctx.memo.get(cacheKey)!;
+
+    const result = computeRigorousRelationship(viewer, target, members, depth, ctx, vId as number, tId as number);
+    ctx.memo.set(cacheKey, result);
+    return result;
+}
+
+function computeRigorousRelationship(
+    viewer: any,
+    target: any,
+    members: any[],
+    depth: number,
+    ctx: KinshipContext,
+    vId: number,
+    tId: number
+): string {
     try {
-        // 防止递归死循环 (设置最大推导深度)
         if (depth > 2) return target?.relationship || "家人";
-        let vId = viewer?.memberId ? Number(viewer.memberId) : (viewer?.id ? Number(viewer.id) : null);
-        const tId = target?.id ? Number(target.id) : null;
-
-        // NOTE: 关键修正 - 如果 vId 是 userId，需要在 members 中找到对应的 memberId
-        if (vId && !members.some(m => Number(m.id) === vId)) {
-            const boundMember = members.find(m => Number(m.userId) === vId);
-            if (boundMember) vId = Number(boundMember.id);
-        }
-
-        if (tId === null || vId === null) return target?.relationship || "家人";
         if (vId === tId) return "我";
 
-        const vNode = members.find(m => Number(m.id) === vId);
-        const tNode = members.find(m => Number(m.id) === tId);
+        const vNode = ctx.membersMap.get(vId);
+        const tNode = ctx.membersMap.get(tId);
         if (!vNode || !tNode) return target?.relationship || "家人";
 
         // --- 【关键修正点】物种隔离拦截器 ---
