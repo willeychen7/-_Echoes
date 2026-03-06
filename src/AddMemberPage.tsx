@@ -177,8 +177,8 @@ export const AddMemberPage: React.FC = () => {
     const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship)) || "";
 
     // 明确的血亲词缀（排除带有姻亲特征的：夫、嫂、媳、母、妈、婆、婶、父、爹）
-    const isStrictBlood = ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨", "儿子", "女儿", "孙", "侄", "外甥"].some(k => relText.includes(k))
-      && !["夫", "嫂", "媳", "母", "妈", "婆", "婶", "父", "爹的", "父的"].some(k => relText.includes(k));
+    const isStrictBlood = ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨", "儿子", "女儿", "孙", "侄", "外甥", "公", "爷", "奶", "婆"].some(k => relText.includes(k))
+      && !["夫", "嫂", "媳", "母", "妈", "婶", "父", "爹", "妗", "老公", "老婆"].some(k => relText.includes(k));
 
     // 强拦截 1：明显的血亲，不能选姻亲或社交
     if (isStrictBlood && type !== 'blood') {
@@ -205,12 +205,12 @@ export const AddMemberPage: React.FC = () => {
     const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship)) || "";
 
     // 父族专属
-    if (["堂", "叔", "伯", "姑", "侄"].some(k => relText.includes(k)) && side !== 'paternal') {
+    if (["堂", "叔", "伯", "姑", "婶", "侄"].some(k => relText.includes(k)) && !["表", "外"].some(k => relText.includes(k)) && side !== 'paternal') {
       setCorrectionNotice(`礼法防错：“${relText}”属于父族宗亲一脉，不可选母系外戚。`);
       return;
     }
     // 母族专属
-    if (["舅", "姨", "外孙", "外甥"].some(k => relText.includes(k)) && side !== 'maternal') {
+    if (["舅", "姨", "妗", "姥", "外孙", "外甥"].some(k => relText.includes(k)) && side !== 'maternal') {
       setCorrectionNotice(`礼法防错：“${relText}”属于母系外戚一脉，不可选父族宗亲。`);
       return;
     }
@@ -264,8 +264,10 @@ export const AddMemberPage: React.FC = () => {
     const finalRelationship = (relationship === "其他" ? customRelationship : relationship) || "";
 
     // 触发前置向导检查: 当用户点击建立档案时才检查是否需要完善关系
+    const ambiguousKeywords = ["叔", "伯", "舅", "姨", "姑", "婶", "妗", "公", "婆", "爷", "奶", "堂", "表", "侄", "甥", "孙", "外孙"];
+    const exactMatchesToSkip = ["爷爷", "奶奶", "外公", "外婆", "爸爸", "妈妈", "父亲", "母亲", "儿子", "女儿", "妻子", "丈夫", "老公", "老婆", "亲爸", "亲妈", "老爸", "老妈"];
     const isDirectFatherOfSomethingElse = finalRelationship.includes("爸") && !["父亲", "爸", "爸爸", "老爸", "亲爸"].includes(finalRelationship);
-    const isAmbiguous = ["叔", "伯", "舅", "姨", "堂", "表", "侄", "甥", "孙", "外孙"].some(k => finalRelationship.includes(k)) || isDirectFatherOfSomethingElse;
+    const isAmbiguous = (ambiguousKeywords.some(k => finalRelationship.includes(k)) && !exactMatchesToSkip.includes(finalRelationship)) || isDirectFatherOfSomethingElse;
 
     if (isAmbiguous) {
       if (!selectedRank) { setSafetyStep('ask'); setSafetyStage(1); return; }
@@ -345,7 +347,7 @@ export const AddMemberPage: React.FC = () => {
         setShowBranchAsk(true);
         return;
       }
-      if (["叔", "伯", "姑", "舅", "姨"].some(k => finalRelationship.includes(k))) {
+      if (["叔", "伯", "姑", "舅", "姨", "公", "婆", "爷", "奶", "妗", "婶"].some(k => finalRelationship.includes(k))) {
         setBranchMode('nature');
         setBranchStage('type');
         setShowBranchAsk(true);
@@ -375,7 +377,7 @@ export const AddMemberPage: React.FC = () => {
 
     // 4. 终极兜底：如果系统现在还是无法判定属于哪个支系 (Branch)，强制弹出询问，不准含糊
     if (!autoInferredBranch && !selectedBranch && relationship !== "挚友/其他" && !parentId) {
-      if (["表", "堂", "亲", "姑", "姨", "舅", "叔", "伯", "侄", "甥", "孙"].some(k => finalRelationship.includes(k))) {
+      if (["表", "堂", "亲", "姑", "姨", "舅", "叔", "伯", "侄", "甥", "孙", "公", "婆", "爷", "奶", "妗", "婶"].some(k => finalRelationship.includes(k))) {
         setCorrectionNotice("该称谓涉及分支归属，请先在下方弹出层中确认其亲疏归属选项。");
         setBranchMode('lineage');
         setBranchStage('type');
