@@ -688,28 +688,44 @@ export const AddMemberPage: React.FC = () => {
                 exit={{ opacity: 0, scale: 0.95 }}
                 className="bg-white p-6 rounded-[2rem] border-2 border-[#eab308]/20 shadow-xl space-y-6 relative overflow-hidden"
               >
-                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none"><Check size={60} /></div>
-                <div className="space-y-2">
-                  <h3 className="text-xl font-black text-slate-800">确认亲属关系</h3>
-                  <p className="text-sm text-slate-500">
-                    {(() => {
-                      const rel = (relationship === "其他" ? customRelationship : relationship);
-                      const isJunior = ["孙", "外孙"].some(k => rel.includes(k));
-                      const isPeer = ["哥", "姐", "弟", "妹", "甥", "侄"].some(k => rel.includes(k)) || (rel.includes("孙") && !isJunior);
-                      const isMaternal = ["舅", "姨", "表"].some(k => rel.includes(k));
+                <div className="bg-amber-50 rounded-2xl p-6 space-y-4 border border-amber-100/50">
+                  <div className="flex gap-4 items-start">
+                    <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-2xl flex-shrink-0">🧐</div>
+                    <div>
+                      <h4 className="font-black text-slate-800 text-lg">名分与房分确认</h4>
+                      <div className="space-y-1">
+                        <p className="text-sm font-bold text-slate-700">
+                          {(() => {
+                            const rel = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship));
+                            const isJunior = ["孙", "外孙"].some(k => rel.includes(k));
+                            const isPeer = ["哥", "姐", "弟", "妹", "甥", "侄"].some(k => rel.includes(k)) || (rel.includes("孙") && !isJunior);
+                            const isMaternal = ["舅", "姨", "表"].some(k => rel.includes(k));
 
-                      if (isJunior) {
-                        return `请问这位 ${rel} 的父亲/母亲，是您的第几个孩子（老大、老二等）？`;
-                      } else if (isPeer) {
-                        if (isMaternal) return `请问这位 ${rel} 的母亲/父亲，是您父母的亲兄弟姐妹（如：嫡亲舅舅/姨妈），还是更远一点的表亲？`;
-                        return `请问这位 ${rel} 的父亲，是您父亲的亲兄弟（伯伯/叔叔），还是堂兄弟？`;
-                      } else {
-                        if (isMaternal) return `这位长辈是您母亲/父亲的亲兄弟姐妹（如：亲舅舅/亲姨妈），还是更远的分支？`;
-                        return `这位长辈是您父亲的亲兄弟，还是堂兄弟？`;
-                      }
-                    })()}
-                  </p>
+                            if (isJunior) {
+                              return `那位 ${rel} (${name || '未命名'}) 的父亲/母亲，是您的第几个孩子？`;
+                            } else if (isPeer) {
+                              if (isMaternal) return `这位 ${rel} (${name || '未命名'}) 的母亲/父亲，在母系长辈中排行老几？`;
+                              return `这位 ${rel} (${name || '未命名'}) 的父亲，在父辈中排行老几？`;
+                            } else {
+                              return `这位长辈 ${rel} (${name || '未命名'})，在他/她那一辈中排行老几？`;
+                            }
+                          })()}
+                        </p>
+                        <p className="text-[11px] text-amber-600/80 leading-relaxed">
+                          {(() => {
+                            const rel = (relationship === "其他" ? customRelationship : relationship);
+                            const isJunior = ["孙", "外孙"].some(k => rel.includes(k));
+                            const isMaternal = ["舅", "姨", "表"].some(k => rel.includes(k));
+                            if (isJunior) return "提示：请选择该孩子在您子女中的排行，这将决定孙辈的‘房分’。";
+                            if (isMaternal) return "提示：请选择您舅舅或姨妈的排行，这将决定表亲支系的‘房分’。";
+                            return "提示：请选择您伯伯或叔叔的排行（如：老大、老二），这将决定堂兄弟姐妹的‘房分’。";
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => {
@@ -718,7 +734,7 @@ export const AddMemberPage: React.FC = () => {
                     className={`p-6 rounded-2xl border-2 transition-all text-center group ${safetyChoice === 'real' ? 'border-[#eab308] bg-white' : 'border-slate-50 bg-slate-50 hover:border-slate-200'}`}
                   >
                     <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">
-                      {["孙", "外孙"].some(k => (relationship === "其他" ? customRelationship : relationship).includes(k)) ? "�" : "�🏡"}
+                      {["孙", "外孙"].some(k => (relationship === "其他" ? customRelationship : relationship).includes(k)) ? "🏠" : "🏡"}
                     </div>
                     <span className="font-black text-slate-800 block">
                       {["孙", "外孙"].some(k => (relationship === "其他" ? customRelationship : relationship).includes(k)) ? "您的子女所生" : "亲兄弟姐妹"}
@@ -741,16 +757,14 @@ export const AddMemberPage: React.FC = () => {
                   </button>
                 </div>
 
-                {safetyChoice === 'real' && (
+                {safetyChoice === 'real' && !parentId && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     className="pt-4 border-t border-slate-100 space-y-4"
                   >
                     <p className="text-center text-xs font-bold text-slate-500">
-                      {["孙", "外孙"].some(k => (relationship === "其他" ? customRelationship : relationship).includes(k))
-                        ? "请问那是您的第几个孩子？"
-                        : "那是您父亲/母亲那边的 排行老几？"}
+                      请指定具体的排行
                     </p>
                     <div className="grid grid-cols-4 gap-2">
                       {["大", "二", "三", "四", "五", "小", "无"].map(rk => (
