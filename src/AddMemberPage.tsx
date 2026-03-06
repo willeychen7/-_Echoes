@@ -311,7 +311,7 @@ export const AddMemberPage: React.FC = () => {
       const isMyDirectParent = ["父亲", "母亲", "爸", "妈", "爸爸", "妈妈", "老爸", "老妈"].some(k => parentRel.includes(k)) || ["father", "mother"].includes(parentRole);
 
       if (isMyDirectParent && ["堂", "表", "姻亲", "社会好友"].includes(selectedBranch)) {
-        alert(`逻辑矛盾：您选择了“${parent?.name}(${parentRel})”作为其父亲，这意味着TA是您的亲缘手足，不能被标记为“${selectedBranch}”。请重新确认名分归属。`);
+        setCorrectionNotice(`逻辑矛盾：该成员的长辈是“${parent?.name}(${parentRel})”，TA应属同脉手足，不可选为“${selectedBranch}”。`);
         setSelectedBranch(null);
         return;
       }
@@ -341,19 +341,19 @@ export const AddMemberPage: React.FC = () => {
     // 3. 深度安全检查 (Wizard Step)：处理向导交互
     if (safetyStep === 'ask' && !parentId) {
       if (!selectedRank) {
-        alert("请先完成阶段一：指定该成员在其同辈中的排行");
+        setCorrectionNotice("请求阻断：请先完成【第一阶段】指定该成员在其同辈中的排行。");
         return;
       }
       if (!kinshipType) {
-        alert("请先确认阶段二：该成员与您的根本关系定性");
+        setCorrectionNotice("请求阻断：请先完成【第二阶段】确认该成员与您的根本关系定性。");
         return;
       }
       if (kinshipType !== 'social' && !lineageSide) {
-        alert("请先完成阶段三：该亲属所属的宗亲/外戚方位");
+        setCorrectionNotice("请求阻断：请先完成【第三阶段】指明该亲属所属的宗亲或外戚方位。");
         return;
       }
       if (kinshipType !== 'social' && !connectingRank) {
-        alert("请先完成阶段四：明确该亲属在家族中的房分排行");
+        setCorrectionNotice("请求阻断：请先完成【第四阶段】明确该支脉在家族中的房分排行。");
         return;
       }
     }
@@ -361,7 +361,7 @@ export const AddMemberPage: React.FC = () => {
     // 4. 终极兜底：如果系统现在还是无法判定属于哪个支系 (Branch)，强制弹出询问，不准含糊
     if (!autoInferredBranch && !selectedBranch && relationship !== "挚友/其他" && !parentId) {
       if (["表", "堂", "亲", "姑", "姨", "舅", "叔", "伯", "侄", "甥", "孙"].some(k => finalRelationship.includes(k))) {
-        alert("该称谓涉及分支归属，请先完成下方的亲疏确认。");
+        setCorrectionNotice("该称谓涉及分支归属，请先在下方弹出层中确认其亲疏归属选项。");
         setBranchMode('lineage');
         setBranchStage('type');
         setShowBranchAsk(true);
@@ -393,11 +393,10 @@ export const AddMemberPage: React.FC = () => {
     const currentBranchName = selectedBranch || autoInferredBranch;
     const side = lineageSide || (currentBranchName === '母家' ? 'maternal' : 'paternal');
 
-    // 如果是母系（外戚），绝对不能出现“堂”
+    // 如果是母系（外戚）或选择了母家选项，绝对不能出现“堂”
     if (side === 'maternal' && (resolvedRelationship.includes("堂") || currentBranchName === '堂')) {
-      alert(`传统礼法提醒：母系（外家）亲属应称“表”不称“堂”。系统已自动为您修正为“表${resolvedRelationship.replace("堂", "")}”。`);
-      resolvedRelationship = resolvedRelationship.replace("堂", "表");
-      if (autoInferredBranch === '堂') autoInferredBranch = '表';
+      setCorrectionNotice(`违背传统礼法：母系（外家）一脉不可存在“堂”之名分，请修正关系称谓或选择正确的亲疏方位。`);
+      return; // 强拦截，决不允许创建档案
     }
 
     // 最终组合逻辑：确保“堂/表”逻辑与支系一致
@@ -1046,8 +1045,8 @@ export const AddMemberPage: React.FC = () => {
 
           <Button
             size="xl"
-            className="w-full py-6 text-xl font-bold rounded-full bg-[#eab308] hover:bg-[#d9a306] text-black shadow-lg shadow-[#eab308]/20 border-none transition-all"
-            disabled={!name || !relationship || (relationship === "其他" && !customRelationship) || isSubmitting}
+            className="w-full py-6 text-xl font-bold rounded-full bg-[#eab308] hover:bg-[#d9a306] text-black shadow-lg shadow-[#eab308]/20 border-none transition-all disabled:opacity-50 disabled:shadow-none"
+            disabled={!name || !relationship || (relationship === "其他" && !customRelationship) || isSubmitting || !!correctionNotice}
             onClick={handleAdd}
           >
             {isSubmitting ? "正在创建档案..." : "建立档案"}
