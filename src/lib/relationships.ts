@@ -66,7 +66,7 @@ export const RELATIONSHIP_OPTIONS = [
  * 支持无限排行 (1-99+)
  */
 export function getCleanRelationship(rel: string): string {
-    const specialTwoWords = ["大伯", "大爷", "大妈", "大娘", "大哥", "大姐", "小弟", "小妹", "老爸", "老妈", "老婆", "老公"];
+    const specialTwoWords = ["大伯", "大爷", "大妈", "大娘", "老爸", "老妈", "老婆", "老公"];
     let clean = (rel || "").trim();
     if (!clean || specialTwoWords.includes(clean)) return clean;
 
@@ -624,13 +624,13 @@ export function getRigorousRelationship(
             "小叔": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "妻子": "婶婶" },
             "婶婶": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
             "姑姑": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姑父" },
-            "堂哥": { "儿子": "堂侄子", "女儿": "堂侄女", "妻子": "堂嫂" },
-            "堂弟": { "儿子": "堂侄子", "女儿": "堂侄女", "妻子": "堂弟媳" },
+            "堂哥": { "儿子": "堂侄", "女儿": "堂侄女", "妻子": "堂嫂" },
+            "堂弟": { "儿子": "堂侄", "女儿": "堂侄女", "妻子": "堂弟媳" },
             "堂姐": { "儿子": "堂外甥", "女儿": "堂外甥女", "丈夫": "堂姐夫" },
             "堂妹": { "儿子": "堂外甥", "女儿": "堂外甥女", "丈夫": "堂妹夫" },
             "堂叔": { "儿子": "堂兄弟", "女儿": "堂姐妹", "妻子": "堂婶" },
             "堂伯": { "儿子": "堂兄弟", "女儿": "堂姐妹", "妻子": "堂伯母" },
-            "亲兄弟": { "儿子": "亲侄子", "女儿": "亲侄女", "孙子": "侄孙", "孙女": "侄孙女" },
+            "亲兄弟": { "儿子": "亲侄", "女儿": "亲侄女", "孙子": "侄孙", "孙女": "侄孙女" },
             "亲姐妹": { "儿子": "亲外甥", "女儿": "亲外甥女", "孙子": "外甥孙", "孙女": "外甥孙女" },
             "亲兄弟姐妹": { "儿子": "亲侄/亲外甥", "女儿": "亲侄/亲外甥" },
             "表哥": { "儿子": "表侄", "女儿": "表侄女", "妻子": "表嫂" },
@@ -640,25 +640,25 @@ export function getRigorousRelationship(
             "表兄弟": { "儿子": "表侄", "女儿": "表侄女" },
             "表姐妹": { "儿子": "表外甥", "女儿": "表外甥女" },
             "表兄弟姐妹": { "儿子": "表侄/表外甥", "女儿": "表侄/表外甥" },
-            "表伯": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
-            "表叔": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
-            "表姑": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
+            "表伯": { "儿子": "表哥/弟", "女儿": "表姐/妹", "妻子": "表伯母" },
+            "表叔": { "儿子": "表哥/弟", "女儿": "表姐/妹", "妻子": "表婶" },
+            "表姑": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "表姑父" },
             "舅舅": { "儿子": "表哥/弟", "女儿": "表姐/妹", "妻子": "舅妈" },
             "舅妈": { "儿子": "表哥/弟", "女儿": "表姐/妹" },
             "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姨父" },
             "姨妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姨父" },
-            "兄弟": { "儿子": "侄子", "女儿": "侄女" },
-            "姐妹": { "儿子": "外甥", "女儿": "外甥女" },
-            "哥哥": { "儿子": "侄子", "女儿": "侄女", "妻子": "嫂子" },
-            "弟弟": { "儿子": "侄子", "女儿": "侄女", "妻子": "弟媳" },
-            "姐姐": { "儿子": "外甥", "女儿": "外甥女", "丈夫": "姐夫" },
-            "妹妹": { "儿子": "外甥", "女儿": "外甥女", "丈夫": "妹夫" },
-            "哥": { "儿子": "侄子", "女儿": "侄女" },
-            "弟": { "儿子": "侄子", "女儿": "侄女" },
-            "姐": { "儿子": "外甥", "女儿": "外甥女" },
-            "妹": { "儿子": "外甥", "女儿": "外甥女" },
-            "姐/妹": { "儿子": "外甥", "女儿": "外甥女" },
-            "哥/弟": { "儿子": "侄子", "女儿": "侄女" },
+            "兄弟": { "儿子": "亲侄子", "女儿": "亲侄女" },
+            "姐妹": { "儿子": "亲外甥", "女儿": "亲外甥女" },
+            "哥哥": { "儿子": "亲侄子", "女儿": "亲侄女", "妻子": "嫂子" },
+            "弟弟": { "儿子": "亲侄子", "女儿": "亲侄女", "妻子": "弟媳" },
+            "姐姐": { "儿子": "亲外甥", "女儿": "亲外甥女", "丈夫": "姐夫" },
+            "妹妹": { "儿子": "亲外甥", "女儿": "亲外甥女", "丈夫": "妹夫" },
+            "哥": { "儿子": "亲侄子", "女儿": "亲侄女", "妻子": "嫂子" },
+            "弟": { "儿子": "亲侄子", "女儿": "亲侄女", "妻子": "弟媳" },
+            "姐": { "儿子": "亲外甥", "女儿": "亲外甥女", "丈夫": "姐夫" },
+            "妹": { "儿子": "亲外甥", "女儿": "亲外甥女", "丈夫": "妹夫" },
+            "姐/妹": { "儿子": "亲外甥", "女儿": "亲外甥女" },
+            "哥/弟": { "儿子": "亲侄子", "女儿": "亲侄女" },
             "儿子": { "妻子": "儿媳", "儿子": "孙子", "女儿": "孙女", "孙辈": "曾孙" },
             "女儿": { "丈夫": "女婿", "儿子": "外孙", "女儿": "外孙女", "孙辈": "外曾孙" },
             "孙子": { "儿子": "曾孙", "女儿": "曾孙女" },
@@ -850,39 +850,47 @@ export function getRigorousRelationship(
             const tToV = getRigorousRelationship(tNode, vNode, members, 99); // depth设为99阻止无限反转
             const cleanTToV = getCleanRelationship(tToV);
 
-            // 如果 T 认识 V，尝试查 inverseMap 来反向推导 V 对 T 的称呼
+            // 如果 T 认识 V (tToV)，我们需要推导 V 怎么叫 T。
+            // 假设张三(T)看 k仔(V) 叫 "外甥女"，那也就是说 V 在 T 面前的角色是 "外甥女"。
+            // inverseMap的结构是： 当我知道自己在某人面前叫 "X"，我该叫对方什么？ 
+            // 所以如果 tToV 就是 "外甥女"，那么 inverseMap["外甥女"] 就会告诉我(V)该叫对方(T)什么！
             if (cleanTToV && cleanTToV !== "家人" && cleanTToV !== "我") {
-                // 先全字匹配
                 let inverseMatch = inverseMap[cleanTToV];
 
-                // 没找到全字，尝试拆分查找 (例如 "舅舅/姨丈" 会匹配 "外甥女")
+                // 没找到全字，尝试基于 key 的包含匹配
                 if (!inverseMatch) {
-                    for (const [key, val] of Object.entries(inverseMap)) {
-                        if (cleanTToV.includes(val.male) || cleanTToV.includes(val.female) || val.female.includes(cleanTToV)) {
-                            // The val tells us what tNode calls vNode. We need the KEY which is what vNode calls tNode!
-                            // Wait, inverseMap maps "Target Role" -> "What Viewer Calls Target".
-                            // Here tToV is what T calls V. So V's role in the eyes of T is tToV.
-                            // But inverseMap maps "Target's Relation" -> "Inverse Relation". 
-                            // Example: inverseMap["儿子"] = "爸爸". If T calls V "儿子", V calls T "爸爸".
+                    for (const key of Object.keys(inverseMap)) {
+                        if (cleanTToV.includes(key)) {
+                            inverseMatch = inverseMap[key];
+                            // 修正：如果是因为 V是表亲而找到的，可能匹配到了直系的兄弟，需要修正为表亲
+                            if (cleanTToV.includes("表") && !key.includes("表")) {
+                                const mapToPaternal = { "叔/伯": "表叔/表伯", "姑/婶": "表姑", "外甥": "表外甥", "侄": "表侄" };
+                            }
+                            break;
                         }
                     }
                 }
 
-                // 正确的做法：T称呼V为 tToV。也就是说，V是T的 tToV。
-                // 那么查 inverseMap[tToV] 即可知道 V 该怎么叫 T。
+                // 双向备用查找：如果 T(男)叫V(男)为"外甥"，那在逆向查找时，如果没查到 "外甥"，看哪个 value 包含 "外甥"
                 if (!inverseMatch) {
-                    // 尝试从基础 key 匹配
-                    for (const key of Object.keys(inverseMap)) {
-                        if (tToV.includes(key)) {
-                            inverseMatch = inverseMap[key];
+                    for (const [key, val] of Object.entries(inverseMap)) {
+                        if (val.male.includes(cleanTToV) || val.female.includes(cleanTToV)) {
+                            // Found that if someone calls me `key`, I call them `val.male/female`.
+                            // But here it's reversed. We know T calls V `cleanTToV`. Which means val matches cleanTToV.
+                            // So V should call T `key`!
+                            // But wait! If T(男) calls V(男) "外甥"，and we see inverseMap["舅舅"] = {male: "外甥", female: "外甥女"}
+                            // Then V calling T is EXACTLY "舅舅"。
+                            inverseMatch = { male: key, female: key }; // Fallback rough match
                             break;
                         }
                     }
                 }
 
                 if (inverseMatch) {
-                    const finalTitle = tNode.gender === "female" ? inverseMatch.female : inverseMatch.male;
-                    return injectRankingAndRemark(finalTitle, tNode, members);
+                    const mappedTitle = tNode.gender === "female" ? inverseMatch.female : inverseMatch.male;
+                    // 取出的 mappedTitle 如果带有 "/", 取第一个，例如 "舅舅/姨丈"
+                    const finalTitleRaw = mappedTitle.split("/")[0];
+                    return injectRankingAndRemark(finalTitleRaw, tNode, members);
                 }
             }
         }
