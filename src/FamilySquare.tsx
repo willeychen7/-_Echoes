@@ -126,7 +126,15 @@ export const FamilySquare: React.FC = () => {
         const familyId = parseInt(String(modeParsed.familyId));
         fetch(`/api/family-members?familyId=${familyId}`).then(res => res.json()).then(data => {
           if (Array.isArray(data)) {
-            setMembers(data);
+            // 过滤掉用于桥接关系的虚拟人物 (memberType === 'virtual' 或 姓名包含特定占位后缀)
+            const filteredMembers = data.filter((m: any) =>
+              m.member_type !== 'virtual' &&
+              m.memberType !== 'virtual' &&
+              !m.name?.includes("的子女") &&
+              !m.name?.includes("的兄弟姐妹") &&
+              !m.name?.includes("的孩子")
+            );
+            setMembers(filteredMembers);
             data.forEach((m: any) => {
               if (m.id && (m.avatar_url || m.avatarUrl)) {
                 updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
@@ -162,30 +170,37 @@ export const FamilySquare: React.FC = () => {
         .on(
           'postgres_changes',
           {
-            event: 'UPDATE',
+            event: '*', // 监听所有变动 (INSERT/UPDATE/DELETE)
             schema: 'public',
             table: 'family_members',
             filter: `family_id=eq.${parsed.familyId}`
           },
           (payload) => {
-            console.log('[REALTIME] Family member updated:', payload);
-            const updated = payload.new as any;
-            // 实时更新本地成员列表
-            setMembers(prev => prev.map(m =>
-              m.id === updated.id
-                ? { ...m, ...updated, avatarUrl: updated.avatar_url, name: updated.name, relationship: updated.relationship }
-                : m
-            ));
-            // 同步更新全局头像缓存
-            if (updated.avatar_url) {
-              updateAvatarCache(updated.id, updated.avatar_url);
-            }
-            // 如果更新的是我自己，同步我的个人资料
-            if (updated.id === parsed.memberId) {
-              const freshUser = { ...parsed, avatar: updated.avatar_url, name: updated.name };
-              localStorage.setItem("currentUser", JSON.stringify(freshUser));
-              setCurrentUser(freshUser);
-              setUserAvatar(updated.avatar_url);
+            console.log('[REALTIME] Family member change:', payload.eventType, payload.new);
+
+            if (payload.eventType === 'INSERT') {
+              const newcomer = payload.new as any;
+              // 过滤虚拟人物
+              if (newcomer.member_type !== 'virtual' &&
+                !newcomer.name?.includes("的孩子") &&
+                !newcomer.name?.includes("的子女")) {
+                setMembers(prev => [...prev, newcomer]);
+              }
+            } else if (payload.eventType === 'UPDATE') {
+              const updated = payload.new as any;
+              setMembers(prev => prev.map(m =>
+                m.id === updated.id
+                  ? { ...m, ...updated, avatarUrl: updated.avatar_url, name: updated.name }
+                  : m
+              ));
+              if (updated.id === parsed.memberId) {
+                const freshUser = { ...parsed, avatar: updated.avatar_url, name: updated.name };
+                localStorage.setItem("currentUser", JSON.stringify(freshUser));
+                setCurrentUser(freshUser);
+                setUserAvatar(updated.avatar_url);
+              }
+            } else if (payload.eventType === 'DELETE') {
+              setMembers(prev => prev.filter(m => m.id !== payload.old.id));
             }
           }
         )

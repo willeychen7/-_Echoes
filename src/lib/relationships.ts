@@ -61,6 +61,19 @@ export const RELATIONSHIP_OPTIONS = [
     { value: "pet", label: "宠物/毛孩子" },
 ];
 
+/** 统一性别判断逻辑 */
+export function isFemale(node: any): boolean {
+    if (!node) return false;
+    const g = (node.gender || "").toString().toLowerCase().trim();
+    if (g === "female" || g === "女") return true;
+    if (g === "male" || g === "男") return false;
+
+    const rawR = (node.relationship || "").trim();
+    const name = (node.name || "").trim();
+    const femaleKeywords = ["阿姨", "姑姑", "妈", "姐", "妹", "婆", "娘", "奶", "嫂", "侄女", "外甥女", "表姐", "表妹", "堂姐", "堂妹", "内侄女", "女"];
+    return femaleKeywords.some(word => rawR.includes(word) || name.includes(word));
+}
+
 /**
  * 清理排行前缀 (大, 二, 十一, 十二... 小, 老等)，还原为基础称谓
  * 支持无限排行 (1-99+)
@@ -509,11 +522,11 @@ export function getRigorousRelationship(
         const { fId: tf, mId: tm } = getParentIds(tId, members);
         if (tf) {
             const { fId: tff, mId: tfm } = getParentIds(tf, members);
-            if (eq(tff, vId) || eq(tfm, vId)) return tNode.gender === "female" ? "孙女" : "孙子";
+            if (eq(tff, vId) || eq(tfm, vId)) return isFemale(tNode) ? "孙女" : "孙子";
         }
         if (tm) {
             const { fId: tmf, mId: tmm } = getParentIds(tm, members);
-            if (eq(tmf, vId) || eq(tmm, vId)) return tNode.gender === "female" ? "外孙女" : "外孙子";
+            if (eq(tmf, vId) || eq(tmm, vId)) return isFemale(tNode) ? "外孙女" : "外孙子";
         }
 
         // 6. 配偶 (基于共同子女推断)
@@ -521,14 +534,14 @@ export function getRigorousRelationship(
             (eq(child.fatherId, vId) && eq(child.motherId, tId)) ||
             (eq(child.motherId, vId) && eq(child.fatherId, tId))
         );
-        if (vIsSpouse) return tNode.gender === "female" ? "妻子" : "丈夫";
+        if (vIsSpouse) return isFemale(tNode) ? "妻子" : "丈夫";
 
         // 7. 舅舅/阿姨/叔叔/姑姑 (父母的兄弟姐妹 - 带排行)
         if (vf) {
             const { fId: vff, mId: vfm } = getParentIds(vf, members);
             const fSiblings = members.filter(m => (vff && eq(m.fatherId, vff)) || (vfm && eq(m.motherId, vfm)));
             if (fSiblings.some(s => eq(s.id, tId))) {
-                if (tNode.gender === "female") return "姑姑";
+                if (isFemale(tNode)) return "姑姑";
 
                 // 细化 叔/伯 (基于父亲与目标的生日对比)
                 const fNode = members.find(m => eq(m.id, vf));
@@ -545,7 +558,7 @@ export function getRigorousRelationship(
             const { fId: vmf, mId: vmm } = getParentIds(vm, members);
             const mSiblings = members.filter(m => (vmf && eq(m.fatherId, vmf)) || (vmm && eq(m.motherId, vmm)));
             if (mSiblings.some(s => eq(s.id, tId))) {
-                return tNode.gender === "female" ? "阿姨" : "舅舅";
+                return isFemale(tNode) ? "阿姨" : "舅舅";
             }
         }
 
@@ -556,7 +569,7 @@ export function getRigorousRelationship(
         );
         if (mySiblings.some(s => eq(tNode.fatherId, s.id) || eq(tNode.motherId, s.id))) {
             const clan = isClan(vNode, tNode);
-            return clan ? (tNode.gender === "female" ? "亲侄女" : "亲侄子") : (tNode.gender === "female" ? "外甥女" : "外甥");
+            return clan ? (isFemale(tNode) ? "亲侄女" : "亲侄子") : (isFemale(tNode) ? "外甥女" : "外甥");
         }
 
         // --- 映射常量 (置于全局以优化递归性能并修复作用域报错) ---
@@ -734,7 +747,7 @@ export function getRigorousRelationship(
             const myRoleToCreator = vNode.relationship || "";
             for (const [key, value] of Object.entries(inverseMap)) {
                 if (myRoleToCreator.includes(key)) {
-                    const titleRaw = tNode.gender === "female" ? value.female : value.male;
+                    const titleRaw = isFemale(tNode) ? value.female : value.male;
                     const finalTitle = titleRaw.split("/")[0];
                     return injectRankingAndRemark(finalTitle, tNode, members);
                 }
@@ -947,8 +960,8 @@ export function getRigorousRelationship(
                         finalTitleRaw = "阿姨";
                     } else {
                         // 如果没有关键词，再按性别取默认值
-                        const isFemale = tNode.gender === "female" || ["阿姨", "姑姑", "妈", "姐", "妹", "婆", "娘", "奶", "嫂", "女"].some(word => rawT.includes(word));
-                        finalTitleRaw = isFemale ? inverseMatch.female.split("/")[0] : inverseMatch.male.split("/")[0];
+                        const female = isFemale(tNode);
+                        finalTitleRaw = female ? inverseMatch.female.split("/")[0] : inverseMatch.male.split("/")[0];
                     }
 
                     return injectRankingAndRemark(finalTitleRaw, tNode, members);
