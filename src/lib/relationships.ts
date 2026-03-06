@@ -54,9 +54,11 @@ export const RELATIONSHIP_OPTIONS = [
     { value: "aunt_maternal", label: "阿姨" },
     { value: "son", label: "儿子" },
     { value: "daughter", label: "女儿" },
-    { value: "grandson", label: "孙子/外孙" },
     { value: "nephew", label: "侄子/外甥" },
-    { value: "cousin", label: "表亲/亲访" },
+    { value: "niece", label: "侄女/外甥女" },
+    { value: "grandson", label: "孙子/外孙" },
+    { value: "granddaughter", label: "孙女/外孙女" },
+    { value: "cousin", label: "表亲/堂亲" },
     { value: "family", label: "其他家人" },
     { value: "pet", label: "宠物/毛孩子" },
 ];

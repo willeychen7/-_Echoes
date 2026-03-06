@@ -34,7 +34,8 @@ export const AddMemberPage: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState<'paternal' | 'maternal' | null>(null);
 
   // 需要触发分流询问的模糊称谓词
-  const AMBIGUOUS_RELATIONS = ["外甥", "外甥女", "侄子", "侄女", "外甥、侄子", "外甥女、侄女"];
+  // 需要触发分流询问的模糊称谓词 (含孙辈、旁系)
+  const AMBIGUOUS_RELATIONS = ["外甥", "侄", "孙子", "孙女", "外孙", "孙辈"];
 
   React.useEffect(() => {
     const savedUser = localStorage.getItem("currentUser");
@@ -144,8 +145,8 @@ export const AddMemberPage: React.FC = () => {
 
     const finalRelationship = relationship === "其他" ? customRelationship : relationship;
 
-    // 如果是模糊词且还没选分支，先弹窗询问亲疏路径
-    if (AMBIGUOUS_RELATIONS.some(rel => finalRelationship.includes(rel)) && !selectedBranch && relationship !== "其他") {
+    // 如果是模糊词且还没选分支，先弹窗询问亲疏路径 (移除且关系 !== "其他" 的限制, 使手动输入也生效)
+    if (AMBIGUOUS_RELATIONS.some(rel => finalRelationship.includes(rel)) && !selectedBranch) {
       setShowBranchAsk(true);
       return;
     }
