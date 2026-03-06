@@ -791,6 +791,8 @@ export function getRigorousRelationship(
                 else if (sRole === "grandson" || rawT.includes("孙子")) tRel = "孙子";
                 else if (sRole === "brother" || rawT.includes("哥") || rawT.includes("弟")) tRel = "儿子"; // 简化推导，同级挂载为儿子方便级联
                 else if (sRole === "sister" || rawT.includes("姐") || rawT.includes("妹")) tRel = "女儿"; // 简化推导
+                else if (sRole === "wife" || ["老婆", "妻子", "爱人", "夫人", "内人", "太太"].some(w => rawT.includes(w))) tRel = "妻子";
+                else if (sRole === "husband" || ["老公", "丈夫", "爱人", "先生"].some(w => rawT.includes(w))) tRel = "丈夫";
                 else tRel = getCleanRelationship(tNode.relationship || ""); // 如果都不是，尝试直接取基础关系
 
                 // 3. 核心增强：执行多重身份拆解判定 (全局 bridgeMap 匹配)
@@ -799,22 +801,23 @@ export function getRigorousRelationship(
                 for (const cleanCRel of cRelOptions) {
                     if (bridgeMap[cleanCRel] && bridgeMap[cleanCRel][tRel]) {
                         const finalTitle = bridgeMap[cleanCRel][tRel].replace("夫家", "");
-                        return injectRankingAndRemark(finalTitle, tNode, members);
+                        return injectRankingAndRemark(finalTitle, tNode, members, getRankPrefix(creator, members));
                     }
                 }
             }
         }
 
         // --- 注入逻辑辅助函数 ---
-        function injectRankingAndRemark(baseRel: string, tNode: any, members: any[]) {
+        function injectRankingAndRemark(baseRel: string, tNode: any, members: any[], inheritedPrefixStr: string = "") {
             let finalTitle = baseRel;
             // 1. 排行注入 (A逻辑)
-            const prefix = getRankPrefix(tNode, members);
-            const rankable = ["爸爸", "叔叔", "叔伯", "姑姑", "阿姨", "舅舅", "姐/妹", "哥/弟", "兄弟", "姐妹", "堂姐/妹", "堂兄/弟", "表姐/妹", "表哥/弟"];
+            const prefix = getRankPrefix(tNode, members) || inheritedPrefixStr;
+            const rankable = ["爸爸", "叔叔", "叔伯", "姑姑", "阿姨", "舅舅", "姐/妹", "哥/弟", "兄弟", "姐妹", "堂姐/妹", "堂兄/弟", "表姐/妹", "表哥/弟", "嫂子", "嫂", "弟媳", "姐夫", "妹夫", "伯母", "婶婶", "舅妈", "姨父", "姑父"];
             if (prefix && rankable.some(r => baseRel.includes(r))) {
                 // 如果 baseRel 还没带前缀且不是排好的，则注入排行
                 if (!prefix.split("").some(char => baseRel.startsWith(char))) {
                     finalTitle = prefix + baseRel;
+                    finalTitle = finalTitle.replace("嫂子", "嫂").replace("弟媳妇", "弟媳");
                 }
             }
 
