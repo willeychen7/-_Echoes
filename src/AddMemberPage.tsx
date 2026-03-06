@@ -33,6 +33,8 @@ export const AddMemberPage: React.FC = () => {
   const [showBranchAsk, setShowBranchAsk] = useState(false);
   const [branchMode, setBranchMode] = useState<'lineage' | 'closeness' | 'nature' | null>(null);
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
+  const [branchStage, setBranchStage] = useState<'type' | 'rank'>('type');
+  const [selectedRank, setSelectedRank] = useState<string | null>(null);
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
 
   // 全面涵盖：孙辈、旁系、长辈、以及平辈的潜在歧义词
@@ -43,7 +45,20 @@ export const AddMemberPage: React.FC = () => {
   ];
 
   // 预定义的建议列表 (用于下拉选择)
-  const RELATIONSHIP_SUGGESTIONS = RELATIONSHIP_OPTIONS.map(opt => opt.label);
+  const RELATIONSHIP_SUGGESTIONS = React.useMemo(() => {
+    const bases = RELATIONSHIP_OPTIONS.map(opt => opt.label);
+    const ranks = ["大", "二", "三", "四", "五", "小", "幺"];
+    const rankables = ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨", "侄", "甥"];
+
+    let expanded: string[] = [...bases];
+    rankables.forEach(r => {
+      ranks.forEach(prefix => {
+        expanded.push(`${prefix}${r}`);
+        if (r === "哥" || r === "姐") expanded.push(`${prefix}${r}${r}`); // 大哥哥, 二姐姐 etc
+      });
+    });
+    return Array.from(new Set(expanded));
+  }, []);
 
   React.useEffect(() => {
     const savedUser = localStorage.getItem("currentUser");
@@ -107,6 +122,10 @@ export const AddMemberPage: React.FC = () => {
       setSafetyStep('none');
       setSafetyChoice(null);
     }
+    // 重置分流与排行状态
+    setSelectedBranch(null);
+    setSelectedRank(null);
+    setBranchStage('type');
   }, [relationship, customRelationship]);
 
   // 自动化：当需要创建虚拟父辈时，预填一个温情的名称
@@ -150,27 +169,38 @@ export const AddMemberPage: React.FC = () => {
     const createdByMemberId = currentUser?.memberId;
 
     const finalRelationship = relationship === "其他" ? customRelationship : relationship;
+    let resolvedRelationship = finalRelationship;
 
-    // 逻辑分流判定器
+    // 如果还没确认过这一步
     if (!selectedBranch) {
       if (["外甥", "侄", "孙", "孙辈"].some(k => finalRelationship.includes(k))) {
         setBranchMode('lineage');
+        setBranchStage('type');
         setShowBranchAsk(true);
         return;
       }
-      if (["哥", "姐", "弟", "妹"].some(k => finalRelationship.includes(k))) {
+      if (["哥", "姐", "弟", "妹", "兄"].some(k => finalRelationship.includes(k))) {
         setBranchMode('closeness');
+        setBranchStage('type');
         setShowBranchAsk(true);
         return;
       }
       if (["叔", "伯", "姑", "舅", "姨"].some(k => finalRelationship.includes(k))) {
         setBranchMode('nature');
+        setBranchStage('type');
         setShowBranchAsk(true);
         return;
       }
     }
 
-    let resolvedRelationship = finalRelationship;
+    // 检查是否需要询问排行 (针对已经选了分类但未指明排行且非社交关系的)
+    const hasRank = /^(大|二|三|四|五|小|幺|老|一|十)/.test(finalRelationship);
+    if (!selectedRank && !hasRank && selectedBranch !== "社会好友" && ["哥", "姐", "弟", "妹", "甥", "侄", "孙"].some(k => finalRelationship.includes(k))) {
+      setBranchStage('rank');
+      setShowBranchAsk(true);
+      return;
+    }
+
     if (finalRelationship.includes("/")) {
       const parts = finalRelationship.split("/");
       if (['母家', '表', '姻亲'].includes(selectedBranch || '')) {
@@ -182,9 +212,14 @@ export const AddMemberPage: React.FC = () => {
       }
     }
 
-    const relationshipToStore = selectedBranch
+    // 组合最终关系
+    let relationshipToStore = selectedBranch
       ? `${resolvedRelationship}(${selectedBranch})`
       : resolvedRelationship;
+
+    if (selectedRank) {
+      relationshipToStore = `${selectedRank}${relationshipToStore}`;
+    }
 
     const deducedRole = deduceRole(finalRelationship);
 
@@ -678,17 +713,22 @@ export const AddMemberPage: React.FC = () => {
               <div className="space-y-2 text-center">
                 <h3 className="text-2xl font-black text-slate-800">确认名分归属</h3>
                 <p className="text-sm text-slate-500">
-                  {branchMode === 'lineage' && `想确认下，这位 ${relationship === '其他' ? customRelationship : relationship} 是：`}
-                  {branchMode === 'closeness' && `这位 ${relationship === '其他' ? customRelationship : relationship} 与您的亲近程度是：`}
-                  {branchMode === 'nature' && `这位 ${relationship === '其他' ? customRelationship : relationship} 是通过哪条路认的亲：`}
+                  {branchStage === 'type' && (
+                    <>
+                      {branchMode === 'lineage' && `想确认下，这位 ${relationship === '其他' ? customRelationship : relationship} 是：`}
+                      {branchMode === 'closeness' && `这位 ${relationship === '其他' ? customRelationship : relationship} 与您的亲近程度是：`}
+                      {branchMode === 'nature' && `这位 ${relationship === '其他' ? customRelationship : relationship} 是通过哪条路认的亲：`}
+                    </>
+                  )}
+                  {branchStage === 'rank' && `请问这位 ${relationship === '其他' ? customRelationship : relationship} 在这辈排行第几？`}
                 </p>
               </div>
 
               <div className="grid grid-cols-1 gap-3">
-                {branchMode === 'lineage' && (
+                {branchStage === 'type' && branchMode === 'lineage' && (
                   <>
                     <button
-                      onClick={() => { setSelectedBranch('母家'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      onClick={() => { setSelectedBranch('母家'); setTimeout(handleAdd, 50); }}
                       className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👩‍👦</span>
@@ -698,7 +738,7 @@ export const AddMemberPage: React.FC = () => {
                       </div>
                     </button>
                     <button
-                      onClick={() => { setSelectedBranch('父家'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      onClick={() => { setSelectedBranch('父家'); setTimeout(handleAdd, 50); }}
                       className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👨‍👦</span>
@@ -710,10 +750,10 @@ export const AddMemberPage: React.FC = () => {
                   </>
                 )}
 
-                {branchMode === 'closeness' && (
+                {branchStage === 'type' && branchMode === 'closeness' && (
                   <>
                     <button
-                      onClick={() => { setSelectedBranch('亲生'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      onClick={() => { setSelectedBranch('亲生'); setTimeout(handleAdd, 50); }}
                       className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">🏠</span>
@@ -723,7 +763,7 @@ export const AddMemberPage: React.FC = () => {
                       </div>
                     </button>
                     <button
-                      onClick={() => { setSelectedBranch('堂'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      onClick={() => { setSelectedBranch('堂'); setTimeout(handleAdd, 50); }}
                       className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">祠</span>
@@ -733,7 +773,7 @@ export const AddMemberPage: React.FC = () => {
                       </div>
                     </button>
                     <button
-                      onClick={() => { setSelectedBranch('表'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      onClick={() => { setSelectedBranch('表'); setTimeout(handleAdd, 50); }}
                       className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">🍎</span>
@@ -742,13 +782,23 @@ export const AddMemberPage: React.FC = () => {
                         <span className="text-[10px] text-slate-400">也就是咱们常说的“表亲”</span>
                       </div>
                     </button>
+                    <button
+                      onClick={() => { setSelectedBranch('社会好友'); setShowBranchAsk(false); setTimeout(handleAdd, 50); }}
+                      className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-slate-300 hover:bg-white transition-all flex items-center gap-4 group opacity-70"
+                    >
+                      <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">🤝</span>
+                      <div className="text-left">
+                        <span className="font-black text-slate-800 block">社会好友 / 损友</span>
+                        <span className="text-[10px] text-slate-400">非血缘关系的挚友、同学等</span>
+                      </div>
+                    </button>
                   </>
                 )}
 
-                {branchMode === 'nature' && (
+                {branchStage === 'type' && branchMode === 'nature' && (
                   <>
                     <button
-                      onClick={() => { setSelectedBranch('血亲'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      onClick={() => { setSelectedBranch('血亲'); setTimeout(handleAdd, 50); }}
                       className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">🩸</span>
@@ -758,7 +808,7 @@ export const AddMemberPage: React.FC = () => {
                       </div>
                     </button>
                     <button
-                      onClick={() => { setSelectedBranch('姻亲'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      onClick={() => { setSelectedBranch('姻亲'); setTimeout(handleAdd, 50); }}
                       className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">💍</span>
@@ -768,7 +818,7 @@ export const AddMemberPage: React.FC = () => {
                       </div>
                     </button>
                     <button
-                      onClick={() => { setSelectedBranch('母家'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      onClick={() => { setSelectedBranch('母家'); setTimeout(handleAdd, 50); }}
                       className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👩‍👦</span>
@@ -778,6 +828,24 @@ export const AddMemberPage: React.FC = () => {
                       </div>
                     </button>
                   </>
+                )}
+
+                {branchStage === 'rank' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {["大", "二", "三", "四", "五", "六", "小", "无"].map(rk => (
+                      <button
+                        key={rk}
+                        onClick={() => {
+                          if (rk !== "无") setSelectedRank(rk);
+                          setShowBranchAsk(false);
+                          setTimeout(handleAdd, 100);
+                        }}
+                        className="p-4 bg-slate-50 rounded-xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center justify-center font-bold text-slate-800"
+                      >
+                        {rk === "无" ? "不清楚/没排行" : rk}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
 
