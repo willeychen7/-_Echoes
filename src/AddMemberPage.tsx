@@ -26,7 +26,10 @@ export const AddMemberPage: React.FC = () => {
   const [members, setMembers] = useState<any[]>([]);
   const [parentId, setParentId] = useState<number | null>(null);
   const [safetyStep, setSafetyStep] = useState<'none' | 'ask'>('none');
-  const [safetyChoice, setSafetyChoice] = useState<'real' | 'clan' | null>(null);
+  const [safetyStage, setSafetyStage] = useState<1 | 2 | 3>(1); // 确认阶段：1.定性 2.定方位 3.定排行
+  const [kinshipType, setKinshipType] = useState<'blood' | 'affinal' | 'social' | null>(null); // 定性：血亲、姻亲、友谊
+  const [lineageSide, setLineageSide] = useState<'paternal' | 'maternal' | null>(null); // 方位：父族、母族
+  const [safetyChoice, setSafetyChoice] = useState<'real' | 'clan' | null>(null); // 保持兼容，real代表血亲支脉，clan代表旁系
   const [connectingRank, setConnectingRank] = useState<string | null>(null); // 衔接人的排行 (如: 大伯、二叔)
   const [isCreatingVirtualParent, setIsCreatingVirtualParent] = useState(false);
   const [virtualParentName, setVirtualParentName] = useState("");
@@ -102,25 +105,25 @@ export const AddMemberPage: React.FC = () => {
     if (!rel || members.length === 0) return [];
     const role = deduceRole(rel);
 
-    // 严谨分流：如果用户做了亲疏选择，则精准过滤
-    if (safetyChoice === 'real') {
-      // 亲兄弟的父辈必须是观察者的亲爷爷 (grandfather_paternal)
-      const savedUser = localStorage.getItem("currentUser");
-      const currentUser = savedUser ? JSON.parse(savedUser) : null;
-      const me = members.find(m => Number(m.id) === Number(currentUser?.memberId));
-      const myFather = members.find(m => Number(m.id) === Number(me?.fatherId));
-      if (myFather?.fatherId) {
-        return members.filter(m => Number(m.id) === Number(myFather.fatherId));
+    // 基于三步走向导的精准过滤
+    if (kinshipType === 'blood' || kinshipType === 'affinal') {
+      if (lineageSide === 'paternal') {
+        // 父族：衔接人通常是我的亲爷爷 (或者说是父辈的父亲)
+        const savedUser = localStorage.getItem("currentUser");
+        const currentUser = savedUser ? JSON.parse(savedUser) : null;
+        const me = members.find(m => Number(m.id) === Number(currentUser?.memberId));
+        const myFather = members.find(m => Number(m.id) === Number(me?.fatherId));
+        if (myFather?.fatherId) {
+          return members.filter(m => Number(m.id) === Number(myFather.fatherId));
+        }
+        return members.filter(m => m.standardRole === "grandfather_paternal" || m.relationship === "爷爷");
+      } else if (lineageSide === 'maternal') {
+        // 母族：衔接人通常是我的亲外公
+        return members.filter(m => m.standardRole === "grandfather_maternal" || m.relationship === "外公" || m.relationship === "姥爷");
       }
-      return members.filter(m => m.standardRole === "grandfather_paternal" || m.relationship === "爷爷");
     }
 
-    if (safetyChoice === 'clan') {
-      // 堂兄弟的父辈是我的叔公、伯公 (grand_uncle)
-      return members.filter(m => (m.relationship || "").includes("叔公") || (m.relationship || "").includes("伯公"));
-    }
-
-    // 默认逻辑
+    // 默认回退逻辑
     if (["uncle_paternal", "aunt_paternal", "father"].includes(role)) {
       return members.filter(m => m.standardRole?.includes("grandfather_paternal") || (m.relationship || "").includes("爷"));
     }
@@ -134,7 +137,7 @@ export const AddMemberPage: React.FC = () => {
       return members.filter(m => ["uncle_paternal", "aunt_paternal", "uncle_maternal", "aunt_maternal"].includes(m.standardRole || ""));
     }
     return [];
-  }, [relationship, customRelationship, members, safetyChoice]);
+  }, [relationship, customRelationship, members, kinshipType, lineageSide]);
 
   React.useEffect(() => {
     // 关键修正：不仅检查自定义文字，还要检查选中的标准 role 值 (如 cousin)
@@ -144,15 +147,18 @@ export const AddMemberPage: React.FC = () => {
 
     if (ambiguous) {
       setSafetyStep('ask');
+      setSafetyStage(1);
     } else {
       setSafetyStep('none');
+      setSafetyStage(1);
+      setKinshipType(null);
+      setLineageSide(null);
       setSafetyChoice(null);
     }
     // 重置分流与排行状态
     setSelectedBranch(null);
     setSelectedRank(null);
     setConnectingRank(null);
-    setSafetyChoice(null);
     setBranchStage('type');
   }, [relationship, customRelationship]);
 
@@ -274,14 +280,18 @@ export const AddMemberPage: React.FC = () => {
       }
     }
 
-    // 3. 深度安全检查 (Safety Step)：处理堂/表等需要锚定父辈关系的情况
+    // 3. 深度安全检查 (Wizard Step)：处理向导交互
     if (safetyStep === 'ask' && !parentId) {
-      if (!safetyChoice) {
-        alert("请先确认该亲属的血缘分类（亲生/堂表等）");
+      if (!kinshipType) {
+        alert("请先完成‘第一阶段：定性’（确认是血亲、姻亲还是好友）");
         return;
       }
-      if (safetyChoice === 'real' && !connectingRank) {
-        alert("请指点该亲属的父辈在您家中的排行（如：是二叔还是三叔家的？）");
+      if (kinshipType !== 'social' && !lineageSide) {
+        alert("请先完成‘第二阶段：定方位’（确认是父族还是母族）");
+        return;
+      }
+      if (kinshipType !== 'social' && !connectingRank) {
+        alert("请先完成‘第三阶段：定排行’（指明详细房分排行）");
         return;
       }
     }
@@ -333,15 +343,15 @@ export const AddMemberPage: React.FC = () => {
     // 严谨：如果启用了虚拟父辈创建 (即没有在现有列表中选到父辈)
     if ((isCreatingVirtualParent || (safetyStep === 'ask' && !parentId)) && !currentParentId) {
       try {
-        const isMaternal = ["舅", "姨", "表"].some(k => finalRelationship.includes(k));
-        let baseRel = isMaternal ? "姨/舅" : "伯/叔";
-        if (safetyChoice === 'clan') baseRel = isMaternal ? "表姨/表舅" : "叔公/伯公";
+        const isMaternalSide = lineageSide === 'maternal';
+        let baseRel = isMaternalSide ? "姨/舅" : "伯/叔";
+        if (kinshipType === 'affinal') baseRel = isMaternalSide ? "表外祖/姻亲长辈" : "族亲长辈";
 
         // 组合具体的虚拟父辈名称
-        let finalVirtualName = virtualParentName.trim() || `${name}的父亲`;
-        if (safetyChoice === 'real' && connectingRank && connectingRank !== '无') {
-          // 如果是亲兄弟且指明了排行，自动修正名字
-          if (isMaternal) {
+        let finalVirtualName = virtualParentName.trim() || `${name}的父辈`;
+        if (kinshipType === 'blood' && connectingRank && connectingRank !== '无') {
+          // 如果是血亲且指明了排行，自动修正名字为温情的称谓
+          if (isMaternalSide) {
             finalVirtualName = relationship.includes("舅") ? `${connectingRank}舅` : `${connectingRank}姨`;
           } else {
             finalVirtualName = (connectingRank === "大" || connectingRank === "一") ? "大伯" : `${connectingRank}叔`;
@@ -354,7 +364,7 @@ export const AddMemberPage: React.FC = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: finalVirtualName,
-            relationship: safetyChoice === 'clan' ? (isMaternal ? "表亲" : "叔公") : baseRel,
+            relationship: kinshipType === 'blood' ? baseRel : (isMaternalSide ? "表世系" : "宗族旁支"),
             avatarUrl: `https://avatar.vercel.sh/${finalVirtualName}.svg`,
             familyId,
             createdByMemberId,
@@ -686,121 +696,129 @@ export const AddMemberPage: React.FC = () => {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-white p-6 rounded-[2rem] border-2 border-[#eab308]/20 shadow-xl space-y-6 relative overflow-hidden"
+                className="bg-white p-6 rounded-[3rem] border-2 border-[#eab308]/20 shadow-2xl space-y-6 relative overflow-hidden"
               >
-                {!safetyChoice ? (
-                  <>
-                    <div className="bg-amber-50 rounded-2xl p-6 space-y-4 border border-amber-100/50">
-                      <div className="flex gap-4 items-start">
-                        <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-2xl flex-shrink-0">🧐</div>
-                        <div>
-                          <h4 className="font-black text-slate-800 text-lg">名分与房分确认</h4>
-                          <div className="space-y-1">
-                            <p className="text-sm font-bold text-slate-700">
-                              {(() => {
-                                const rel = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship));
-                                const isJunior = ["孙", "外孙"].some(k => rel.includes(k));
-                                const isPeer = ["哥", "姐", "弟", "妹", "甥", "侄"].some(k => rel.includes(k)) || (rel.includes("孙") && !isJunior);
-                                const isMaternal = ["舅", "姨", "表"].some(k => rel.includes(k));
+                {/* 进度指示条 */}
+                <div className="flex gap-1 px-12">
+                  {[1, 2, 3].map(s => (
+                    <div key={s} className={`h-1 flex-1 rounded-full transition-all ${safetyStage >= s ? 'bg-[#eab308]' : 'bg-slate-100'}`} />
+                  ))}
+                </div>
 
-                                if (isJunior) {
-                                  return `那位 ${rel} (${name || '未命名'}) 的父亲/母亲，是您的第几个孩子？`;
-                                } else if (isPeer) {
-                                  if (isMaternal) return `这位 ${rel} (${name || '未命名'}) 的母亲/父亲，在母系长辈中排行老几？`;
-                                  return `这位 ${rel} (${name || '未命名'}) 的父亲，在父辈中排行老几？`;
-                                } else {
-                                  return `这位长辈 ${rel} (${name || '未命名'})，在他/她那一辈中排行老几？`;
-                                }
-                              })()}
-                            </p>
-                            <p className="text-[11px] text-amber-600/80 leading-relaxed">
-                              {(() => {
-                                const rel = (relationship === "其他" ? customRelationship : relationship);
-                                const isJunior = ["孙", "外孙"].some(k => rel.includes(k));
-                                const isMaternal = ["舅", "姨", "表"].some(k => rel.includes(k));
-                                if (isJunior) return "提示：请选择该孩子在您子女中的排行，这将决定孙辈的‘房分’。";
-                                if (isMaternal) return "提示：请选择您舅舅或姨妈的排行，这将决定表亲支系的‘房分’。";
-                                return "提示：请选择您伯伯或叔叔的排行（如：老大、老二），这将决定堂兄弟姐妹的‘房分’。";
-                              })()}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                {/* 阶段 1：定性 (Kinship Type) */}
+                {safetyStage === 1 && (
+                  <div className="space-y-6">
+                    <div className="text-center space-y-2">
+                      <h3 className="text-xl font-black text-slate-800">第一阶段：定性</h3>
+                      <p className="text-xs text-slate-400">请确认该成员与您的根本关系类型</p>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-3">
                       <button
-                        onClick={() => {
-                          setSafetyChoice('real');
-                        }}
-                        className={`p-6 rounded-2xl border-2 transition-all text-center group ${safetyChoice === 'real' ? 'border-[#eab308] bg-white' : 'border-slate-50 bg-slate-50 hover:border-slate-200'}`}
+                        onClick={() => { setKinshipType('blood'); setSafetyStage(2); }}
+                        className="flex items-center gap-4 p-5 rounded-[2rem] border-2 border-slate-50 bg-slate-50 hover:border-red-100 hover:bg-red-50/30 transition-all group"
                       >
-                        <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">
-                          {["孙", "外孙"].some(k => (relationship === "其他" ? customRelationship : relationship).includes(k)) ? "🏠" : "🏡"}
+                        <div className="size-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-500 text-xl group-hover:scale-110 transition-transform">❤️</div>
+                        <div className="text-left flex-1">
+                          <span className="font-black text-slate-800 block">同胞血亲</span>
+                          <span className="text-[10px] text-slate-400">例：亲叔伯、亲姑姨、亲兄弟及其后代</span>
                         </div>
-                        <span className="font-black text-slate-800 block">
-                          {["孙", "外孙"].some(k => (relationship === "其他" ? customRelationship : relationship).includes(k)) ? "您的子女所生" : "亲兄弟姐妹"}
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          {["孙", "外孙"].some(k => (relationship === "其他" ? customRelationship : relationship).includes(k)) ? "直系孙辈" : "同父母出的"}
-                        </span>
                       </button>
                       <button
-                        onClick={() => setSafetyChoice('clan')}
-                        className={`p-6 rounded-2xl border-2 transition-all text-center group ${safetyChoice === 'clan' ? 'border-[#eab308] bg-white' : 'border-slate-50 bg-slate-50 hover:border-slate-200'}`}
+                        onClick={() => { setKinshipType('affinal'); setSafetyStage(2); }}
+                        className="flex items-center gap-4 p-5 rounded-[2rem] border-2 border-slate-50 bg-slate-50 hover:border-blue-100 hover:bg-blue-50/30 transition-all group"
                       >
-                        <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">祠</div>
-                        <span className="font-black text-slate-800 block">
-                          {["孙", "外孙"].some(k => (relationship === "其他" ? customRelationship : relationship).includes(k)) ? "旁系/远亲孙辈" : "不清楚/稍远"}
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          {["孙", "外孙"].some(k => (relationship === "其他" ? customRelationship : relationship).includes(k)) ? "也就是堂孙、表孙等" : "可能是从祖/曾祖辈分支"}
-                        </span>
+                        <div className="size-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 text-xl group-hover:scale-110 transition-transform">🔗</div>
+                        <div className="text-left flex-1">
+                          <span className="font-black text-slate-800 block">姻亲眷属</span>
+                          <span className="text-[10px] text-slate-400">例：舅妈、姑父、婶婶、姻缘结成的至亲</span>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => { setKinshipType('social'); setSafetyStep('none'); }}
+                        className="flex items-center gap-4 p-5 rounded-[2rem] border-2 border-slate-50 bg-slate-50 hover:border-green-100 hover:bg-green-50/30 transition-all group"
+                      >
+                        <div className="size-12 rounded-2xl bg-green-50 flex items-center justify-center text-green-500 text-xl group-hover:scale-110 transition-transform">👥</div>
+                        <div className="text-left flex-1">
+                          <span className="font-black text-slate-800 block">社会好友</span>
+                          <span className="text-[10px] text-slate-400">例：挚友、义气兄弟、非血缘社交关系</span>
+                        </div>
                       </button>
                     </div>
-                  </>
-                ) : (
+                  </div>
+                )}
+
+                {/* 阶段 2：定方位 (Lineage Direction) */}
+                {safetyStage === 2 && (
                   <div className="space-y-6">
                     <div className="flex justify-between items-center">
-                      <h4 className="font-black text-slate-800">
-                        {safetyChoice === 'real' ? '指点具体房分/排行' : '正在寻找对应房头'}
-                      </h4>
+                      <button onClick={() => setSafetyStage(1)} className="text-slate-400 text-xs font-bold">← 返回定性</button>
+                      <h3 className="text-lg font-black text-slate-800 italic">第二阶段：定方位</h3>
+                      <div className="w-12"></div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
                       <button
-                        onClick={() => {
-                          setSafetyChoice(null);
-                          setConnectingRank(null);
-                        }}
-                        className="text-[10px] font-bold text-slate-400 hover:text-amber-600 transition-colors"
+                        onClick={() => { setLineageSide('paternal'); setSafetyStage(3); setSafetyChoice('real'); }}
+                        className="p-8 rounded-[2.5rem] border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all group text-center space-y-2"
                       >
-                        ← 返回重选
+                        <div className="text-3xl group-hover:scale-110 transition-transform">�️</div>
+                        <span className="font-black text-slate-800 block">父族宗亲</span>
+                        <span className="text-[10px] text-slate-400">我父亲这边的人</span>
+                      </button>
+                      <button
+                        onClick={() => { setLineageSide('maternal'); setSafetyStage(3); setSafetyChoice('real'); }}
+                        className="p-8 rounded-[2.5rem] border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all group text-center space-y-2"
+                      >
+                        <div className="text-3xl group-hover:scale-110 transition-transform">🏡</div>
+                        <span className="font-black text-slate-800 block">母族外戚</span>
+                        <span className="text-[10px] text-slate-400">我母亲这边的人</span>
                       </button>
                     </div>
+                    <p className="text-[10px] text-center text-slate-400 px-4">提示：这决定了该成员在家族树中的左右位置（宗亲还是外家）。</p>
+                  </div>
+                )}
 
-                    {safetyChoice === 'real' && (
-                      <div className="space-y-4">
-                        <p className="text-sm font-bold text-amber-700">
-                          {(() => {
-                            const rel = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship));
-                            if (["孙", "外孙"].some(k => rel.includes(k))) return `请问您的第几个孩子，是 ${name || '这位晚辈'} 的父母？`;
-                            return `请问这位 ${rel} 的 [父亲/母亲]，在长辈中排行老几？`;
-                          })()}
-                        </p>
-                        <p className="text-[10px] text-amber-600/60 -mt-2">
-                          这一步是为了确定该亲属属于哪一“房”支脉。
-                        </p>
-                        <div className="grid grid-cols-4 gap-2">
-                          {["大", "二", "三", "四", "五", "小", "无"].map(rk => (
-                            <button
-                              key={rk}
-                              onClick={() => setConnectingRank(rk)}
-                              className={`py-4 rounded-2xl border-2 text-sm font-black transition-all ${connectingRank === rk ? 'border-[#eab308] bg-white text-black shadow-lg scale-105' : 'bg-slate-50 border-transparent text-slate-400'}`}
-                            >
-                              {rk === "无" ? "不知" : rk}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                {/* 阶段 3：定排行 (Ranking & House Branch) */}
+                {safetyStage === 3 && (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center px-2">
+                      <button onClick={() => setSafetyStage(2)} className="text-slate-400 text-xs font-bold">← 返回方位</button>
+                      <h3 className="text-lg font-black text-slate-800">最终阶段：定排行</h3>
+                      <div className="w-12"></div>
+                    </div>
+
+                    <div className="bg-amber-50 rounded-3xl p-6 border border-amber-100/50 space-y-3">
+                      <p className="text-sm font-bold text-slate-700 leading-relaxed text-center">
+                        {(() => {
+                          const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship));
+                          if (["孙", "外孙"].some(k => relText.includes(k))) return `您的第几个孩子，是那位 ${relText} (${name || '未命名'}) 的父母？`;
+
+                          if (lineageSide === 'paternal') {
+                            return `那位 ${relText} (${name || '未命名'}) 的父亲（您的亲伯叔），在父辈中排行老几？`;
+                          } else {
+                            return `那位 ${relText} (${name || '未命名'}) 的父/母（您的亲舅姨），在母系长辈中排行老几？`;
+                          }
+                        })()}
+                      </p>
+                      <p className="text-[10px] text-amber-600/70 text-center">
+                        提示：请指明该长辈的排行，这将决定该支位的“房分”。
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2">
+                      {["大", "二", "三", "四", "五", "小", "无"].map(rk => (
+                        <button
+                          key={rk}
+                          onClick={() => {
+                            setConnectingRank(rk);
+                            // 选完排行即完成问询
+                            setSafetyStep('none');
+                          }}
+                          className={`py-4 rounded-2xl border-2 text-sm font-black transition-all ${connectingRank === rk ? 'border-[#eab308] bg-white text-black shadow-lg scale-105' : 'bg-slate-50 border-transparent text-slate-400'}`}
+                        >
+                          {rk === "无" ? "不知" : rk}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </motion.div>
