@@ -278,6 +278,17 @@ export const AddMemberPage: React.FC = () => {
       if (safetyChoice === 'real' && !connectingRank) return; // 选了亲支但还没选排行
     }
 
+    // 4. 终极兜底：如果系统现在还是无法判定属于哪个支系 (Branch)，强制弹出询问，不准含糊
+    if (!autoInferredBranch && !selectedBranch && relationship !== "挚友/其他" && !parentId) {
+      // 只要包含了任何亲属关键词但还没定论，就强制进入分类询问
+      if (["表", "堂", "亲", "姑", "姨", "舅", "叔", "伯", "侄", "甥", "孙"].some(k => finalRelationship.includes(k))) {
+        setBranchMode('lineage'); // 默认使用血缘/分房模式询问
+        setBranchStage('type');
+        setShowBranchAsk(true);
+        return;
+      }
+    }
+
     const currentBranch = selectedBranch || autoInferredBranch;
     const currentRank = (selectedRank === "none" ? null : (selectedRank || autoInferredRank));
 
