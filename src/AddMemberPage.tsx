@@ -141,26 +141,19 @@ export const AddMemberPage: React.FC = () => {
   }, [relationship, customRelationship, members, kinshipType, lineageSide]);
 
   React.useEffect(() => {
-    // 关键修正：不仅检查自定义文字，还要检查选中的标准 role 值 (如 cousin)
-    const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship)) || "";
-    const isDirectFatherOfSomethingElse = relText.includes("爸") && !["父亲", "爸", "爸爸", "老爸", "亲爸"].includes(relText);
-    const ambiguous = ["叔", "伯", "舅", "姨", "堂", "表", "侄", "甥", "孙", "外孙"].some(k => relText.includes(k)) || isDirectFatherOfSomethingElse;
+    // 关键修正：不再自动跳转向导，等点击建立档案再判断
+    setSafetyStep('none');
+    setSafetyStage(1);
+    setKinshipType(null);
+    setLineageSide(null);
+    setSafetyChoice(null);
 
-    if (ambiguous) {
-      setSafetyStep('ask');
-      setSafetyStage(1);
-    } else {
-      setSafetyStep('none');
-      setSafetyStage(1);
-      setKinshipType(null);
-      setLineageSide(null);
-      setSafetyChoice(null);
-    }
     // 重置分流与排行状态
     setSelectedBranch(null);
     setSelectedRank(null);
     setConnectingRank(null);
     setBranchStage('type');
+    setCorrectionNotice(null);
   }, [relationship, customRelationship]);
 
   // 实时的逻辑校准与“教学提示”并自动滚动
@@ -269,6 +262,20 @@ export const AddMemberPage: React.FC = () => {
     const createdByMemberId = currentUser?.memberId;
 
     const finalRelationship = (relationship === "其他" ? customRelationship : relationship) || "";
+
+    // 触发前置向导检查: 当用户点击建立档案时才检查是否需要完善关系
+    const isDirectFatherOfSomethingElse = finalRelationship.includes("爸") && !["父亲", "爸", "爸爸", "老爸", "亲爸"].includes(finalRelationship);
+    const isAmbiguous = ["叔", "伯", "舅", "姨", "堂", "表", "侄", "甥", "孙", "外孙"].some(k => finalRelationship.includes(k)) || isDirectFatherOfSomethingElse;
+
+    if (isAmbiguous) {
+      if (!selectedRank) { setSafetyStep('ask'); setSafetyStage(1); return; }
+      if (!kinshipType) { setSafetyStep('ask'); setSafetyStage(2); return; }
+      if (kinshipType !== 'social') {
+        if (!lineageSide) { setSafetyStep('ask'); setSafetyStage(3); return; }
+        if (!connectingRank) { setSafetyStep('ask'); setSafetyStage(4); return; }
+      }
+    }
+
     let resolvedRelationship = finalRelationship;
     let autoInferredBranch = selectedBranch;
     let autoInferredRank = selectedRank;
@@ -378,7 +385,7 @@ export const AddMemberPage: React.FC = () => {
     }
 
     const currentBranch = selectedBranch || autoInferredBranch;
-    const currentRank = (selectedRank === "none" ? null : (selectedRank || autoInferredRank));
+    const currentRank = (selectedRank === "none" || selectedRank === "无" ? null : (selectedRank || autoInferredRank));
 
     // 检查是否需要询问排行
     if (!currentRank && currentBranch !== "社会好友" && ["哥", "姐", "弟", "妹", "甥", "侄", "孙"].some(k => resolvedRelationship.includes(k))) {
@@ -437,6 +444,8 @@ export const AddMemberPage: React.FC = () => {
           } else {
             finalVirtualName = (connectingRank === "大" || connectingRank === "一") ? "大伯" : `${connectingRank}叔`;
           }
+        } else if (kinshipType === 'blood') {
+          finalVirtualName = isMaternalSide ? (relationship.includes("舅") ? "舅舅" : "阿姨") : "叔伯";
         }
 
         const genNum = (currentUser.generationNum || 30) - 1;
@@ -906,7 +915,7 @@ export const AddMemberPage: React.FC = () => {
             exit={{ opacity: 0, y: 50 }}
             className="fixed inset-0 z-[120] bg-[#f8fafc] overflow-y-auto"
           >
-            <div className="max-w-2xl mx-auto min-h-screen flex flex-col p-6 space-y-8 pb-32">
+            <div className="max-w-md mx-auto min-h-screen flex flex-col px-4 py-2 space-y-6 pb-24">
               {/* Header with clear black arrow back button */}
               <div className="flex items-center pt-4 pb-2 sticky top-0 bg-[#f8fafc] z-10">
                 <button
@@ -926,27 +935,27 @@ export const AddMemberPage: React.FC = () => {
               </div>
 
               {/* 进度指示条 */}
-              <div className="flex gap-2 px-4 pb-4">
+              <div className="flex gap-2 px-2 pb-2">
                 {[1, 2, 3, 4].map(s => (
-                  <div key={s} className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${safetyStage >= s ? 'bg-[#eab308] shadow-[0_0_10px_rgba(234,179,8,0.5)]' : 'bg-slate-200'}`} />
+                  <div key={s} className={`h-1 flex-1 rounded-full transition-all duration-500 ${safetyStage >= s ? 'bg-[#eab308] shadow-[0_0_10px_rgba(234,179,8,0.5)]' : 'bg-slate-200'}`} />
                 ))}
               </div>
 
               {/* 阶段 1：个人排行 (Personal Seniority) */}
               {safetyStage === 1 && (
-                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="text-center space-y-3">
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="text-center space-y-2">
                     <h3 className="text-2xl font-black text-slate-800 tracking-wider">第一阶：名分确认</h3>
-                    <p className="text-base font-bold text-slate-600">
+                    <p className="text-[13px] font-bold text-slate-600">
                       请问这位 {(relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship))} ({name || '未命名'}) 在这辈排行第几？
                     </p>
                   </div>
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-4 gap-2">
                     {["大", "二", "三", "四", "五", "小", "无"].map(rk => (
                       <button
                         key={rk}
                         onClick={() => { setSelectedRank(rk); setSafetyStage(2); }}
-                        className={`py-6 rounded-[2rem] border-2 text-lg font-black transition-all ${selectedRank === rk ? 'border-[#eab308] bg-white text-black shadow-xl scale-105' : 'bg-white border-transparent text-slate-400 hover:shadow-md'}`}
+                        className={`py-4 rounded-3xl border-2 text-base font-black transition-all ${selectedRank === rk ? 'border-[#eab308] bg-white text-black shadow-xl scale-105' : 'bg-white border-transparent text-slate-400 hover:shadow-md'}`}
                       >
                         {rk === "无" ? "不知" : rk}
                       </button>
@@ -958,48 +967,48 @@ export const AddMemberPage: React.FC = () => {
 
               {/* 阶段 2：定性 (Kinship Type) */}
               {safetyStage === 2 && (
-                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="text-center space-y-3">
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="text-center space-y-2">
                     <h3 className="text-2xl font-black text-slate-800 tracking-wider">第二阶：关系定性</h3>
                     <p className="text-sm font-bold text-slate-500">
                       明确基本属性
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 gap-4">
+                  <div className="grid grid-cols-1 gap-3">
                     <button
                       onClick={() => handleKinshipTypeSelect('blood')}
-                      className="flex items-center gap-6 p-6 rounded-[2.5rem] bg-white shadow-sm border-2 border-transparent hover:border-red-100 hover:shadow-xl transition-all group"
+                      className="flex items-center gap-4 p-5 rounded-[2rem] bg-white shadow-sm border-2 border-transparent hover:border-red-100 hover:shadow-xl transition-all group"
                     >
-                      <div className="size-16 rounded-[1.5rem] bg-red-50 flex items-center justify-center text-red-500 group-hover:scale-110 transition-transform">
-                        <Heart size={32} fill="currentColor" />
+                      <div className="size-14 rounded-[1.2rem] bg-red-50 flex items-center justify-center text-red-500 group-hover:scale-110 transition-transform">
+                        <Heart size={28} fill="currentColor" />
                       </div>
                       <div className="text-left flex-1">
-                        <span className="font-black text-slate-800 block text-lg mb-1">同胞血亲</span>
-                        <span className="text-xs text-slate-400 font-medium leading-relaxed">例：亲叔伯、亲姑姨、亲兄弟及其后代</span>
+                        <span className="font-black text-slate-800 block text-[15px] mb-1">同胞血亲</span>
+                        <span className="text-[11px] text-slate-400 font-medium leading-relaxed">例：亲叔伯、亲姑姨、亲兄弟极其后代</span>
                       </div>
                     </button>
                     <button
                       onClick={() => handleKinshipTypeSelect('affinal')}
-                      className="flex items-center gap-6 p-6 rounded-[2.5rem] bg-white shadow-sm border-2 border-transparent hover:border-blue-100 hover:shadow-xl transition-all group"
+                      className="flex items-center gap-4 p-5 rounded-[2rem] bg-white shadow-sm border-2 border-transparent hover:border-blue-100 hover:shadow-xl transition-all group"
                     >
-                      <div className="size-16 rounded-[1.5rem] bg-blue-50 flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
-                        <Link size={32} />
+                      <div className="size-14 rounded-[1.2rem] bg-blue-50 flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
+                        <Link size={28} />
                       </div>
                       <div className="text-left flex-1">
-                        <span className="font-black text-slate-800 block text-lg mb-1">姻亲眷属</span>
-                        <span className="text-xs text-slate-400 font-medium leading-relaxed">例：舅妈、姑父、婶婶、姻脉所系</span>
+                        <span className="font-black text-slate-800 block text-[15px] mb-1">姻亲眷属</span>
+                        <span className="text-[11px] text-slate-400 font-medium leading-relaxed">例：舅妈、姑父、婶婶、姻脉所系</span>
                       </div>
                     </button>
                     <button
                       onClick={() => handleKinshipTypeSelect('social')}
-                      className="flex items-center gap-6 p-6 rounded-[2.5rem] bg-white shadow-sm border-2 border-transparent hover:border-green-100 hover:shadow-xl transition-all group"
+                      className="flex items-center gap-4 p-5 rounded-[2rem] bg-white shadow-sm border-2 border-transparent hover:border-green-100 hover:shadow-xl transition-all group"
                     >
-                      <div className="size-16 rounded-[1.5rem] bg-green-50 flex items-center justify-center text-green-500 group-hover:scale-110 transition-transform">
-                        <Users size={32} />
+                      <div className="size-14 rounded-[1.2rem] bg-green-50 flex items-center justify-center text-green-500 group-hover:scale-110 transition-transform">
+                        <Users size={28} />
                       </div>
                       <div className="text-left flex-1">
-                        <span className="font-black text-slate-800 block text-lg mb-1">社会好友</span>
-                        <span className="text-xs text-slate-400 font-medium leading-relaxed">例：挚友、义气兄弟、世交好友</span>
+                        <span className="font-black text-slate-800 block text-[15px] mb-1">社会好友</span>
+                        <span className="text-[11px] text-slate-400 font-medium leading-relaxed">例：挚友、义气兄弟、世交好友</span>
                       </div>
                     </button>
                   </div>
@@ -1008,35 +1017,35 @@ export const AddMemberPage: React.FC = () => {
 
               {/* 阶段 3：定方位 (Lineage Direction) */}
               {safetyStage === 3 && (
-                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="text-center space-y-3">
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="text-center space-y-2">
                     <h3 className="text-2xl font-black text-slate-800 tracking-wider">第三阶：方位归属</h3>
                     <p className="text-sm font-bold text-slate-500">
                       定夺族系主次
                     </p>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => handleLineageSideSelect('paternal')}
-                      className="p-8 rounded-[3rem] bg-white border-2 border-transparent hover:border-[#eab308] transition-all group text-center space-y-4 shadow-sm hover:shadow-xl"
+                      className="p-6 rounded-[2rem] bg-white border-2 border-transparent hover:border-[#eab308] transition-all group text-center space-y-3 shadow-sm hover:shadow-xl"
                     >
-                      <div className="size-20 rounded-full bg-amber-50 mx-auto flex items-center justify-center text-[#eab308] group-hover:scale-110 transition-transform">
-                        <Landmark size={40} />
+                      <div className="size-16 rounded-full bg-amber-50 mx-auto flex items-center justify-center text-[#eab308] group-hover:scale-110 transition-transform">
+                        <Landmark size={32} />
                       </div>
-                      <div className="space-y-1">
-                        <span className="font-black text-slate-800 block text-lg">父族宗亲</span>
+                      <div className="space-y-0.5">
+                        <span className="font-black text-slate-800 block text-base">父族宗亲</span>
                         <span className="text-[11px] text-slate-400 leading-tight block">我父亲/父系<br />那边的人</span>
                       </div>
                     </button>
                     <button
                       onClick={() => handleLineageSideSelect('maternal')}
-                      className="p-8 rounded-[3rem] bg-white border-2 border-transparent hover:border-[#eab308] transition-all group text-center space-y-4 shadow-sm hover:shadow-xl"
+                      className="p-6 rounded-[2rem] bg-white border-2 border-transparent hover:border-[#eab308] transition-all group text-center space-y-3 shadow-sm hover:shadow-xl"
                     >
-                      <div className="size-20 rounded-full bg-amber-50 mx-auto flex items-center justify-center text-[#eab308] group-hover:scale-110 transition-transform">
-                        <Home size={40} />
+                      <div className="size-16 rounded-full bg-amber-50 mx-auto flex items-center justify-center text-[#eab308] group-hover:scale-110 transition-transform">
+                        <Home size={32} />
                       </div>
-                      <div className="space-y-1">
-                        <span className="font-black text-slate-800 block text-lg">母族外戚</span>
+                      <div className="space-y-0.5">
+                        <span className="font-black text-slate-800 block text-base">母族外戚</span>
                         <span className="text-[11px] text-slate-400 leading-tight block">我母亲/母系<br />那边的人</span>
                       </div>
                     </button>
@@ -1046,16 +1055,16 @@ export const AddMemberPage: React.FC = () => {
 
               {/* 阶段 4：定排行/房分 (House Branch) */}
               {safetyStage === 4 && (
-                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="text-center space-y-3">
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="text-center space-y-2">
                     <h3 className="text-2xl font-black text-slate-800 tracking-wider">最终决：定宗房分</h3>
                     <p className="text-sm font-bold text-slate-500">
                       确立家族支脉
                     </p>
                   </div>
 
-                  <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 space-y-4">
-                    <p className="text-base font-bold text-slate-800 leading-relaxed text-center">
+                  <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 space-y-3">
+                    <p className="text-[15px] font-bold text-slate-800 leading-relaxed text-center">
                       {(() => {
                         const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship));
                         if (["孙", "外孙"].some(k => relText.includes(k))) return `您的第几个孩子，是 ${name || '这位晚辈'} 的父母？`;
@@ -1072,7 +1081,7 @@ export const AddMemberPage: React.FC = () => {
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-4 gap-2">
                     {["大", "二", "三", "四", "五", "小", "无"].map(rk => (
                       <button
                         key={rk}
@@ -1080,7 +1089,7 @@ export const AddMemberPage: React.FC = () => {
                           setConnectingRank(rk);
                           setSafetyStep('none');
                         }}
-                        className={`py-6 rounded-[2rem] border-2 text-lg font-black transition-all ${connectingRank === rk ? 'border-[#eab308] bg-white text-black shadow-xl scale-105' : 'bg-white border-transparent text-slate-400 hover:shadow-md'}`}
+                        className={`py-4 rounded-3xl border-2 text-base font-black transition-all ${connectingRank === rk ? 'border-[#eab308] bg-white text-black shadow-xl scale-105' : 'bg-white border-transparent text-slate-400 hover:shadow-md'}`}
                       >
                         {rk === "无" ? "不知" : rk}
                       </button>
