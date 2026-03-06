@@ -49,13 +49,33 @@ export const AddMemberPage: React.FC = () => {
     const bases = RELATIONSHIP_OPTIONS.map(opt => opt.label);
     const ranks = ["大", "二", "三", "四", "五", "小", "幺"];
     const rankables = ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨", "侄", "甥"];
+    const cousinPrefixes = ["堂", "表"];
 
     let expanded: string[] = [...bases];
+
+    // 1. 添加堂/表基础前缀 (如 堂哥, 表弟)
+    ["哥", "弟", "姐", "妹"].forEach(s => {
+      cousinPrefixes.forEach(p => {
+        expanded.push(`${p}${s}`);
+      });
+    });
+
+    // 2. 添加排行前缀 (如 大哥, 二哥)
     rankables.forEach(r => {
       ranks.forEach(prefix => {
         expanded.push(`${prefix}${r}`);
       });
     });
+
+    // 3. 组合：堂/表 + 排行 (如 堂大哥, 表小妹)
+    ["哥", "弟", "姐", "妹"].forEach(s => {
+      cousinPrefixes.forEach(p => {
+        ranks.forEach(rk => {
+          expanded.push(`${p}${rk}${s}`);
+        });
+      });
+    });
+
     return Array.from(new Set(expanded));
   }, []);
 
@@ -596,7 +616,7 @@ export const AddMemberPage: React.FC = () => {
               >
                 <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none"><Check size={60} /></div>
                 <div className="space-y-2">
-                  <h3 className="text-xl font-black text-slate-800">确认亲疏关系</h3>
+                  <h3 className="text-xl font-black text-slate-800">确认亲属关系</h3>
                   <p className="text-sm text-slate-500">这位长辈是您父亲的亲兄弟，还是堂兄弟？</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
