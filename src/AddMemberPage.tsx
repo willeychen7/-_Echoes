@@ -137,10 +137,11 @@ export const AddMemberPage: React.FC = () => {
   }, [relationship, customRelationship, members, safetyChoice]);
 
   React.useEffect(() => {
-    const rel = (relationship === "其他" ? customRelationship : relationship) || "";
-    // 不仅是长辈，平辈和晚辈中的“堂/表/侄/甥/孙”也需要追问父辈关系来锚定
-    const isDirectFatherOfSomethingElse = rel.includes("爸") && !["父亲", "爸", "爸爸", "老爸", "亲爸"].includes(rel);
-    const ambiguous = ["叔", "伯", "舅", "姨", "堂", "表", "侄", "甥", "孙", "外孙"].some(k => rel.includes(k)) || isDirectFatherOfSomethingElse;
+    // 关键修正：不仅检查自定义文字，还要检查选中的标准 role 值 (如 cousin)
+    const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship)) || "";
+    const isDirectFatherOfSomethingElse = relText.includes("爸") && !["父亲", "爸", "爸爸", "老爸", "亲爸"].includes(relText);
+    const ambiguous = ["叔", "伯", "舅", "姨", "堂", "表", "侄", "甥", "孙", "外孙"].some(k => relText.includes(k)) || isDirectFatherOfSomethingElse;
+
     if (ambiguous) {
       setSafetyStep('ask');
     } else {
