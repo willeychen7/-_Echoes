@@ -187,11 +187,35 @@ export const AddMemberPage: React.FC = () => {
     const familyId = currentUser?.familyId || null;
     const createdByMemberId = currentUser?.memberId;
 
-    const finalRelationship = relationship === "其他" ? customRelationship : relationship;
+    const finalRelationship = (relationship === "其他" ? customRelationship : relationship) || "";
     let resolvedRelationship = finalRelationship;
-
-    // 逻辑分流判定器 (智能推理：如果已经选择了父母，直接推断血统，不弹出询问)
     let autoInferredBranch = selectedBranch;
+    let autoInferredRank = selectedRank;
+
+    // 1. 智能预解析：从输入文字中提取支系与排行 (如输入“堂大哥”，提取“堂”和“大”)
+    if (!autoInferredBranch) {
+      if (finalRelationship.startsWith("堂")) {
+        autoInferredBranch = "堂";
+        resolvedRelationship = resolvedRelationship.substring(1);
+      } else if (finalRelationship.startsWith("表")) {
+        autoInferredBranch = "表";
+        resolvedRelationship = resolvedRelationship.substring(1);
+      } else if (finalRelationship.startsWith("亲")) {
+        autoInferredBranch = "亲生";
+        resolvedRelationship = resolvedRelationship.substring(3).startsWith("的手足") ? resolvedRelationship.substring(5) : resolvedRelationship.substring(1);
+      }
+    }
+
+    // 继续提取排行
+    if (!autoInferredRank) {
+      const rankMatch = resolvedRelationship.match(/^(大|二|三|四|五|六|小|幺|老|第一|第二|第三)/);
+      if (rankMatch) {
+        autoInferredRank = rankMatch[0];
+        resolvedRelationship = resolvedRelationship.substring(rankMatch[0].length);
+      }
+    }
+
+    // 2. 逻辑分流判定器 (智能推理：如果已经选择了父母，直接推断血统，不弹出询问)
     if (!autoInferredBranch && parentId) {
       const parent = members.find(m => Number(m.id) === Number(parentId));
       if (parent) {
@@ -200,8 +224,8 @@ export const AddMemberPage: React.FC = () => {
         const isMyDirectParent = ["父亲", "母亲", "爸", "妈", "爸爸", "妈妈", "老爸", "老妈"].some(k => parentRel.includes(k)) || ["father", "mother"].includes(parentRole);
 
         if (isMyDirectParent) {
-          if (["哥", "姐", "弟", "妹", "兄"].some(k => finalRelationship.includes(k))) autoInferredBranch = "亲生";
-          if (["甥", "侄", "孙"].some(k => finalRelationship.includes(k))) autoInferredBranch = "血亲";
+          if (["哥", "姐", "弟", "妹", "兄"].some(k => resolvedRelationship.includes(k))) autoInferredBranch = "亲生";
+          if (["甥", "侄", "孙"].some(k => resolvedRelationship.includes(k))) autoInferredBranch = "血亲";
         }
       }
     }
@@ -242,10 +266,10 @@ export const AddMemberPage: React.FC = () => {
     }
 
     const currentBranch = selectedBranch || autoInferredBranch;
+    const currentRank = (selectedRank === "none" ? null : (selectedRank || autoInferredRank));
 
-    // 检查是否需要询问排行 (针对已经选了分类但未指明排行且非社交关系的)
-    const hasRank = /^(大|二|三|四|五|小|幺|老|一|十)/.test(finalRelationship);
-    if (!selectedRank && !hasRank && currentBranch !== "社会好友" && ["哥", "姐", "弟", "妹", "甥", "侄", "孙"].some(k => finalRelationship.includes(k))) {
+    // 检查是否需要询问排行
+    if (!currentRank && currentBranch !== "社会好友" && ["哥", "姐", "弟", "妹", "甥", "侄", "孙"].some(k => resolvedRelationship.includes(k))) {
       setBranchStage('rank');
       setShowBranchAsk(true);
       return;
@@ -254,10 +278,8 @@ export const AddMemberPage: React.FC = () => {
     if (finalRelationship.includes("/")) {
       const parts = finalRelationship.split("/");
       if (['母家', '表', '姻亲'].includes(currentBranch || '')) {
-        // 通常 / 后面的词是母家、表亲或姻亲称谓 (如 侄子/外甥，外甥是母系)
         resolvedRelationship = parts[1] || parts[parts.length - 1];
       } else {
-        // 通常 / 前面的是父家、堂亲或血亲 (如 侄子/外甥，侄子是父系)
         resolvedRelationship = parts[0];
       }
     }
@@ -267,8 +289,8 @@ export const AddMemberPage: React.FC = () => {
       ? `${resolvedRelationship}(${currentBranch})`
       : resolvedRelationship;
 
-    if (selectedRank) {
-      relationshipToStore = `${selectedRank}${relationshipToStore}`;
+    if (currentRank) {
+      relationshipToStore = `${currentRank}${relationshipToStore}`;
     }
 
     const deducedRole = deduceRole(finalRelationship);
