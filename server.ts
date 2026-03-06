@@ -47,20 +47,32 @@ export async function createApp() {
       try {
         if (supabase) {
           // Add profile fields to users table
-          await supabase.rpc('exec_sql', {
-            sql_query: `
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date DATE;
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT;
-          ` }).catch(err => console.log("Users Migration check:", err.message));
+          try {
+            await supabase.rpc('exec_sql', {
+              sql_query: `
+              ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+              ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;
+              ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date DATE;
+              ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT;
+            ` });
+          } catch (err: any) {
+            console.log("Users Migration check failed:", err.message);
+          }
 
           // Add user_id and gender to family_members for persistent identity and rigorous relationships
-          await supabase.rpc('exec_sql', {
-            sql_query: `
-            ALTER TABLE family_members ADD COLUMN IF NOT EXISTS user_id INTEGER;
-            ALTER TABLE family_members ADD COLUMN IF NOT EXISTS gender TEXT;
-          ` }).catch(err => console.log("Members Migration check:", err.message));
+          // Also add new columns for pets, clan ranking and generation tracking
+          try {
+            await supabase.rpc('exec_sql', {
+              sql_query: `
+              ALTER TABLE family_members ADD COLUMN IF NOT EXISTS user_id INTEGER;
+              ALTER TABLE family_members ADD COLUMN IF NOT EXISTS gender TEXT;
+              ALTER TABLE family_members ADD COLUMN IF NOT EXISTS member_type TEXT;
+              ALTER TABLE family_members ADD COLUMN IF NOT EXISTS ancestral_hall TEXT;
+              ALTER TABLE family_members ADD COLUMN IF NOT EXISTS generation_num INTEGER;
+            ` });
+          } catch (err: any) {
+            console.log("Members Migration check failed:", err.message);
+          }
         }
       } catch (e) {
         console.warn("Migration error:", e);
@@ -267,6 +279,9 @@ export async function createApp() {
           fatherId: m.father_id,
           motherId: m.mother_id,
           spouseId: m.spouse_id,
+          ancestralHall: m.ancestral_hall,
+          generationNum: m.generation_num,
+          memberType: m.member_type,
           createdByMemberId: createdByMemberId || null
         };
       });
@@ -299,7 +314,10 @@ export async function createApp() {
           standardRole: data.standard_role,
           fatherId: data.father_id,
           motherId: data.mother_id,
-          spouseId: data.spouse_id
+          spouseId: data.spouse_id,
+          ancestralHall: data.ancestral_hall,
+          generationNum: data.generation_num,
+          memberType: data.member_type
         };
 
         if (targetUserId) {
@@ -504,43 +522,68 @@ export async function createApp() {
     });
 
     app.post("/api/family-members", async (req, res) => {
+      if (!supabase) return res.status(500).json({ error: "服务器初始化失败：数据库未连接" });
       try {
-        const { name, relationship, avatarUrl, bio, birthDate, standardRole, familyId, createdByMemberId, fatherId, ancestralHall, gender, memberType } = req.body;
+        const { name, relationship, avatarUrl, bio, birthDate, standardRole, familyId, createdByMemberId, fatherId, ancestralHall, gender, memberType, generationNum } = req.body;
         // NOTE: 不再生成旧的 FA- 格式邀请码
         // 邀请码统一使用前端动态生成的 INV-{targetId}-{inviterId} 格式
 
-        const { data: existing } = await supabase
+        console.log(`[API:MEMBER] Creating member: ${name} in family ${familyId}`);
+        const { data: existing, error: existError } = await supabase
           .from("family_members")
           .select("id")
           .eq("name", name)
           .eq("family_id", familyId)
           .maybeSingle();
 
+        if (existError) console.warn("[API:MEMBER] Existing check error:", existError.message);
         if (existing) {
+          console.log(`[API:MEMBER] Existing member found: ${existing.id}`);
           return res.json({ id: existing.id, linked: true });
         }
 
-        const { data, error } = await supabase
+        const insertPayload: any = {
+          family_id: familyId,
+          name,
+          relationship,
+          avatar_url: avatarUrl,
+          bio,
+          birth_date: birthDate || null,
+          invite_code: null,
+          is_registered: false,
+          standard_role: standardRole || "",
+          father_id: fatherId || null,
+          ancestral_hall: ancestralHall || null,
+          gender: gender || null,
+          member_type: memberType || 'human',
+          generation_num: generationNum || null
+        };
+
+        console.log("[API:MEMBER] Attempting primary insert...");
+        let { data, error } = await supabase
           .from("family_members")
-          .insert({
-            family_id: familyId,
-            name,
-            relationship,
-            avatar_url: avatarUrl,
-            bio,
-            birth_date: birthDate || null,
-            invite_code: null, // 不再存旧格式，前端用 INV- 动态生成
-            is_registered: false,
-            standard_role: standardRole || "",
-            father_id: fatherId || null,
-            ancestral_hall: ancestralHall || null,
-            gender: gender || null,
-            member_type: memberType || 'human'
-          })
+          .insert(insertPayload)
           .select()
           .single();
 
-        if (error) throw error;
+        // 核心兜底：如果某些新增加的列（如 member_type, ancestral_hall）在数据库中不存在，降级重试
+        if (error && (error.message?.includes("column") || error.code === "PGRST204" || error.code === "42703")) {
+          console.warn(`[MEMBER:FALLBACK] Column missing, retrying without new fields. Error: ${error.message}`);
+          const fallbackPayload = { ...insertPayload };
+          delete fallbackPayload.member_type;
+          delete fallbackPayload.ancestral_hall;
+          delete fallbackPayload.generation_num;
+          const result = await supabase.from("family_members").insert(fallbackPayload).select().single();
+          data = result.data;
+          error = result.error;
+        }
+
+        if (error) {
+          console.error("[API:MEMBER] Insert error:", error.message, error);
+          return res.status(500).json({ error: error.message });
+        }
+
+        console.log(`[API:MEMBER] Successfully created member: ${data.id}`);
 
         // 记录创建者关系
         if (createdByMemberId) {
@@ -557,7 +600,7 @@ export async function createApp() {
         res.json({ id: data.id, linked: false });
       } catch (err: any) {
         console.error("[MEMBER] POST error:", err.message);
-        res.status(500).json({ error: "创建档案失败，请稍后重试" });
+        res.status(500).json({ error: err.message || "创建档案失败，请稍后重试" });
       }
     });
 

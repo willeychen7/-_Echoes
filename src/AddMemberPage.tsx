@@ -211,14 +211,15 @@ export const AddMemberPage: React.FC = () => {
         });
         localStorage.setItem("demoCustomMembers", JSON.stringify(customMembers));
       } else if (!data.id) {
-        throw new Error(data.error || "Failed to add member");
+        const errMsg = data.error || data.message || "服务器插入失败";
+        throw new Error(errMsg);
       }
 
       setInviteCode(inviteCodeResponse);
       setNewMemberId(newId);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("添加失败，请稍后重试。");
+      alert(`添加失败：${error.message || "系统繁忙，请稍后重试"}`);
     } finally {
       setIsSubmitting(false);
     }
