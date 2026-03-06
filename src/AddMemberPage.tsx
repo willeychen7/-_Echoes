@@ -778,12 +778,15 @@ export const AddMemberPage: React.FC = () => {
 
                     {safetyChoice === 'real' && (
                       <div className="space-y-4">
-                        <p className="text-sm font-bold text-slate-600">
+                        <p className="text-sm font-bold text-amber-700">
                           {(() => {
-                            const rel = (relationship === "其他" ? customRelationship : relationship);
-                            if (["孙", "外孙"].some(k => rel.includes(k))) return "请问属于您的第几个孩子？";
-                            return "请问在他/她那一辈中排行老几？";
+                            const rel = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship));
+                            if (["孙", "外孙"].some(k => rel.includes(k))) return `请问您的第几个孩子，是 ${name || '这位晚辈'} 的父母？`;
+                            return `请问这位 ${rel} 的 [父亲/母亲]，在长辈中排行老几？`;
                           })()}
+                        </p>
+                        <p className="text-[10px] text-amber-600/60 -mt-2">
+                          这一步是为了确定该亲属属于哪一“房”支脉。
                         </p>
                         <div className="grid grid-cols-4 gap-2">
                           {["大", "二", "三", "四", "五", "小", "无"].map(rk => (
