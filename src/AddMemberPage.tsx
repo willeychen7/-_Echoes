@@ -704,6 +704,22 @@ export const AddMemberPage: React.FC = () => {
           </div>
 
           <div className="space-y-4">
+            <AnimatePresence>
+              {correctionNotice && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  className="bg-rose-50 border-2 border-rose-200 p-4 rounded-[2rem] flex items-start gap-3 shadow-md mb-2"
+                >
+                  <AlertCircle className="size-6 text-rose-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm font-bold text-rose-700 leading-relaxed">
+                    {correctionNotice}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <label className="text-xl font-black px-1 block">Ta与您的关系</label>
             <div className="grid grid-cols-3 gap-2">
               {displayRelationships.map((rel) => (
@@ -1027,22 +1043,6 @@ export const AddMemberPage: React.FC = () => {
         </div>
 
         <div className="pt-4 pb-12 space-y-4">
-          <AnimatePresence>
-            {correctionNotice && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className="bg-rose-50 border border-rose-100 p-4 rounded-2xl flex items-start gap-3 shadow-sm"
-              >
-                <AlertCircle className="size-5 text-rose-500 flex-shrink-0 mt-0.5" />
-                <p className="text-xs font-bold text-rose-700 leading-relaxed">
-                  {correctionNotice}
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           <Button
             size="xl"
             className="w-full py-6 text-xl font-bold rounded-full bg-[#eab308] hover:bg-[#d9a306] text-black shadow-lg shadow-[#eab308]/20 border-none transition-all disabled:opacity-50 disabled:shadow-none"
