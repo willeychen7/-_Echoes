@@ -1007,14 +1007,26 @@ export async function createApp() {
             const { data: m } = await supabase.from("family_members").select("*").eq("id", memberId).single();
             let pId = gender === 'male' ? m.father_id : m.mother_id;
             if (!pId) {
-              const { data: nP } = await supabase.from("family_members").insert({
+              const { data: nP, error: vErr } = await supabase.from("family_members").insert({
                 family_id: m.family_id,
                 name: `${m.name}的${gender === 'male' ? '父亲' : '母亲'}`,
                 gender: gender,
-                is_registered: false
+                is_registered: false,
+                member_type: 'virtual'
               }).select().single();
-              if (nP) {
+
+              if (vErr && (vErr.message?.includes("column") || vErr.code === "PGRST204" || vErr.code === "42703")) {
+                const { data: nP2 } = await supabase.from("family_members").insert({
+                  family_id: m.family_id,
+                  name: `${m.name}的${gender === 'male' ? '父亲' : '母亲'}`,
+                  gender: gender,
+                  is_registered: false
+                }).select().single();
+                if (nP2) pId = nP2.id;
+              } else if (nP) {
                 pId = nP.id;
+              }
+              if (pId) {
                 await supabase.from("family_members").update({ [gender === 'male' ? 'father_id' : 'mother_id']: pId }).eq("id", memberId);
               }
             }
@@ -1052,14 +1064,26 @@ export async function createApp() {
             else await supabase.from("family_members").update({ mother_id: targetId }).eq("id", pId);
             updateData.gender = role === "grandfather" ? "male" : "female";
           } else if (role === "grandson" || role === "granddaughter") {
-            const { data: child } = await supabase.from("family_members").insert({
+            const { data: child, error: cErr } = await supabase.from("family_members").insert({
               family_id: inviter.family_id,
               name: `${inviter.name}的孩子`,
               is_registered: false,
+              member_type: 'virtual',
               [inviter.gender === 'female' ? 'mother_id' : 'father_id']: inviter.id
             }).select().single();
-            if (child) {
-              updateData[inviter.gender === 'female' ? 'mother_id' : 'father_id'] = child.id;
+
+            let finalChild = child;
+            if (cErr && (cErr.message?.includes("column") || cErr.code === "PGRST204" || cErr.code === "42703")) {
+              const { data: child2 } = await supabase.from("family_members").insert({
+                family_id: inviter.family_id,
+                name: `${inviter.name}的孩子`,
+                is_registered: false,
+                [inviter.gender === 'female' ? 'mother_id' : 'father_id']: inviter.id
+              }).select().single();
+              finalChild = child2;
+            }
+            if (finalChild) {
+              updateData[inviter.gender === 'female' ? 'mother_id' : 'father_id'] = finalChild.id;
             }
             updateData.gender = role === "grandson" ? "male" : "female";
           } else if (role === "uncle" || role === "aunt") {
@@ -1069,15 +1093,28 @@ export async function createApp() {
             updateData.mother_id = mId;
             updateData.gender = role === "uncle" ? "male" : "female";
           } else if (role === "nephew" || role === "niece") {
-            const { data: sibling } = await supabase.from("family_members").insert({
+            const { data: sibling, error: sErr } = await supabase.from("family_members").insert({
               family_id: inviter.family_id,
               name: `${inviter.name}的兄弟姐妹`,
               is_registered: false,
+              member_type: 'virtual',
               father_id: (await ensureSiblingParents(inviter.id)).fId,
               mother_id: (await ensureSiblingParents(inviter.id)).mId
             }).select().single();
-            if (sibling) {
-              updateData[inviter.gender === 'male' ? 'father_id' : 'mother_id'] = sibling.id;
+
+            let finalSibling = sibling;
+            if (sErr && (sErr.message?.includes("column") || sErr.code === "PGRST204" || sErr.code === "42703")) {
+              const { data: sibling2 } = await supabase.from("family_members").insert({
+                family_id: inviter.family_id,
+                name: `${inviter.name}的兄弟姐妹`,
+                is_registered: false,
+                father_id: (await ensureSiblingParents(inviter.id)).fId,
+                mother_id: (await ensureSiblingParents(inviter.id)).mId
+              }).select().single();
+              finalSibling = sibling2;
+            }
+            if (finalSibling) {
+              updateData[inviter.gender === 'male' ? 'father_id' : 'mother_id'] = finalSibling.id;
             }
             updateData.gender = role === "nephew" ? "male" : "female";
           }
@@ -1217,7 +1254,12 @@ export async function createApp() {
         // 2. Perform rigorous relationship calculation
         const { updateData, invUpdate } = await resolveRigorousRel(standardRole, inviter, finalTargetId);
 
-        const finalTargetData: any = { ...updateData, is_registered: true, user_id: currentUser.id };
+        const finalTargetData: any = {
+          ...updateData,
+          is_registered: true,
+          user_id: currentUser.id,
+          relationship: relationshipToInviter // 关键：更新档案中的备注关系，防止旧的手动备注干扰推导
+        };
         // 核心逻辑：如果前端传了确认/修改后的姓名和头像，优先使用；否则保留用户当前资料
         finalTargetData.name = name || currentUser.name || target.name;
         finalTargetData.avatar_url = avatarUrl || currentUser.avatar_url || target.avatar_url;

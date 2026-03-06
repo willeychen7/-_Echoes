@@ -30,6 +30,11 @@ export const AddMemberPage: React.FC = () => {
   const [isCreatingVirtualParent, setIsCreatingVirtualParent] = useState(false);
   const [virtualParentName, setVirtualParentName] = useState("");
   const [memberType, setMemberType] = useState<'human' | 'pet'>('human');
+  const [showBranchAsk, setShowBranchAsk] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState<'paternal' | 'maternal' | null>(null);
+
+  // 需要触发分流询问的模糊称谓词
+  const AMBIGUOUS_RELATIONS = ["外甥", "外甥女", "侄子", "侄女", "外甥、侄子", "外甥女、侄女"];
 
   React.useEffect(() => {
     const savedUser = localStorage.getItem("currentUser");
@@ -138,6 +143,17 @@ export const AddMemberPage: React.FC = () => {
     const createdByMemberId = currentUser?.memberId;
 
     const finalRelationship = relationship === "其他" ? customRelationship : relationship;
+
+    // 如果是模糊词且还没选分支，先弹窗询问亲疏路径
+    if (AMBIGUOUS_RELATIONS.some(rel => finalRelationship.includes(rel)) && !selectedBranch && relationship !== "其他") {
+      setShowBranchAsk(true);
+      return;
+    }
+
+    const relationshipToStore = selectedBranch
+      ? `${finalRelationship}(${selectedBranch === 'maternal' ? '母系' : '父系'})`
+      : finalRelationship;
+
     const deducedRole = deduceRole(finalRelationship);
 
     setIsSubmitting(true);
@@ -156,7 +172,7 @@ export const AddMemberPage: React.FC = () => {
             avatarUrl: `https://avatar.vercel.sh/${virtualParentName.trim()}.svg`,
             familyId,
             createdByMemberId,
-            isVirtual: true,
+            memberType: 'virtual',
             generationNum: genNum,
             // 自动解析房头
             ancestralHall: virtualParentName.includes("二") ? "二房" : virtualParentName.includes("大") ? "大房" : virtualParentName.includes("三") ? "三房" : null
@@ -177,7 +193,7 @@ export const AddMemberPage: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          relationship: finalRelationship,
+          relationship: relationshipToStore,
           avatarUrl: avatar || `https://picsum.photos/seed/${name}/200/200`,
           bio: "",
           birthDate,
@@ -199,7 +215,7 @@ export const AddMemberPage: React.FC = () => {
         customMembers.push({
           id: newId,
           name,
-          relationship: finalRelationship,
+          relationship: relationshipToStore,
           avatarUrl: avatar || `https://picsum.photos/seed/${name}/200/200`,
           bio: "",
           birthDate,
@@ -580,6 +596,60 @@ export const AddMemberPage: React.FC = () => {
       </main>
 
       <AnimatePresence>
+        {showBranchAsk && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center px-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowBranchAsk(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl relative z-10 space-y-6"
+            >
+              <div className="space-y-2 text-center">
+                <h3 className="text-2xl font-black text-slate-800">确认血缘归属</h3>
+                <p className="text-sm text-slate-500">为了精准计算辈分，这位 {relationship} 是：</p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <button
+                  onClick={() => { setSelectedBranch('maternal'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                  className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
+                >
+                  <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👩‍👦</span>
+                  <div className="text-left">
+                    <span className="font-black text-slate-800 block">我母亲家 (母系)</span>
+                    <span className="text-[10px] text-slate-400">对应：TA该叫您“舅舅/阿姨”</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => { setSelectedBranch('paternal'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                  className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
+                >
+                  <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👨‍👦</span>
+                  <div className="text-left">
+                    <span className="font-black text-slate-800 block">我父亲家 (父系)</span>
+                    <span className="text-[10px] text-slate-400">对应：TA该叫您“叔父/姑姑”</span>
+                  </div>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowBranchAsk(false)}
+                className="w-full py-4 text-slate-400 font-bold text-sm"
+              >
+                返回修改
+              </button>
+            </motion.div>
+          </div>
+        )}
+
         {showCropper && tempImage && (
           <ImageCropper
             image={tempImage}

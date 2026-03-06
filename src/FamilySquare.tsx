@@ -127,13 +127,15 @@ export const FamilySquare: React.FC = () => {
         fetch(`/api/family-members?familyId=${familyId}`).then(res => res.json()).then(data => {
           if (Array.isArray(data)) {
             // 过滤掉用于桥接关系的虚拟人物 (memberType === 'virtual' 或 姓名包含特定占位后缀)
-            const filteredMembers = data.filter((m: any) =>
-              m.member_type !== 'virtual' &&
-              m.memberType !== 'virtual' &&
-              !m.name?.includes("的子女") &&
-              !m.name?.includes("的兄弟姐妹") &&
-              !m.name?.includes("的孩子")
-            );
+            const filteredMembers = data.filter((m: any) => {
+              const type = m.member_type || m.memberType;
+              const name = m.name || "";
+              if (type === 'virtual') return false;
+              // 增强过滤：拦截所有系统自动生成的“XX的XX”占位符档案
+              const virtualKeywords = ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"];
+              if (virtualKeywords.some(k => name.includes(k))) return false;
+              return true;
+            });
             setMembers(filteredMembers);
             data.forEach((m: any) => {
               if (m.id && (m.avatar_url || m.avatarUrl)) {
@@ -180,10 +182,12 @@ export const FamilySquare: React.FC = () => {
 
             if (payload.eventType === 'INSERT') {
               const newcomer = payload.new as any;
-              // 过滤虚拟人物
-              if (newcomer.member_type !== 'virtual' &&
-                !newcomer.name?.includes("的孩子") &&
-                !newcomer.name?.includes("的子女")) {
+              // 过滤虚拟人物 (同步 loadUser 逻辑)
+              const type = newcomer.member_type || newcomer.memberType;
+              const name = newcomer.name || "";
+              const virtualKeywords = ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"];
+              const IS_VIRTUAL = type === 'virtual' || virtualKeywords.some(k => name.includes(k));
+              if (!IS_VIRTUAL) {
                 setMembers(prev => [...prev, newcomer]);
               }
             } else if (payload.eventType === 'UPDATE') {
