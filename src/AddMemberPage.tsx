@@ -159,7 +159,8 @@ export const AddMemberPage: React.FC = () => {
   // 实时的逻辑校准与“教学提示”并自动滚动
   React.useEffect(() => {
     const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship)) || "";
-    if (lineageSide === 'maternal' && relText.includes("堂")) {
+    const isMaternalTang = relText.includes("堂") && ["舅", "姨", "姥"].some(k => relText.includes(k));
+    if (lineageSide === 'maternal' && relText.includes("堂") && !isMaternalTang) {
       setCorrectionNotice(`违背传统礼法：母系（外家）一脉不可存在“堂”之名分，请修正关系称谓或选择正确的亲疏方位。`);
     }
   }, [relationship, customRelationship, lineageSide]);
@@ -179,12 +180,15 @@ export const AddMemberPage: React.FC = () => {
     const isStrictBlood = ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨", "儿子", "女儿", "孙", "侄", "外甥", "公", "爷", "奶", "婆"].some(k => relText.includes(k))
       && !["夫", "嫂", "媳", "母", "妈", "婶", "父", "爹", "妗", "老公", "老婆"].some(k => relText.includes(k));
 
+    const isMaternalTang = relText.includes("堂") && ["舅", "姨", "姥"].some(k => relText.includes(k));
+
     return {
       disableAffinal: isStrictBlood,
       disableSocial: isStrictBlood || ["堂", "表"].some(k => relText.includes(k)),
-      disableMaternal: ["堂", "叔", "伯", "姑", "婶", "侄"].some(k => relText.includes(k)) && !["表", "外"].some(k => relText.includes(k)),
+      disableMaternal: (["堂", "叔", "伯", "姑", "婶", "侄"].some(k => relText.includes(k)) && !["表", "外"].some(k => relText.includes(k))) && !isMaternalTang,
       disablePaternal: ["舅", "姨", "妗", "姥", "外孙", "外甥"].some(k => relText.includes(k)),
-      relText
+      relText,
+      isMaternalTang
     };
   }, [relationship, customRelationship]);
 
@@ -219,15 +223,16 @@ export const AddMemberPage: React.FC = () => {
 
   const handleLineageSideSelect = (side: 'paternal' | 'maternal') => {
     const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship)) || "";
+    const isMaternalTang = relText.includes("堂") && ["舅", "姨", "姥"].some(k => relText.includes(k));
 
     // 父族专属
-    if (["堂", "叔", "伯", "姑", "婶", "侄"].some(k => relText.includes(k)) && !["表", "外"].some(k => relText.includes(k)) && side !== 'paternal') {
-      setCorrectionNotice(`礼法防错：“${relText}”属于父族宗亲一脉，不可选母系外戚。`);
+    if (["堂", "叔", "伯", "姑", "婶", "侄"].some(k => relText.includes(k)) && !["表", "外"].some(k => relText.includes(k)) && !isMaternalTang && side !== 'paternal') {
+      setCorrectionNotice(`温馨提示：“${relText}”是父亲那边的宗亲，请选择父系。`);
       return;
     }
     // 母族专属
     if (["舅", "姨", "妗", "姥", "外孙", "外甥"].some(k => relText.includes(k)) && side !== 'maternal') {
-      setCorrectionNotice(`礼法防错：“${relText}”属于母系外戚一脉，不可选父族宗亲。`);
+      setCorrectionNotice(`温馨提示：“${relText}”是母亲那边的外戚，请确认下方位哦。`);
       return;
     }
 
@@ -427,7 +432,8 @@ export const AddMemberPage: React.FC = () => {
     const side = lineageSide || (currentBranchName === '母家' ? 'maternal' : 'paternal');
 
     // 如果是母系（外戚）或选择了母家选项，绝对不能出现“堂”
-    if (side === 'maternal' && (resolvedRelationship.includes("堂") || currentBranchName === '堂')) {
+    const isMaternalTangFinal = resolvedRelationship.includes("堂") && ["舅", "姨", "姥"].some(k => resolvedRelationship.includes(k));
+    if (side === 'maternal' && (resolvedRelationship.includes("堂") || currentBranchName === '堂') && !isMaternalTangFinal) {
       setCorrectionNotice(`违背传统礼法：母系（外家）一脉不可存在“堂”之名分，请修正关系称谓或选择正确的亲疏方位。`);
       return; // 强拦截，决不允许创建档案
     }
@@ -1075,7 +1081,7 @@ export const AddMemberPage: React.FC = () => {
                     <div className="flex bg-rose-50 p-4 rounded-2xl items-start gap-3 border border-rose-100 shadow-sm animate-in fade-in">
                       <AlertCircle className="size-5 text-rose-500 flex-shrink-0 mt-0.5" />
                       <p className="text-[13px] font-bold text-rose-700 leading-relaxed">
-                        礼法规制：[{kinshipGuard.relText}] {kinshipGuard.disableMaternal ? '根据宗法属于父族一脉，不可选母系。' : '根据宗法属于母家一脉，不可选父系。'}
+                        温馨提示：[{kinshipGuard.relText}] {kinshipGuard.disableMaternal ? '是父亲那边的宗亲，请选择父族哦。' : '是母亲那边的外戚，请确认下方位哦。'}
                       </p>
                     </div>
                   )}
@@ -1084,7 +1090,7 @@ export const AddMemberPage: React.FC = () => {
                     <button
                       onClick={() => {
                         if (kinshipGuard.disablePaternal) {
-                          setCorrectionNotice(`礼法防错：“${kinshipGuard.relText}”属于母系外戚一脉，不可选父族宗亲。`);
+                          setCorrectionNotice(`温馨提示：“${kinshipGuard.relText}”是母亲那边的外戚，请确认下方位哦。`);
                         } else {
                           handleLineageSideSelect('paternal');
                         }
@@ -1105,7 +1111,7 @@ export const AddMemberPage: React.FC = () => {
                     <button
                       onClick={() => {
                         if (kinshipGuard.disableMaternal) {
-                          setCorrectionNotice(`礼法防错：“${kinshipGuard.relText}”属于父族宗亲一脉，不可选母系外戚。`);
+                          setCorrectionNotice(`温馨提示：“${kinshipGuard.relText}”是父亲那边的宗亲，请选择父系哦。`);
                         } else {
                           handleLineageSideSelect('maternal');
                         }
@@ -1145,13 +1151,24 @@ export const AddMemberPage: React.FC = () => {
                           <>您的<span className="text-lg text-rose-500 mx-1 px-1 bg-rose-50 rounded-lg">第几个孩子</span>，是 {name || '这位晚辈'} 的父母？</>
                         );
 
+                        if (lineageSide === 'maternal') {
+                          const isMaternalTang = relText.includes("堂") && ["舅", "姨", "姥"].some(k => relText.includes(k));
+                          if (isMaternalTang) {
+                            return <>这位 {relText} 的<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">父亲（您的堂外公）</span>，在您的<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">母系长辈</span>中排行老几？</>;
+                          } else if (["亲", "舅", "姨", "姥"].some(k => relText.includes(k)) && !relText.includes("表")) {
+                            return <>您的这位<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">{relText}</span>排行老几？</>;
+                          } else {
+                            return <>那位 {relText} 的<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">父/母</span>，在您的<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">母系长辈</span>中排行老几？</>;
+                          }
+                        }
+
                         if (lineageSide === 'paternal') {
+                          const isPaternalDirect = ["亲", "叔", "伯", "姑", "婶"].some(k => relText.includes(k)) && !["表", "堂"].some(k => relText.includes(k));
+                          if (isPaternalDirect) {
+                            return <>您的这位<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">{relText}</span>排行老几？</>;
+                          }
                           return (
                             <>那位 {relText} 的<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">父亲</span>，在您的<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">父辈</span>中排行老几？</>
-                          );
-                        } else {
-                          return (
-                            <>那位 {relText} 的<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">父/母</span>，在您的<span className="text-xl text-[#eab308] mx-1 px-1 bg-amber-50 rounded-lg">母系长辈</span>中排行老几？</>
                           );
                         }
                       })()}
