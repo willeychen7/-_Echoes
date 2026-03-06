@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, UserPlus, Copy, Check, Camera, Heart, Link, Users, Landmark, Home, UserCircle2, PawPrint } from "lucide-react";
+import { ArrowLeft, UserPlus, Copy, Check, Camera, Heart, Link, Users, Landmark, Home, UserCircle2, PawPrint, AlertCircle } from "lucide-react";
 import { Button } from "./components/Button";
 import { motion, AnimatePresence } from "motion/react";
 import { deduceRole, RELATIONSHIP_OPTIONS } from "./lib/relationships";
@@ -40,6 +40,7 @@ export const AddMemberPage: React.FC = () => {
   const [branchStage, setBranchStage] = useState<'type' | 'rank'>('type');
   const [selectedRank, setSelectedRank] = useState<string | null>(null);
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
+  const [correctionNotice, setCorrectionNotice] = useState<string | null>(null);
 
   // 全面涵盖：孙辈、旁系、长辈、以及平辈的潜在歧义词
   const AMBIGUOUS_RELATIONS = [
@@ -161,6 +162,63 @@ export const AddMemberPage: React.FC = () => {
     setConnectingRank(null);
     setBranchStage('type');
   }, [relationship, customRelationship]);
+
+  // 实时的逻辑校准与“教学提示”
+  React.useEffect(() => {
+    const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship)) || "";
+    if (lineageSide === 'maternal' && relText.includes("堂")) {
+      setCorrectionNotice("礼法校准：母系（外戚）亲属不称“堂”，系统已自动为您定性为“表”。");
+    }
+  }, [relationship, customRelationship, lineageSide]);
+
+  // 宗法防错守卫：阻断错误的选择并触发教学提示
+  const handleKinshipTypeSelect = (type: 'blood' | 'affinal' | 'social') => {
+    const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship)) || "";
+
+    // 明确的血亲词缀（排除带有姻亲特征的：夫、嫂、媳、母、妈、婆、婶、父、爹）
+    const isStrictBlood = ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨", "儿子", "女儿", "孙", "侄", "外甥"].some(k => relText.includes(k))
+      && !["夫", "嫂", "媳", "母", "妈", "婆", "婶", "父", "爹的", "父的"].some(k => relText.includes(k));
+
+    // 强拦截 1：明显的血亲，不能选姻亲或社交
+    if (isStrictBlood && type !== 'blood') {
+      setCorrectionNotice(`礼法防错：“${relText}”属于您的同胞/同脉血亲，不可选择“${type === 'social' ? '社会好友' : '姻亲眷属'}”。`);
+      return;
+    }
+
+    // 堂/表亲的宽泛拦截 (应对未被 isStrictBlood 覆盖的情况)
+    if (["堂", "表"].some(k => relText.includes(k)) && type === 'social') {
+      setCorrectionNotice(`礼法防错：“${relText}”属于您的宗族/外家至亲，不可选择“社会好友”。`);
+      return;
+    }
+
+    setCorrectionNotice(null);
+    setKinshipType(type);
+    if (type === 'social') {
+      setSafetyStep('none');
+    } else {
+      setSafetyStage(3);
+    }
+  };
+
+  const handleLineageSideSelect = (side: 'paternal' | 'maternal') => {
+    const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship)) || "";
+
+    // 父族专属
+    if (["堂", "叔", "伯", "姑", "侄"].some(k => relText.includes(k)) && side !== 'paternal') {
+      setCorrectionNotice(`礼法防错：“${relText}”属于父族宗亲一脉，不可选母系外戚。`);
+      return;
+    }
+    // 母族专属
+    if (["舅", "姨", "外孙", "外甥"].some(k => relText.includes(k)) && side !== 'maternal') {
+      setCorrectionNotice(`礼法防错：“${relText}”属于母系外戚一脉，不可选父族宗亲。`);
+      return;
+    }
+
+    setCorrectionNotice(null);
+    setLineageSide(side);
+    setSafetyStage(4);
+    setSafetyChoice('real');
+  };
 
   // 自动化：当需要创建虚拟父辈时，预填一个温情的名称
   React.useEffect(() => {
@@ -765,7 +823,7 @@ export const AddMemberPage: React.FC = () => {
                     </div>
                     <div className="grid grid-cols-1 gap-3 px-2">
                       <button
-                        onClick={() => { setKinshipType('blood'); setSafetyStage(3); }}
+                        onClick={() => handleKinshipTypeSelect('blood')}
                         className="flex items-center gap-4 p-5 rounded-[2rem] border-2 border-slate-50 bg-slate-50 hover:border-red-100 hover:bg-red-50/30 transition-all group"
                       >
                         <div className="size-14 rounded-2xl bg-red-50 flex items-center justify-center text-red-500 group-hover:scale-110 transition-transform">
@@ -777,7 +835,7 @@ export const AddMemberPage: React.FC = () => {
                         </div>
                       </button>
                       <button
-                        onClick={() => { setKinshipType('affinal'); setSafetyStage(3); }}
+                        onClick={() => handleKinshipTypeSelect('affinal')}
                         className="flex items-center gap-4 p-5 rounded-[2rem] border-2 border-slate-50 bg-slate-50 hover:border-blue-100 hover:bg-blue-50/30 transition-all group"
                       >
                         <div className="size-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
@@ -789,7 +847,7 @@ export const AddMemberPage: React.FC = () => {
                         </div>
                       </button>
                       <button
-                        onClick={() => { setKinshipType('social'); setSafetyStep('none'); }}
+                        onClick={() => handleKinshipTypeSelect('social')}
                         className="flex items-center gap-4 p-5 rounded-[2rem] border-2 border-slate-50 bg-slate-50 hover:border-green-100 hover:bg-green-50/30 transition-all group"
                       >
                         <div className="size-14 rounded-2xl bg-green-50 flex items-center justify-center text-green-500 group-hover:scale-110 transition-transform">
@@ -814,7 +872,7 @@ export const AddMemberPage: React.FC = () => {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <button
-                        onClick={() => { setLineageSide('paternal'); setSafetyStage(4); setSafetyChoice('real'); }}
+                        onClick={() => handleLineageSideSelect('paternal')}
                         className="p-8 rounded-[2.5rem] border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all group text-center space-y-3 shadow-sm hover:shadow-md"
                       >
                         <div className="size-16 rounded-full bg-amber-50 mx-auto flex items-center justify-center text-[#eab308] group-hover:scale-110 transition-transform">
@@ -824,7 +882,7 @@ export const AddMemberPage: React.FC = () => {
                         <span className="text-[10px] text-slate-400 leading-tight">我父亲/父系<br />那边的人</span>
                       </button>
                       <button
-                        onClick={() => { setLineageSide('maternal'); setSafetyStage(4); setSafetyChoice('real'); }}
+                        onClick={() => handleLineageSideSelect('maternal')}
                         className="p-8 rounded-[2.5rem] border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all group text-center space-y-3 shadow-sm hover:shadow-md"
                       >
                         <div className="size-16 rounded-full bg-amber-50 mx-auto flex items-center justify-center text-[#eab308] group-hover:scale-110 transition-transform">
@@ -969,7 +1027,23 @@ export const AddMemberPage: React.FC = () => {
           </AnimatePresence>
         </div>
 
-        <div className="pt-4 pb-12">
+        <div className="pt-4 pb-12 space-y-4">
+          <AnimatePresence>
+            {correctionNotice && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="bg-rose-50 border border-rose-100 p-4 rounded-2xl flex items-start gap-3 shadow-sm"
+              >
+                <AlertCircle className="size-5 text-rose-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs font-bold text-rose-700 leading-relaxed">
+                  {correctionNotice}
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <Button
             size="xl"
             className="w-full py-6 text-xl font-bold rounded-full bg-[#eab308] hover:bg-[#d9a306] text-black shadow-lg shadow-[#eab308]/20 border-none transition-all"
