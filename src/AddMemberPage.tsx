@@ -172,6 +172,22 @@ export const AddMemberPage: React.FC = () => {
     }
   }, [correctionNotice]);
 
+  // 礼法防错：预先计算应禁用的维度，用于 UI 提示与限制
+  const kinshipGuard = React.useMemo(() => {
+    const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship)) || "";
+
+    const isStrictBlood = ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨", "儿子", "女儿", "孙", "侄", "外甥", "公", "爷", "奶", "婆"].some(k => relText.includes(k))
+      && !["夫", "嫂", "媳", "母", "妈", "婶", "父", "爹", "妗", "老公", "老婆"].some(k => relText.includes(k));
+
+    return {
+      disableAffinal: isStrictBlood,
+      disableSocial: isStrictBlood || ["堂", "表"].some(k => relText.includes(k)),
+      disableMaternal: ["堂", "叔", "伯", "姑", "婶", "侄"].some(k => relText.includes(k)) && !["表", "外"].some(k => relText.includes(k)),
+      disablePaternal: ["舅", "姨", "妗", "姥", "外孙", "外甥"].some(k => relText.includes(k)),
+      relText
+    };
+  }, [relationship, customRelationship]);
+
   // 宗法防错守卫：阻断错误的选择并触发教学提示
   const handleKinshipTypeSelect = (type: 'blood' | 'affinal' | 'social') => {
     const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship)) || "";
@@ -969,13 +985,23 @@ export const AddMemberPage: React.FC = () => {
 
               {/* 阶段 2：定性 (Kinship Type) */}
               {safetyStage === 2 && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
                   <div className="text-center space-y-2">
                     <h3 className="text-2xl font-black text-slate-800 tracking-wider">第二阶：关系定性</h3>
                     <p className="text-sm font-bold text-slate-500">
                       明确基本属性
                     </p>
                   </div>
+
+                  {(kinshipGuard.disableAffinal || kinshipGuard.disableSocial) && (
+                    <div className="flex bg-rose-50 p-4 rounded-2xl items-start gap-3 border border-rose-100 shadow-sm animate-in fade-in">
+                      <AlertCircle className="size-5 text-rose-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-[13px] font-bold text-rose-700 leading-relaxed">
+                        礼法防错：系统已为您自动锁定符合 [{kinshipGuard.relText}] 的定性分类，屏蔽了不相关选项。
+                      </p>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 gap-3">
                     <button
                       onClick={() => handleKinshipTypeSelect('blood')}
@@ -990,8 +1016,17 @@ export const AddMemberPage: React.FC = () => {
                       </div>
                     </button>
                     <button
-                      onClick={() => handleKinshipTypeSelect('affinal')}
-                      className="flex items-center gap-4 p-5 rounded-[2rem] bg-white shadow-sm border-2 border-transparent hover:border-blue-100 hover:shadow-xl transition-all group"
+                      onClick={() => {
+                        if (kinshipGuard.disableAffinal) {
+                          setCorrectionNotice(`礼法防错：“${kinshipGuard.relText}”属于同胞血亲，不可选姻亲眷属。`);
+                        } else {
+                          handleKinshipTypeSelect('affinal');
+                        }
+                      }}
+                      className={cn(
+                        "flex items-center gap-4 p-5 rounded-[2rem] shadow-sm border-2 transition-all group",
+                        kinshipGuard.disableAffinal ? "bg-slate-50 border-transparent opacity-40 grayscale cursor-not-allowed" : "bg-white border-transparent hover:border-blue-100 hover:shadow-xl"
+                      )}
                     >
                       <div className="size-14 rounded-[1.2rem] bg-blue-50 flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
                         <Link size={28} />
@@ -1002,8 +1037,17 @@ export const AddMemberPage: React.FC = () => {
                       </div>
                     </button>
                     <button
-                      onClick={() => handleKinshipTypeSelect('social')}
-                      className="flex items-center gap-4 p-5 rounded-[2rem] bg-white shadow-sm border-2 border-transparent hover:border-green-100 hover:shadow-xl transition-all group"
+                      onClick={() => {
+                        if (kinshipGuard.disableSocial) {
+                          setCorrectionNotice(`礼法防错：“${kinshipGuard.relText}”属于社会好友以外范畴，不可选社会好友。`);
+                        } else {
+                          handleKinshipTypeSelect('social');
+                        }
+                      }}
+                      className={cn(
+                        "flex items-center gap-4 p-5 rounded-[2rem] shadow-sm border-2 transition-all group",
+                        kinshipGuard.disableSocial ? "bg-slate-50 border-transparent opacity-40 grayscale cursor-not-allowed" : "bg-white border-transparent hover:border-green-100 hover:shadow-xl"
+                      )}
                     >
                       <div className="size-14 rounded-[1.2rem] bg-green-50 flex items-center justify-center text-green-500 group-hover:scale-110 transition-transform">
                         <Users size={28} />
@@ -1019,17 +1063,36 @@ export const AddMemberPage: React.FC = () => {
 
               {/* 阶段 3：定方位 (Lineage Direction) */}
               {safetyStage === 3 && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
                   <div className="text-center space-y-2">
                     <h3 className="text-2xl font-black text-slate-800 tracking-wider">第三阶：方位归属</h3>
                     <p className="text-sm font-bold text-slate-500">
                       定夺族系主次
                     </p>
                   </div>
+
+                  {(kinshipGuard.disableMaternal || kinshipGuard.disablePaternal) && (
+                    <div className="flex bg-rose-50 p-4 rounded-2xl items-start gap-3 border border-rose-100 shadow-sm animate-in fade-in">
+                      <AlertCircle className="size-5 text-rose-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-[13px] font-bold text-rose-700 leading-relaxed">
+                        礼法规制：[{kinshipGuard.relText}] {kinshipGuard.disableMaternal ? '根据宗法属于父族一脉，不可选母系。' : '根据宗法属于母家一脉，不可选父系。'}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-3">
                     <button
-                      onClick={() => handleLineageSideSelect('paternal')}
-                      className="p-6 rounded-[2rem] bg-white border-2 border-transparent hover:border-[#eab308] transition-all group text-center space-y-3 shadow-sm hover:shadow-xl"
+                      onClick={() => {
+                        if (kinshipGuard.disablePaternal) {
+                          setCorrectionNotice(`礼法防错：“${kinshipGuard.relText}”属于母系外戚一脉，不可选父族宗亲。`);
+                        } else {
+                          handleLineageSideSelect('paternal');
+                        }
+                      }}
+                      className={cn(
+                        "p-6 rounded-[2rem] border-2 transition-all group text-center space-y-3 shadow-sm",
+                        kinshipGuard.disablePaternal ? "bg-slate-50 border-transparent opacity-40 grayscale cursor-not-allowed" : "bg-white border-transparent hover:border-[#eab308] hover:shadow-xl"
+                      )}
                     >
                       <div className="size-16 rounded-full bg-amber-50 mx-auto flex items-center justify-center text-[#eab308] group-hover:scale-110 transition-transform">
                         <Landmark size={32} />
@@ -1040,8 +1103,17 @@ export const AddMemberPage: React.FC = () => {
                       </div>
                     </button>
                     <button
-                      onClick={() => handleLineageSideSelect('maternal')}
-                      className="p-6 rounded-[2rem] bg-white border-2 border-transparent hover:border-[#eab308] transition-all group text-center space-y-3 shadow-sm hover:shadow-xl"
+                      onClick={() => {
+                        if (kinshipGuard.disableMaternal) {
+                          setCorrectionNotice(`礼法防错：“${kinshipGuard.relText}”属于父族宗亲一脉，不可选母系外戚。`);
+                        } else {
+                          handleLineageSideSelect('maternal');
+                        }
+                      }}
+                      className={cn(
+                        "p-6 rounded-[2rem] border-2 transition-all group text-center space-y-3 shadow-sm",
+                        kinshipGuard.disableMaternal ? "bg-slate-50 border-transparent opacity-40 grayscale cursor-not-allowed" : "bg-white border-transparent hover:border-[#eab308] hover:shadow-xl"
+                      )}
                     >
                       <div className="size-16 rounded-full bg-amber-50 mx-auto flex items-center justify-center text-[#eab308] group-hover:scale-110 transition-transform">
                         <Home size={32} />
