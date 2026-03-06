@@ -48,27 +48,30 @@ export const AddMemberPage: React.FC = () => {
   const RELATIONSHIP_SUGGESTIONS = React.useMemo(() => {
     const bases = RELATIONSHIP_OPTIONS.map(opt => opt.label);
     const ranks = ["大", "二", "三", "四", "五", "小", "幺"];
-    const rankables = ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨", "侄", "甥"];
+    const rankables = ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨", "侄", "甥", "孙", "侄子", "侄女", "外甥", "外甥女", "孙子", "孙女"];
     const cousinPrefixes = ["堂", "表"];
 
     let expanded: string[] = [...bases];
 
-    // 1. 添加堂/表基础前缀 (如 堂哥, 堂叔, 表姑)
-    ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨"].forEach(s => {
+    // 1. 添加堂/表基础前缀 (覆盖长、平、晚三代)
+    ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨", "侄", "甥", "孙"].forEach(s => {
       cousinPrefixes.forEach(p => {
         expanded.push(`${p}${s}`);
+        if (s === "侄") expanded.push(`${p}侄子`, `${p}侄女`);
+        if (s === "甥") expanded.push(`${p}外甥`, `${p}外甥女`);
+        if (s === "孙") expanded.push(`${p}孙子`, `${p}孙女`);
       });
     });
 
-    // 2. 添加排行前缀 (如 大哥, 二哥)
+    // 2. 添加排行前缀 (常规)
     rankables.forEach(r => {
       ranks.forEach(prefix => {
         expanded.push(`${prefix}${r}`);
       });
     });
 
-    // 3. 组合：堂/表 + 排行 (如 堂大哥, 表三姑)
-    ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨"].forEach(s => {
+    // 3. 深度组合：堂/表 + 排行 + 重点称谓
+    ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨", "侄", "甥", "孙"].forEach(s => {
       cousinPrefixes.forEach(p => {
         ranks.forEach(rk => {
           expanded.push(`${p}${rk}${s}`);
@@ -641,10 +644,19 @@ export const AddMemberPage: React.FC = () => {
                 <div className="space-y-2">
                   <h3 className="text-xl font-black text-slate-800">确认亲属关系</h3>
                   <p className="text-sm text-slate-500">
-                    {["哥", "姐", "弟", "妹", "甥", "侄", "孙"].some(k => (relationship === "其他" ? customRelationship : relationship).includes(k))
-                      ? `请问这位 ${relationship === "其他" ? customRelationship : relationship} 的父亲，是您父亲的亲兄弟（伯伯/叔叔），还是堂兄弟？`
-                      : `这位长辈是您父亲的亲兄弟，还是堂兄弟？`
-                    }
+                    {(() => {
+                      const rel = (relationship === "其他" ? customRelationship : relationship);
+                      const isPeer = ["哥", "姐", "弟", "妹", "甥", "侄", "孙"].some(k => rel.includes(k));
+                      const isMaternal = ["舅", "姨", "表"].some(k => rel.includes(k));
+
+                      if (isPeer) {
+                        if (isMaternal) return `请问这位 ${rel} 的母亲/父亲，是您父母的亲兄弟姐妹（如：嫡亲舅舅/姨妈），还是更远一点的表亲？`;
+                        return `请问这位 ${rel} 的父亲，是您父亲的亲兄弟（伯伯/叔叔），还是堂兄弟？`;
+                      } else {
+                        if (isMaternal) return `这位长辈是您母亲/父亲的亲兄弟姐妹（如：亲舅舅/亲姨妈），还是更远的分支？`;
+                        return `这位长辈是您父亲的亲兄弟，还是堂兄弟？`;
+                      }
+                    })()}
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
