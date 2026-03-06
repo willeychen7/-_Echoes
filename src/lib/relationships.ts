@@ -58,7 +58,7 @@ export const RELATIONSHIP_OPTIONS = [
     { value: "niece", label: "侄女/外甥女" },
     { value: "grandson", label: "孙子/外孙" },
     { value: "granddaughter", label: "孙女/外孙女" },
-    { value: "cousin", label: "表亲/堂亲" },
+    { value: "cousin", label: "堂亲/表亲" },
     { value: "family", label: "其他家人" },
     { value: "pet", label: "宠物/毛孩子" },
 ];
@@ -101,7 +101,7 @@ export function getCleanRelationship(rel: string): string {
     }
 
     // 移除手动分流打标
-    const tags = ["(母系)", "(父系)", "(亲生)", "(堂)", "(表)", "(血亲)", "(姻亲)"];
+    const tags = ["(母家)", "(父家)", "(母系)", "(父系)", "(亲生)", "(堂)", "(表)", "(血亲)", "(姻亲)"];
     tags.forEach(t => {
         clean = clean.split(t).join("");
     });
@@ -860,9 +860,9 @@ export function getRigorousRelationship(
                     let finalTitleRaw = "";
 
                     // 1. 优先通过“打标”锁死名分 (名分锚定)
-                    if (rawT.includes("母系")) {
+                    if (rawT.includes("母家") || rawT.includes("母系")) {
                         finalTitleRaw = isFemale(tNode) ? "姨妈" : "舅舅";
-                    } else if (rawT.includes("父系")) {
+                    } else if (rawT.includes("父家") || rawT.includes("父系")) {
                         finalTitleRaw = isFemale(tNode) ? "姑姑" : "叔叔";
                     } else if (rawT.includes("血亲")) {
                         // 如果是长辈辈分反转

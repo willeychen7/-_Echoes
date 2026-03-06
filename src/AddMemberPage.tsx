@@ -170,9 +170,21 @@ export const AddMemberPage: React.FC = () => {
       }
     }
 
+    let resolvedRelationship = finalRelationship;
+    if (finalRelationship.includes("/")) {
+      const parts = finalRelationship.split("/");
+      if (['母家', '表', '姻亲'].includes(selectedBranch || '')) {
+        // 通常 / 后面的词是母家、表亲或姻亲称谓 (如 侄子/外甥，外甥是母系)
+        resolvedRelationship = parts[1] || parts[parts.length - 1];
+      } else {
+        // 通常 / 前面的是父家、堂亲或血亲 (如 侄子/外甥，侄子是父系)
+        resolvedRelationship = parts[0];
+      }
+    }
+
     const relationshipToStore = selectedBranch
-      ? `${finalRelationship}(${selectedBranch})`
-      : finalRelationship;
+      ? `${resolvedRelationship}(${selectedBranch})`
+      : resolvedRelationship;
 
     const deducedRole = deduceRole(finalRelationship);
 
@@ -676,7 +688,7 @@ export const AddMemberPage: React.FC = () => {
                 {branchMode === 'lineage' && (
                   <>
                     <button
-                      onClick={() => { setSelectedBranch('母系'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      onClick={() => { setSelectedBranch('母家'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
                       className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👩‍👦</span>
@@ -686,7 +698,7 @@ export const AddMemberPage: React.FC = () => {
                       </div>
                     </button>
                     <button
-                      onClick={() => { setSelectedBranch('父系'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      onClick={() => { setSelectedBranch('父家'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
                       className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👨‍👦</span>
@@ -756,7 +768,7 @@ export const AddMemberPage: React.FC = () => {
                       </div>
                     </button>
                     <button
-                      onClick={() => { setSelectedBranch('母系'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
+                      onClick={() => { setSelectedBranch('母家'); setShowBranchAsk(false); setTimeout(handleAdd, 100); }}
                       className="p-5 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-[#eab308] hover:bg-white transition-all flex items-center gap-4 group"
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👩‍👦</span>
