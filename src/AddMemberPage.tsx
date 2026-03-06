@@ -79,18 +79,18 @@ export const AddMemberPage: React.FC = () => {
 
     if (safetyChoice === 'clan') {
       // 堂兄弟的父辈是我的叔公、伯公 (grand_uncle)
-      return members.filter(m => m.relationship.includes("叔公") || m.relationship.includes("伯公"));
+      return members.filter(m => (m.relationship || "").includes("叔公") || (m.relationship || "").includes("伯公"));
     }
 
     // 默认逻辑
     if (["uncle_paternal", "aunt_paternal", "father"].includes(role)) {
-      return members.filter(m => m.standardRole?.includes("grandfather_paternal") || m.relationship.includes("爷"));
+      return members.filter(m => m.standardRole?.includes("grandfather_paternal") || (m.relationship || "").includes("爷"));
     }
     if (["brother", "sister"].includes(role)) {
-      return members.filter(m => m.standardRole === "father" || m.relationship.includes("爸"));
+      return members.filter(m => m.standardRole === "father" || (m.relationship || "").includes("爸"));
     }
     if (["uncle_maternal", "aunt_maternal", "mother"].includes(role)) {
-      return members.filter(m => m.standardRole?.includes("grandfather_maternal") || m.relationship.includes("外公"));
+      return members.filter(m => m.standardRole?.includes("grandfather_maternal") || (m.relationship || "").includes("外公"));
     }
     if (role === "cousin" || rel.includes("堂") || rel.includes("表")) {
       return members.filter(m => ["uncle_paternal", "aunt_paternal", "uncle_maternal", "aunt_maternal"].includes(m.standardRole || ""));
@@ -98,9 +98,8 @@ export const AddMemberPage: React.FC = () => {
     return [];
   }, [relationship, customRelationship, members, safetyChoice]);
 
-  // 当关系变化时，判断是否需要触发安全检查
   React.useEffect(() => {
-    const rel = relationship === "其他" ? customRelationship : relationship;
+    const rel = (relationship === "其他" ? customRelationship : relationship) || "";
     const ambiguous = ["叔叔", "伯伯", "堂叔", "二爸", "小叔", "叔伯"].some(k => rel.includes(k));
     if (ambiguous) {
       setSafetyStep('ask');
@@ -795,6 +794,6 @@ export const AddMemberPage: React.FC = () => {
           />
         )}
       </AnimatePresence>
-    </div >
+    </div>
   );
 };
