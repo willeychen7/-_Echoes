@@ -251,28 +251,28 @@ export function isClan(vNode: any, tNode: any): boolean {
  * 根据生日及房头计算排行前缀 (大, 二, 三, 小)
  */
 function getRankPrefix(targetNode: any, members: any[]) {
+    // --- 逻辑 A：名分优先 (针对“二爸”、“老小姨”) ---
+    const rawRemark = (targetNode.relationship || "").trim();
+    // 匹配前缀：大, 二, 三, 四, 五, 六, 七, 八, 九, 十, 小, 老
+    const explicitRankMatch = rawRemark.match(/^(大|二|三|四|五|六|七|八|九|十|小|老)/);
+    if (explicitRankMatch) {
+        return explicitRankMatch[0]; // 用户手动填了名分，直接锁死，不再看生日
+    }
+
+    // --- 逻辑 B：生物学排序 (用户没填排行时触发) ---
     const targetId = Number(targetNode.id);
     const targetGen = targetNode.generationNum;
 
-    // 筛选出同代、同房、相同性别的兄弟
     const sibs = members.filter(m => {
-        // 排除宠物，宠物不参与人类排行
         if (m.memberType === 'pet' || m.type === 'pet') return false;
-
-        // 基本要求：同代、同性别
-        const sameGen = m.generationNum !== undefined && targetGen !== undefined ?
-            m.generationNum === targetGen : true;
-
-        // 房头判定：如果目标有房头，则只在同房头内排
-        const sameHall = targetNode.ancestralHall && m.ancestralHall ?
-            targetNode.ancestralHall === m.ancestralHall : true;
-
+        const sameGen = m.generationNum === targetGen;
+        // 确保排行是在同一个房头（或同一支脉）内部进行的
+        const sameHall = targetNode.ancestralHall === m.ancestralHall;
         return sameGen && sameHall && m.gender === targetNode.gender;
     });
 
     if (sibs.length <= 1) return "";
 
-    // 对有生日的人进行排序，没生日的放最后
     const sorted = [...sibs].sort((a, b) => {
         const da = a.birthDate || a.birth_date || "9999-99-99";
         const db = b.birthDate || b.birth_date || "9999-99-99";
@@ -282,11 +282,11 @@ function getRankPrefix(targetNode: any, members: any[]) {
     const index = sorted.findIndex(s => Number(s.id) === targetId);
     if (index === -1) return "";
 
-    // 如果最后一位，且人数大于1，通常叫“小”
+    // 针对末位的特殊处理
     if (index === sorted.length - 1 && sorted.length > 1) return "小";
 
-    const chineseNumbers = ["", "大", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十", "二十一", "二十二", "二十三", "二十四", "二十五"];
-    return chineseNumbers[index + 1] || `${index + 1}`;
+    const chineseNumbers = ["", "大", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+    return chineseNumbers[index + 1] || "";
 }
 
 /**
