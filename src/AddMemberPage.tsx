@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, UserPlus, Copy, Check, Camera } from "lucide-react";
+import { ArrowLeft, UserPlus, Copy, Check, Camera, Heart, Link, Users, Landmark, Home, UserCircle2, PawPrint } from "lucide-react";
 import { Button } from "./components/Button";
 import { motion, AnimatePresence } from "motion/react";
 import { deduceRole, RELATIONSHIP_OPTIONS } from "./lib/relationships";
@@ -330,9 +330,21 @@ export const AddMemberPage: React.FC = () => {
       }
     }
 
-    // 组合最终关系
-    let relationshipToStore = currentBranch
-      ? `${resolvedRelationship}(${currentBranch})`
+    // --- 逻辑守卫 (Logic Guard) ---
+    // 强制执行传统的宗法逻辑：母系无“堂”，父系姑表为“表”
+    const currentBranchName = selectedBranch || autoInferredBranch;
+    const side = lineageSide || (currentBranchName === '母家' ? 'maternal' : 'paternal');
+
+    // 如果是母系（外戚），绝对不能出现“堂”
+    if (side === 'maternal' && (resolvedRelationship.includes("堂") || currentBranchName === '堂')) {
+      alert(`传统礼法提醒：母系（外家）亲属应称“表”不称“堂”。系统已自动为您修正为“表${resolvedRelationship.replace("堂", "")}”。`);
+      resolvedRelationship = resolvedRelationship.replace("堂", "表");
+      if (autoInferredBranch === '堂') autoInferredBranch = '表';
+    }
+
+    // 最终组合逻辑：确保“堂/表”逻辑与支系一致
+    let relationshipToStore = currentBranchName
+      ? `${resolvedRelationship}(${currentBranchName})`
       : resolvedRelationship;
 
     if (currentRank) {
@@ -612,13 +624,23 @@ export const AddMemberPage: React.FC = () => {
                   type="button"
                   onClick={() => setMemberType(t as 'human' | 'pet')}
                   className={cn(
-                    "flex-1 h-14 rounded-2xl font-bold transition-all border-2",
+                    "flex-1 h-20 rounded-[2rem] font-bold transition-all border-2 flex flex-col items-center justify-center gap-1",
                     memberType === t
-                      ? "bg-slate-800 border-slate-800 text-white shadow-lg scale-[1.02]"
-                      : "bg-white border-slate-50 text-slate-400 hover:border-slate-200"
+                      ? "bg-slate-800 border-slate-800 text-white shadow-xl scale-[1.02]"
+                      : "bg-white border-slate-50 text-slate-400 hover:border-slate-200 shadow-sm"
                   )}
                 >
-                  {t === 'human' ? "人类成员 👤" : "可爱宠物 🐾"}
+                  {t === 'human' ? (
+                    <>
+                      <UserCircle2 size={24} className={memberType === t ? "text-amber-400" : "text-slate-300"} />
+                      <span className="text-sm">人物档案</span>
+                    </>
+                  ) : (
+                    <>
+                      <PawPrint size={24} className={memberType === t ? "text-amber-400" : "text-slate-300"} />
+                      <span className="text-sm">萌宠伙伴</span>
+                    </>
+                  )}
                 </button>
               ))}
             </div>
@@ -744,31 +766,37 @@ export const AddMemberPage: React.FC = () => {
                     <div className="grid grid-cols-1 gap-3 px-2">
                       <button
                         onClick={() => { setKinshipType('blood'); setSafetyStage(3); }}
-                        className="flex items-center gap-4 p-5 rounded-[2.2rem] border-2 border-slate-50 bg-slate-50 hover:border-red-100 hover:bg-red-50/30 transition-all group"
+                        className="flex items-center gap-4 p-5 rounded-[2rem] border-2 border-slate-50 bg-slate-50 hover:border-red-100 hover:bg-red-50/30 transition-all group"
                       >
-                        <div className="size-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-500 text-xl group-hover:scale-110 transition-transform">❤️</div>
+                        <div className="size-14 rounded-2xl bg-red-50 flex items-center justify-center text-red-500 group-hover:scale-110 transition-transform">
+                          <Heart size={28} fill="currentColor" />
+                        </div>
                         <div className="text-left flex-1">
-                          <span className="font-black text-slate-800 block leading-tight">同胞血亲</span>
+                          <span className="font-black text-slate-800 block text-base">同胞血亲</span>
                           <span className="text-[10px] text-slate-400">例：亲叔伯、亲姑姨、亲兄弟及其后代</span>
                         </div>
                       </button>
                       <button
                         onClick={() => { setKinshipType('affinal'); setSafetyStage(3); }}
-                        className="flex items-center gap-4 p-5 rounded-[2.2rem] border-2 border-slate-50 bg-slate-50 hover:border-blue-100 hover:bg-blue-50/30 transition-all group"
+                        className="flex items-center gap-4 p-5 rounded-[2rem] border-2 border-slate-50 bg-slate-50 hover:border-blue-100 hover:bg-blue-50/30 transition-all group"
                       >
-                        <div className="size-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 text-xl group-hover:scale-110 transition-transform">🔗</div>
+                        <div className="size-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
+                          <Link size={28} />
+                        </div>
                         <div className="text-left flex-1">
-                          <span className="font-black text-slate-800 block leading-tight">姻亲眷属</span>
+                          <span className="font-black text-slate-800 block text-base">姻亲眷属</span>
                           <span className="text-[10px] text-slate-400">例：舅妈、姑父、婶婶、姻脉所系</span>
                         </div>
                       </button>
                       <button
                         onClick={() => { setKinshipType('social'); setSafetyStep('none'); }}
-                        className="flex items-center gap-4 p-5 rounded-[2.2rem] border-2 border-slate-50 bg-slate-50 hover:border-green-100 hover:bg-green-50/30 transition-all group"
+                        className="flex items-center gap-4 p-5 rounded-[2rem] border-2 border-slate-50 bg-slate-50 hover:border-green-100 hover:bg-green-50/30 transition-all group"
                       >
-                        <div className="size-12 rounded-2xl bg-green-50 flex items-center justify-center text-green-500 text-xl group-hover:scale-110 transition-transform">👥</div>
+                        <div className="size-14 rounded-2xl bg-green-50 flex items-center justify-center text-green-500 group-hover:scale-110 transition-transform">
+                          <Users size={28} />
+                        </div>
                         <div className="text-left flex-1">
-                          <span className="font-black text-slate-800 block leading-tight">社会好友</span>
+                          <span className="font-black text-slate-800 block text-base">社会好友</span>
                           <span className="text-[10px] text-slate-400">例：挚友、义气兄弟、世交好友</span>
                         </div>
                       </button>
@@ -787,19 +815,23 @@ export const AddMemberPage: React.FC = () => {
                     <div className="grid grid-cols-2 gap-4">
                       <button
                         onClick={() => { setLineageSide('paternal'); setSafetyStage(4); setSafetyChoice('real'); }}
-                        className="p-8 rounded-[2.5rem] border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all group text-center space-y-2 shadow-sm hover:shadow-md"
+                        className="p-8 rounded-[2.5rem] border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all group text-center space-y-3 shadow-sm hover:shadow-md"
                       >
-                        <div className="text-3xl group-hover:scale-110 transition-transform">🏛️</div>
+                        <div className="size-16 rounded-full bg-amber-50 mx-auto flex items-center justify-center text-[#eab308] group-hover:scale-110 transition-transform">
+                          <Landmark size={32} />
+                        </div>
                         <span className="font-black text-slate-800 block">父族宗亲</span>
-                        <span className="text-[10px] text-slate-400">我父亲/父系那边的人</span>
+                        <span className="text-[10px] text-slate-400 leading-tight">我父亲/父系<br />那边的人</span>
                       </button>
                       <button
                         onClick={() => { setLineageSide('maternal'); setSafetyStage(4); setSafetyChoice('real'); }}
-                        className="p-8 rounded-[2.5rem] border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all group text-center space-y-2 shadow-sm hover:shadow-md"
+                        className="p-8 rounded-[2.5rem] border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all group text-center space-y-3 shadow-sm hover:shadow-md"
                       >
-                        <div className="text-3xl group-hover:scale-110 transition-transform">🏡</div>
+                        <div className="size-16 rounded-full bg-amber-50 mx-auto flex items-center justify-center text-[#eab308] group-hover:scale-110 transition-transform">
+                          <Home size={32} />
+                        </div>
                         <span className="font-black text-slate-800 block">母族外戚</span>
-                        <span className="text-[10px] text-slate-400">我母亲/母系那边的人</span>
+                        <span className="text-[10px] text-slate-400 leading-tight">我母亲/母系<br />那边的人</span>
                       </button>
                     </div>
                   </div>
