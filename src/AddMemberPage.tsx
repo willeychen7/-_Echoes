@@ -26,10 +26,10 @@ export const AddMemberPage: React.FC = () => {
   const [members, setMembers] = useState<any[]>([]);
   const [parentId, setParentId] = useState<number | null>(null);
   const [safetyStep, setSafetyStep] = useState<'none' | 'ask'>('none');
-  const [safetyStage, setSafetyStage] = useState<1 | 2 | 3>(1); // 确认阶段：1.定性 2.定方位 3.定排行
+  const [safetyStage, setSafetyStage] = useState<1 | 2 | 3 | 4>(1); // 确认阶段：1.个人排行 2.定性 3.定方位 4.定排行/房分
   const [kinshipType, setKinshipType] = useState<'blood' | 'affinal' | 'social' | null>(null); // 定性：血亲、姻亲、友谊
   const [lineageSide, setLineageSide] = useState<'paternal' | 'maternal' | null>(null); // 方位：父族、母族
-  const [safetyChoice, setSafetyChoice] = useState<'real' | 'clan' | null>(null); // 保持兼容，real代表血亲支脉，clan代表旁系
+  const [safetyChoice, setSafetyChoice] = useState<'real' | 'clan' | null>(null); // 保持兼容
   const [connectingRank, setConnectingRank] = useState<string | null>(null); // 衔接人的排行 (如: 大伯、二叔)
   const [isCreatingVirtualParent, setIsCreatingVirtualParent] = useState(false);
   const [virtualParentName, setVirtualParentName] = useState("");
@@ -282,16 +282,20 @@ export const AddMemberPage: React.FC = () => {
 
     // 3. 深度安全检查 (Wizard Step)：处理向导交互
     if (safetyStep === 'ask' && !parentId) {
+      if (!selectedRank) {
+        alert("请先完成阶段一：指定该成员在其同辈中的排行");
+        return;
+      }
       if (!kinshipType) {
-        alert("请先完成‘第一阶段：定性’（确认是血亲、姻亲还是好友）");
+        alert("请先确认阶段二：该成员与您的根本关系定性");
         return;
       }
       if (kinshipType !== 'social' && !lineageSide) {
-        alert("请先完成‘第二阶段：定方位’（确认是父族还是母族）");
+        alert("请先完成阶段三：该亲属所属的宗亲/外戚方位");
         return;
       }
       if (kinshipType !== 'social' && !connectingRank) {
-        alert("请先完成‘第三阶段：定排行’（指明详细房分排行）");
+        alert("请先完成阶段四：明确该亲属在家族中的房分排行");
         return;
       }
     }
@@ -700,107 +704,131 @@ export const AddMemberPage: React.FC = () => {
               >
                 {/* 进度指示条 */}
                 <div className="flex gap-1 px-12">
-                  {[1, 2, 3].map(s => (
+                  {[1, 2, 3, 4].map(s => (
                     <div key={s} className={`h-1 flex-1 rounded-full transition-all ${safetyStage >= s ? 'bg-[#eab308]' : 'bg-slate-100'}`} />
                   ))}
                 </div>
 
-                {/* 阶段 1：定性 (Kinship Type) */}
+                {/* 阶段 1：个人排行 (Personal Seniority) */}
                 {safetyStage === 1 && (
                   <div className="space-y-6">
                     <div className="text-center space-y-2">
-                      <h3 className="text-xl font-black text-slate-800">第一阶段：定性</h3>
-                      <p className="text-xs text-slate-400">请确认该成员与您的根本关系类型</p>
+                      <h3 className="text-xl font-black text-slate-800 italic underline decoration-[#eab308] underline-offset-4">第一阶段：名分确认</h3>
+                      <p className="text-sm font-bold text-slate-700">
+                        请问这位 {(relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship))} ({name || '未命名'}) 在这辈排行第几？
+                      </p>
                     </div>
-                    <div className="grid grid-cols-1 gap-3">
+                    <div className="grid grid-cols-4 gap-2">
+                      {["大", "二", "三", "四", "五", "小", "无"].map(rk => (
+                        <button
+                          key={rk}
+                          onClick={() => { setSelectedRank(rk); setSafetyStage(2); }}
+                          className={`py-5 rounded-[1.5rem] border-2 text-base font-black transition-all ${selectedRank === rk ? 'border-[#eab308] bg-white text-black shadow-lg scale-105' : 'bg-slate-50 border-transparent text-slate-400'}`}
+                        >
+                          {rk === "无" ? "不知" : rk}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-center text-slate-400">提示：这是 TA 在同胞亲兄弟姐妹中的排行。</p>
+                  </div>
+                )}
+
+                {/* 阶段 2：定性 (Kinship Type) */}
+                {safetyStage === 2 && (
+                  <div className="space-y-6 text-center">
+                    <div className="flex justify-between items-center px-2">
+                      <button onClick={() => setSafetyStage(1)} className="text-slate-400 text-xs font-bold">← 返回排行</button>
+                      <h3 className="text-lg font-black text-slate-800 italic">第二阶段：关系定性</h3>
+                      <div className="w-12"></div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 px-2">
                       <button
-                        onClick={() => { setKinshipType('blood'); setSafetyStage(2); }}
-                        className="flex items-center gap-4 p-5 rounded-[2rem] border-2 border-slate-50 bg-slate-50 hover:border-red-100 hover:bg-red-50/30 transition-all group"
+                        onClick={() => { setKinshipType('blood'); setSafetyStage(3); }}
+                        className="flex items-center gap-4 p-5 rounded-[2.2rem] border-2 border-slate-50 bg-slate-50 hover:border-red-100 hover:bg-red-50/30 transition-all group"
                       >
                         <div className="size-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-500 text-xl group-hover:scale-110 transition-transform">❤️</div>
                         <div className="text-left flex-1">
-                          <span className="font-black text-slate-800 block">同胞血亲</span>
+                          <span className="font-black text-slate-800 block leading-tight">同胞血亲</span>
                           <span className="text-[10px] text-slate-400">例：亲叔伯、亲姑姨、亲兄弟及其后代</span>
                         </div>
                       </button>
                       <button
-                        onClick={() => { setKinshipType('affinal'); setSafetyStage(2); }}
-                        className="flex items-center gap-4 p-5 rounded-[2rem] border-2 border-slate-50 bg-slate-50 hover:border-blue-100 hover:bg-blue-50/30 transition-all group"
+                        onClick={() => { setKinshipType('affinal'); setSafetyStage(3); }}
+                        className="flex items-center gap-4 p-5 rounded-[2.2rem] border-2 border-slate-50 bg-slate-50 hover:border-blue-100 hover:bg-blue-50/30 transition-all group"
                       >
                         <div className="size-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 text-xl group-hover:scale-110 transition-transform">🔗</div>
                         <div className="text-left flex-1">
-                          <span className="font-black text-slate-800 block">姻亲眷属</span>
-                          <span className="text-[10px] text-slate-400">例：舅妈、姑父、婶婶、姻缘结成的至亲</span>
+                          <span className="font-black text-slate-800 block leading-tight">姻亲眷属</span>
+                          <span className="text-[10px] text-slate-400">例：舅妈、姑父、婶婶、姻脉所系</span>
                         </div>
                       </button>
                       <button
                         onClick={() => { setKinshipType('social'); setSafetyStep('none'); }}
-                        className="flex items-center gap-4 p-5 rounded-[2rem] border-2 border-slate-50 bg-slate-50 hover:border-green-100 hover:bg-green-50/30 transition-all group"
+                        className="flex items-center gap-4 p-5 rounded-[2.2rem] border-2 border-slate-50 bg-slate-50 hover:border-green-100 hover:bg-green-50/30 transition-all group"
                       >
                         <div className="size-12 rounded-2xl bg-green-50 flex items-center justify-center text-green-500 text-xl group-hover:scale-110 transition-transform">👥</div>
                         <div className="text-left flex-1">
-                          <span className="font-black text-slate-800 block">社会好友</span>
-                          <span className="text-[10px] text-slate-400">例：挚友、义气兄弟、非血缘社交关系</span>
+                          <span className="font-black text-slate-800 block leading-tight">社会好友</span>
+                          <span className="text-[10px] text-slate-400">例：挚友、义气兄弟、世交好友</span>
                         </div>
                       </button>
                     </div>
                   </div>
                 )}
 
-                {/* 阶段 2：定方位 (Lineage Direction) */}
-                {safetyStage === 2 && (
+                {/* 阶段 3：定方位 (Lineage Direction) */}
+                {safetyStage === 3 && (
                   <div className="space-y-6">
-                    <div className="flex justify-between items-center">
-                      <button onClick={() => setSafetyStage(1)} className="text-slate-400 text-xs font-bold">← 返回定性</button>
-                      <h3 className="text-lg font-black text-slate-800 italic">第二阶段：定方位</h3>
+                    <div className="flex justify-between items-center px-2">
+                      <button onClick={() => setSafetyStage(2)} className="text-slate-400 text-xs font-bold">← 返回定性</button>
+                      <h3 className="text-lg font-black text-slate-800 italic">第三阶段：方位坐标</h3>
                       <div className="w-12"></div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <button
-                        onClick={() => { setLineageSide('paternal'); setSafetyStage(3); setSafetyChoice('real'); }}
-                        className="p-8 rounded-[2.5rem] border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all group text-center space-y-2"
+                        onClick={() => { setLineageSide('paternal'); setSafetyStage(4); setSafetyChoice('real'); }}
+                        className="p-8 rounded-[2.5rem] border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all group text-center space-y-2 shadow-sm hover:shadow-md"
                       >
-                        <div className="text-3xl group-hover:scale-110 transition-transform">�️</div>
+                        <div className="text-3xl group-hover:scale-110 transition-transform">🏛️</div>
                         <span className="font-black text-slate-800 block">父族宗亲</span>
-                        <span className="text-[10px] text-slate-400">我父亲这边的人</span>
+                        <span className="text-[10px] text-slate-400">我父亲/父系那边的人</span>
                       </button>
                       <button
-                        onClick={() => { setLineageSide('maternal'); setSafetyStage(3); setSafetyChoice('real'); }}
-                        className="p-8 rounded-[2.5rem] border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all group text-center space-y-2"
+                        onClick={() => { setLineageSide('maternal'); setSafetyStage(4); setSafetyChoice('real'); }}
+                        className="p-8 rounded-[2.5rem] border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all group text-center space-y-2 shadow-sm hover:shadow-md"
                       >
                         <div className="text-3xl group-hover:scale-110 transition-transform">🏡</div>
                         <span className="font-black text-slate-800 block">母族外戚</span>
-                        <span className="text-[10px] text-slate-400">我母亲这边的人</span>
+                        <span className="text-[10px] text-slate-400">我母亲/母系那边的人</span>
                       </button>
                     </div>
-                    <p className="text-[10px] text-center text-slate-400 px-4">提示：这决定了该成员在家族树中的左右位置（宗亲还是外家）。</p>
                   </div>
                 )}
 
-                {/* 阶段 3：定排行 (Ranking & House Branch) */}
-                {safetyStage === 3 && (
+                {/* 阶段 4：定排行/房分 (House Branch) */}
+                {safetyStage === 4 && (
                   <div className="space-y-6">
-                    <div className="flex justify-between items-center px-2">
-                      <button onClick={() => setSafetyStage(2)} className="text-slate-400 text-xs font-bold">← 返回方位</button>
-                      <h3 className="text-lg font-black text-slate-800">最终阶段：定排行</h3>
+                    <div className="flex justify-between items-center px-4">
+                      <button onClick={() => setSafetyStage(3)} className="text-slate-400 text-xs font-bold">← 返回方位</button>
+                      <h3 className="text-lg font-black text-slate-800">最终阶段：房分排行</h3>
                       <div className="w-12"></div>
                     </div>
 
-                    <div className="bg-amber-50 rounded-3xl p-6 border border-amber-100/50 space-y-3">
-                      <p className="text-sm font-bold text-slate-700 leading-relaxed text-center">
+                    <div className="bg-amber-100/30 rounded-[2.5rem] p-8 border border-amber-200/50 space-y-4">
+                      <p className="text-sm font-bold text-slate-800 leading-relaxed text-center">
                         {(() => {
                           const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship));
-                          if (["孙", "外孙"].some(k => relText.includes(k))) return `您的第几个孩子，是那位 ${relText} (${name || '未命名'}) 的父母？`;
+                          if (["孙", "外孙"].some(k => relText.includes(k))) return `您的第几个孩子，是 ${name || '这位晚辈'} 的父母？`;
 
                           if (lineageSide === 'paternal') {
-                            return `那位 ${relText} (${name || '未命名'}) 的父亲（您的亲伯叔），在父辈中排行老几？`;
+                            return `那位 ${relText} 的父亲，在您的父辈中排行老几？`;
                           } else {
-                            return `那位 ${relText} (${name || '未命名'}) 的父/母（您的亲舅姨），在母系长辈中排行老几？`;
+                            return `那位 ${relText} 的父/母，在您的母系长辈中排行老几？`;
                           }
                         })()}
                       </p>
-                      <p className="text-[10px] text-amber-600/70 text-center">
-                        提示：请指明该长辈的排行，这将决定该支位的“房分”。
+                      <p className="text-[11px] text-amber-700/60 text-center font-medium">
+                        提示：此选项将决定其所属支脉的“房分”。
                       </p>
                     </div>
 
@@ -810,10 +838,9 @@ export const AddMemberPage: React.FC = () => {
                           key={rk}
                           onClick={() => {
                             setConnectingRank(rk);
-                            // 选完排行即完成问询
                             setSafetyStep('none');
                           }}
-                          className={`py-4 rounded-2xl border-2 text-sm font-black transition-all ${connectingRank === rk ? 'border-[#eab308] bg-white text-black shadow-lg scale-105' : 'bg-slate-50 border-transparent text-slate-400'}`}
+                          className={`py-5 rounded-2xl border-2 text-base font-black transition-all ${connectingRank === rk ? 'border-[#eab308] bg-white text-black shadow-lg scale-105' : 'bg-slate-50 border-transparent text-slate-400'}`}
                         >
                           {rk === "无" ? "不知" : rk}
                         </button>
