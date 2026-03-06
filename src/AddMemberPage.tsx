@@ -53,8 +53,8 @@ export const AddMemberPage: React.FC = () => {
 
     let expanded: string[] = [...bases];
 
-    // 1. 添加堂/表基础前缀 (如 堂哥, 表弟)
-    ["哥", "弟", "姐", "妹"].forEach(s => {
+    // 1. 添加堂/表基础前缀 (如 堂哥, 堂叔, 表姑)
+    ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨"].forEach(s => {
       cousinPrefixes.forEach(p => {
         expanded.push(`${p}${s}`);
       });
@@ -67,8 +67,8 @@ export const AddMemberPage: React.FC = () => {
       });
     });
 
-    // 3. 组合：堂/表 + 排行 (如 堂大哥, 表小妹)
-    ["哥", "弟", "姐", "妹"].forEach(s => {
+    // 3. 组合：堂/表 + 排行 (如 堂大哥, 表三姑)
+    ["哥", "弟", "姐", "妹", "叔", "伯", "姑", "舅", "姨"].forEach(s => {
       cousinPrefixes.forEach(p => {
         ranks.forEach(rk => {
           expanded.push(`${p}${rk}${s}`);
