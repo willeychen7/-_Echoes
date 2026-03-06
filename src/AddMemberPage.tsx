@@ -33,6 +33,7 @@ export const AddMemberPage: React.FC = () => {
   const [showBranchAsk, setShowBranchAsk] = useState(false);
   const [branchMode, setBranchMode] = useState<'lineage' | 'closeness' | 'nature' | null>(null);
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
+  const [isDropdownVisible, setIsDropdownVisible] = useState(false);
 
   // 全面涵盖：孙辈、旁系、长辈、以及平辈的潜在歧义词
   const AMBIGUOUS_RELATIONS = [
@@ -40,6 +41,9 @@ export const AddMemberPage: React.FC = () => {
     "哥", "姐", "弟", "妹",         // 平辈 (堂/表/亲)
     "叔", "伯", "姑", "舅", "姨"    // 长辈 (血路/姻路)
   ];
+
+  // 预定义的建议列表 (用于下拉选择)
+  const RELATIONSHIP_SUGGESTIONS = RELATIONSHIP_OPTIONS.map(opt => opt.label);
 
   React.useEffect(() => {
     const savedUser = localStorage.getItem("currentUser");
@@ -124,8 +128,7 @@ export const AddMemberPage: React.FC = () => {
   }, [inviteCode]);
 
   const displayRelationships = React.useMemo(() => {
-    const shuffled = [...RELATIONSHIP_OPTIONS].sort(() => 0.5 - Math.random());
-    return [...shuffled.slice(0, 5).map(r => r.label), "其他"];
+    return ["父亲", "母亲", "儿子", "女儿", "其他"];
   }, []);
 
   const defaultAvatars = SYSTEM_AVATARS;
@@ -438,167 +441,199 @@ export const AddMemberPage: React.FC = () => {
           </div>
 
           <div className="space-y-4">
-            <label className="text-xl font-black px-1 block">新成员是我的 ____</label>
-            <div className="grid grid-cols-3 gap-3">
-              {displayRelationships.map((r) => (
+            <label className="text-xl font-black px-1 block">Ta与您的关系</label>
+            <div className="grid grid-cols-3 gap-2">
+              {displayRelationships.map((rel) => (
                 <button
-                  key={r}
+                  key={rel}
+                  type="button"
                   onClick={() => {
-                    setRelationship(r);
-                    if (r !== "其他") setCustomRelationship("");
+                    setRelationship(rel);
+                    if (rel !== "其他") {
+                      setSelectedBranch(null); // 重置分支
+                    }
                   }}
-                  className={`px-4 py-4 rounded-2xl border-2 transition-all text-lg font-black ${relationship === r
-                    ? "bg-[#eab308] border-[#eab308] text-black shadow-lg shadow-[#eab308]/20"
-                    : "bg-white border-slate-50 text-slate-500 hover:border-[#eab308]/30"
-                    }`}
+                  className={cn(
+                    "h-12 rounded-xl font-bold text-sm transition-all border-2",
+                    relationship === rel
+                      ? "bg-[#eab308] border-[#eab308] text-black shadow-md"
+                      : "bg-white border-slate-50 text-slate-400 hover:border-slate-100"
+                  )}
                 >
-                  {r}
+                  {rel}
                 </button>
               ))}
             </div>
 
             {relationship === "其他" && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                className="pt-2"
-              >
+              <div className="space-y-2 relative">
                 <input
                   type="text"
-                  className="w-full h-16 px-6 rounded-2xl border-none bg-white shadow-md text-xl font-bold focus:ring-2 focus:ring-[#eab308]/20 transition-all"
-                  placeholder="填写具体的称谓，如：干爹、老战友"
+                  className="w-full h-14 px-5 rounded-2xl border-none bg-white shadow-inner text-lg font-bold placeholder:text-slate-300 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
+                  placeholder="手动输入或选择建议 (如: 侄女, 姑父)"
                   value={customRelationship}
-                  onChange={(e) => setCustomRelationship(e.target.value)}
+                  onChange={(e) => {
+                    setCustomRelationship(e.target.value);
+                    setIsDropdownVisible(true);
+                    setSelectedBranch(null); // 输入变化时重置分支
+                  }}
+                  onFocus={() => setIsDropdownVisible(true)}
                 />
+
+                {isDropdownVisible && customRelationship && (
+                  <div className="absolute top-16 left-0 right-0 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-[110] max-h-48 overflow-y-auto">
+                    {RELATIONSHIP_SUGGESTIONS.filter(s => s.includes(customRelationship)).map(s => (
+                      <button
+                        key={s}
+                        className="w-full text-left p-3 hover:bg-slate-50 rounded-xl font-bold text-slate-700 text-sm transition-colors"
+                        onClick={() => {
+                          setCustomRelationship(s);
+                          setIsDropdownVisible(false);
+                        }}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                    {RELATIONSHIP_SUGGESTIONS.filter(s => s.includes(customRelationship)).length === 0 && (
+                      <div className="p-3 text-xs text-slate-400 italic">没有匹配的词汇，请继续输入</div>
+                    )}
+                  </div>
+                )}
+                {isDropdownVisible && customRelationship && (
+                  <div
+                    className="fixed inset-0 z-[105]"
+                    onClick={() => setIsDropdownVisible(false)}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 物理血缘指名 (Parent Identification) */}
+          <AnimatePresence mode="wait">
+            {safetyStep === 'ask' && !safetyChoice && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white p-6 rounded-[2rem] border-2 border-[#eab308]/20 shadow-xl space-y-6 relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none"><Check size={60} /></div>
+                <div className="space-y-2">
+                  <h3 className="text-xl font-black text-slate-800">确认亲疏关系</h3>
+                  <p className="text-sm text-slate-500">这位长辈是您父亲的亲兄弟，还是堂兄弟？</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => {
+                      setSafetyChoice('real');
+                      if (relationship === "叔叔" || relationship === "伯伯") {
+                        // 自动建议更亲密的称谓
+                        setRelationship(gender === 'male' ? "二爸" : "姑姑");
+                      }
+                    }}
+                    className="p-6 rounded-2xl border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all text-center group"
+                  >
+                    <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">🏡</div>
+                    <span className="font-black text-slate-800 block">亲兄弟</span>
+                    <span className="text-[10px] text-slate-400">亲爷爷的孩子</span>
+                  </button>
+                  <button
+                    onClick={() => setSafetyChoice('clan')}
+                    className="p-6 rounded-2xl border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all text-center group"
+                  >
+                    <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">祠</div>
+                    <span className="font-black text-slate-800 block">堂兄弟</span>
+                    <span className="text-[10px] text-slate-400">叔公/伯公的孩子</span>
+                  </button>
+                </div>
               </motion.div>
             )}
 
-            {/* 物理血缘指认 (Parent Identification) */}
-            <AnimatePresence mode="wait">
-              {safetyStep === 'ask' && !safetyChoice && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-white p-6 rounded-[2rem] border-2 border-[#eab308]/20 shadow-xl space-y-6 relative overflow-hidden"
-                >
-                  <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none"><Check size={60} /></div>
-                  <div className="space-y-2">
-                    <h3 className="text-xl font-black text-slate-800">确认亲疏关系</h3>
-                    <p className="text-sm text-slate-500">这位长辈是您父亲的亲兄弟，还是堂兄弟？</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
+            {safetyChoice === 'clan' && candidateParents.length === 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white p-6 rounded-[2rem] border-2 border-dashed border-amber-200 space-y-4"
+              >
+                <div className="space-y-1">
+                  <p className="text-sm font-black text-amber-600">看来您的叔公们还没有加入广场</p>
+                  <p className="text-[10px] text-slate-400">为了理清房分，请问这位 {relationship} 的父亲（您的叔公）怎么称呼？</p>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 h-12 px-4 rounded-xl border-none bg-slate-50 text-sm font-bold focus:ring-2 focus:ring-[#eab308]/20"
+                    placeholder="如：二叔公、三叔公"
+                    value={virtualParentName}
+                    onChange={(e) => {
+                      setVirtualParentName(e.target.value);
+                      setIsCreatingVirtualParent(true);
+                    }}
+                  />
+                  <button onClick={() => setSafetyChoice(null)} className="px-4 text-xs font-bold text-slate-400">返回</button>
+                </div>
+              </motion.div>
+            )}
+
+            {candidateParents.length > 0 && (safetyStep === 'none' || safetyChoice) && (
+              <motion.div
+                key="picker"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="bg-amber-50/50 p-6 rounded-[2rem] border border-amber-100 space-y-4"
+              >
+                <div className="flex justify-between items-center">
+                  <p className="text-sm font-black text-amber-700/60 uppercase tracking-widest flex items-center gap-2">
+                    <Check className="size-4" /> 您正在添加 {relationship === "其他" ? customRelationship : relationship}，请指点他是谁的孩子？
+                  </p>
+                  {safetyChoice && (
+                    <button onClick={() => setSafetyChoice(null)} className="text-[10px] bg-amber-200/50 px-2 py-0.5 rounded-full text-amber-800 font-bold">重新选择亲疏</button>
+                  )}
+                </div>
+                <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+                  {candidateParents.map((p) => (
                     <button
+                      key={p.id}
                       onClick={() => {
-                        setSafetyChoice('real');
-                        if (relationship === "叔叔" || relationship === "伯伯") {
-                          // 自动建议更亲密的称谓
-                          setRelationship(gender === 'male' ? "二爸" : "姑姑");
-                        }
+                        setParentId(parentId === p.id ? null : p.id);
+                        setIsCreatingVirtualParent(false);
                       }}
-                      className="p-6 rounded-2xl border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all text-center group"
+                      className={cn(
+                        "flex-shrink-0 flex flex-col items-center gap-2 transition-all p-2 rounded-2xl border-2",
+                        parentId === p.id ? "bg-white border-[#eab308] shadow-md scale-105" : "border-transparent opacity-60"
+                      )}
                     >
-                      <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">🏡</div>
-                      <span className="font-black text-slate-800 block">亲兄弟</span>
-                      <span className="text-[10px] text-slate-400">亲爷爷的孩子</span>
+                      <img src={p.avatarUrl} className="size-14 rounded-full object-cover border-2 border-white shadow-sm" />
+                      <span className="text-xs font-black text-slate-800">{p.name} ({p.relationship})</span>
                     </button>
+                  ))}
+                  {!isCreatingVirtualParent ? (
                     <button
-                      onClick={() => setSafetyChoice('clan')}
-                      className="p-6 rounded-2xl border-2 border-slate-50 bg-slate-50 hover:border-[#eab308] hover:bg-white transition-all text-center group"
+                      onClick={() => setIsCreatingVirtualParent(true)}
+                      className="flex-shrink-0 flex flex-col items-center gap-2 transition-all p-2 rounded-2xl border-2 border-transparent opacity-40"
                     >
-                      <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">祠</div>
-                      <span className="font-black text-slate-800 block">堂兄弟</span>
-                      <span className="text-[10px] text-slate-400">叔公/伯公的孩子</span>
+                      <div className="size-14 rounded-full bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400">+</div>
+                      <span className="text-xs font-bold">不在列表中</span>
                     </button>
-                  </div>
-                </motion.div>
-              )}
-
-              {safetyChoice === 'clan' && candidateParents.length === 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-white p-6 rounded-[2rem] border-2 border-dashed border-amber-200 space-y-4"
-                >
-                  <div className="space-y-1">
-                    <p className="text-sm font-black text-amber-600">看来您的叔公们还没有加入广场</p>
-                    <p className="text-[10px] text-slate-400">为了理清房分，请问这位 {relationship} 的父亲（您的叔公）怎么称呼？</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      className="flex-1 h-12 px-4 rounded-xl border-none bg-slate-50 text-sm font-bold focus:ring-2 focus:ring-[#eab308]/20"
-                      placeholder="如：二叔公、三叔公"
-                      value={virtualParentName}
-                      onChange={(e) => {
-                        setVirtualParentName(e.target.value);
-                        setIsCreatingVirtualParent(true);
-                      }}
-                    />
-                    <button onClick={() => setSafetyChoice(null)} className="px-4 text-xs font-bold text-slate-400">返回</button>
-                  </div>
-                </motion.div>
-              )}
-
-              {candidateParents.length > 0 && (safetyStep === 'none' || safetyChoice) && (
-                <motion.div
-                  key="picker"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="bg-amber-50/50 p-6 rounded-[2rem] border border-amber-100 space-y-4"
-                >
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm font-black text-amber-700/60 uppercase tracking-widest flex items-center gap-2">
-                      <Check className="size-4" /> 您正在添加 {relationship === "其他" ? customRelationship : relationship}，请指点他是谁的孩子？
-                    </p>
-                    {safetyChoice && (
-                      <button onClick={() => setSafetyChoice(null)} className="text-[10px] bg-amber-200/50 px-2 py-0.5 rounded-full text-amber-800 font-bold">重新选择亲疏</button>
-                    )}
-                  </div>
-                  <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-                    {candidateParents.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => {
-                          setParentId(parentId === p.id ? null : p.id);
-                          setIsCreatingVirtualParent(false);
-                        }}
-                        className={cn(
-                          "flex-shrink-0 flex flex-col items-center gap-2 transition-all p-2 rounded-2xl border-2",
-                          parentId === p.id ? "bg-white border-[#eab308] shadow-md scale-105" : "border-transparent opacity-60"
-                        )}
-                      >
-                        <img src={p.avatarUrl} className="size-14 rounded-full object-cover border-2 border-white shadow-sm" />
-                        <span className="text-xs font-black text-slate-800">{p.name} ({p.relationship})</span>
-                      </button>
-                    ))}
-                    {!isCreatingVirtualParent ? (
-                      <button
-                        onClick={() => setIsCreatingVirtualParent(true)}
-                        className="flex-shrink-0 flex flex-col items-center gap-2 transition-all p-2 rounded-2xl border-2 border-transparent opacity-40"
-                      >
-                        <div className="size-14 rounded-full bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400">+</div>
-                        <span className="text-xs font-bold">不在列表中</span>
-                      </button>
-                    ) : (
-                      <div className="flex-shrink-0 flex flex-col items-center gap-2 p-2">
-                        <input
-                          autoFocus
-                          type="text"
-                          className="w-24 h-14 rounded-2xl bg-white border-2 border-[#eab308] text-[10px] font-bold text-center px-1"
-                          placeholder="输入其父姓名"
-                          value={virtualParentName}
-                          onChange={(e) => setVirtualParentName(e.target.value)}
-                        />
-                        <span onClick={() => setIsCreatingVirtualParent(false)} className="text-[10px] text-red-400 font-bold">取消</span>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                  ) : (
+                    <div className="flex-shrink-0 flex flex-col items-center gap-2 p-2">
+                      <input
+                        autoFocus
+                        type="text"
+                        className="w-24 h-14 rounded-2xl bg-white border-2 border-[#eab308] text-[10px] font-bold text-center px-1"
+                        placeholder="输入其父姓名"
+                        value={virtualParentName}
+                        onChange={(e) => setVirtualParentName(e.target.value)}
+                      />
+                      <span onClick={() => setIsCreatingVirtualParent(false)} className="text-[10px] text-red-400 font-bold">取消</span>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <div className="pt-4 pb-12">
@@ -632,9 +667,9 @@ export const AddMemberPage: React.FC = () => {
               <div className="space-y-2 text-center">
                 <h3 className="text-2xl font-black text-slate-800">确认名分归属</h3>
                 <p className="text-sm text-slate-500">
-                  {branchMode === 'lineage' && `确认这位 ${relationship} 的归属方向：`}
-                  {branchMode === 'closeness' && `确认这位 ${relationship} 的亲疏程度：`}
-                  {branchMode === 'nature' && `确认这位 ${relationship} 的血缘路径：`}
+                  {branchMode === 'lineage' && `想确认下，这位 ${relationship === '其他' ? customRelationship : relationship} 是：`}
+                  {branchMode === 'closeness' && `这位 ${relationship === '其他' ? customRelationship : relationship} 与您的亲近程度是：`}
+                  {branchMode === 'nature' && `这位 ${relationship === '其他' ? customRelationship : relationship} 是通过哪条路认的亲：`}
                 </p>
               </div>
 
@@ -647,8 +682,8 @@ export const AddMemberPage: React.FC = () => {
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👩‍👦</span>
                       <div className="text-left">
-                        <span className="font-black text-slate-800 block">我母亲家 (母系)</span>
-                        <span className="text-[10px] text-slate-400">对应：TA该叫您“舅舅/姨妈”</span>
+                        <span className="font-black text-slate-800 block">我母亲家这边的</span>
+                        <span className="text-[10px] text-slate-400">比如：外公外婆的孩子们</span>
                       </div>
                     </button>
                     <button
@@ -657,8 +692,8 @@ export const AddMemberPage: React.FC = () => {
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👨‍👦</span>
                       <div className="text-left">
-                        <span className="font-black text-slate-800 block">我父亲家 (父系)</span>
-                        <span className="text-[10px] text-slate-400">对应：TA该叫您“叔父/姑姑”</span>
+                        <span className="font-black text-slate-800 block">我父亲家这边的</span>
+                        <span className="text-[10px] text-slate-400">比如：爷爷奶奶的孩子们</span>
                       </div>
                     </button>
                   </>
@@ -672,8 +707,8 @@ export const AddMemberPage: React.FC = () => {
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">🏠</span>
                       <div className="text-left">
-                        <span className="font-black text-slate-800 block">亲兄弟姐妹</span>
-                        <span className="text-[10px] text-slate-400">同父同母的直系手足</span>
+                        <span className="font-black text-slate-800 block">亲生的手足</span>
+                        <span className="text-[10px] text-slate-400">同一个爸妈带大的</span>
                       </div>
                     </button>
                     <button
@@ -682,8 +717,8 @@ export const AddMemberPage: React.FC = () => {
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">祠</span>
                       <div className="text-left">
-                        <span className="font-black text-slate-800 block">堂兄弟姐妹 (父系)</span>
-                        <span className="text-[10px] text-slate-400">同祖父不同父的血亲</span>
+                        <span className="font-black text-slate-800 block">叔叔伯伯家的 (堂)</span>
+                        <span className="text-[10px] text-slate-400">同一个祖宗的家族孩子</span>
                       </div>
                     </button>
                     <button
@@ -692,8 +727,8 @@ export const AddMemberPage: React.FC = () => {
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">🍎</span>
                       <div className="text-left">
-                        <span className="font-black text-slate-800 block">表兄弟姐妹 (姻亲)</span>
-                        <span className="text-[10px] text-slate-400">姑舅姨家的异姓亲戚</span>
+                        <span className="font-black text-slate-800 block">姑舅姨妈家的 (表)</span>
+                        <span className="text-[10px] text-slate-400">也就是咱们常说的“表亲”</span>
                       </div>
                     </button>
                   </>
@@ -707,8 +742,8 @@ export const AddMemberPage: React.FC = () => {
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">🩸</span>
                       <div className="text-left">
-                        <span className="font-black text-slate-800 block">原本血亲</span>
-                        <span className="text-[10px] text-slate-400">如：父亲的亲哥哥 (大伯)</span>
+                        <span className="font-black text-slate-800 block">打断骨头连着筋的血亲</span>
+                        <span className="text-[10px] text-slate-400">比如：我爸亲哥（大伯）</span>
                       </div>
                     </button>
                     <button
@@ -717,8 +752,8 @@ export const AddMemberPage: React.FC = () => {
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">💍</span>
                       <div className="text-left">
-                        <span className="font-black text-slate-800 block">婚姻关联</span>
-                        <span className="text-[10px] text-slate-400">如：姑姑的丈夫 (姑父)</span>
+                        <span className="font-black text-slate-800 block">通过结婚进门的亲戚</span>
+                        <span className="text-[10px] text-slate-400">比如：姑姑的老公（姑父）</span>
                       </div>
                     </button>
                     <button
@@ -727,8 +762,8 @@ export const AddMemberPage: React.FC = () => {
                     >
                       <span className="text-3xl grayscale group-hover:grayscale-0 transition-all">👩‍👦</span>
                       <div className="text-left">
-                        <span className="font-black text-slate-800 block">母亲家 (母系)</span>
-                        <span className="text-[10px] text-slate-400">如：母亲的兄弟 (舅舅)</span>
+                        <span className="font-black text-slate-800 block">我妈妈那边的亲兄弟</span>
+                        <span className="text-[10px] text-slate-400">比如：亲舅舅</span>
                       </div>
                     </button>
                   </>
@@ -760,6 +795,6 @@ export const AddMemberPage: React.FC = () => {
           />
         )}
       </AnimatePresence>
-    </div>
+    </div >
   );
 };

@@ -635,7 +635,12 @@ export const FamilySquare: React.FC = () => {
                           >
                             <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><FolderOpen size={80} /></div>
                             {label && (
-                              <div className="absolute top-4 left-4 bg-slate-900/5 text-slate-400 text-[10px] font-black px-2 py-0.5 rounded-full border border-slate-100 z-10">
+                              <div className={cn(
+                                "absolute top-4 left-4 text-[10px] font-black px-2 py-0.5 rounded-full border z-10",
+                                label.includes("母系") || label.includes("外")
+                                  ? "bg-purple-50 text-purple-400 border-purple-100"
+                                  : "bg-slate-900/5 text-slate-400 border-slate-100"
+                              )}>
                                 {label}
                               </div>
                             )}
@@ -668,7 +673,12 @@ export const FamilySquare: React.FC = () => {
                                   )}
                                 </h3>
                               </div>
-                              <p className="text-base text-slate-400 font-bold uppercase tracking-widest leading-none mt-1">
+                              <p className={cn(
+                                "text-base font-bold uppercase tracking-widest leading-none mt-1",
+                                (rel.includes("母") || (rel.includes("外") && !rel.includes("曾")) || rel.includes("姨") || rel.includes("舅"))
+                                  ? "text-purple-600"
+                                  : "text-slate-900"
+                              )}>
                                 {rel}
                               </p>
                             </div>
@@ -705,7 +715,12 @@ export const FamilySquare: React.FC = () => {
                             onClick={() => navigate(`/archive/${member.id}`)}
                           >
                             {label && (
-                              <div className="absolute top-4 left-4 bg-[#8b5e34]/5 text-[#8b5e34]/60 text-[10px] font-black px-2 py-0.5 rounded-full border border-[#8b5e34]/10 z-10">
+                              <div className={cn(
+                                "absolute top-4 left-4 text-[10px] font-black px-2 py-0.5 rounded-full border z-10",
+                                label.includes("母系") || label.includes("外")
+                                  ? "bg-purple-50 text-purple-400 border-purple-100"
+                                  : "bg-[#8b5e34]/5 text-[#8b5e34]/60 border-[#8b5e34]/10"
+                              )}>
                                 {label}
                               </div>
                             )}
@@ -732,7 +747,12 @@ export const FamilySquare: React.FC = () => {
                                     </span>
                                   )}
                                 </h4>
-                                <p className="text-xs text-slate-300 font-bold uppercase tracking-widest">
+                                <p className={cn(
+                                  "text-xs font-bold uppercase tracking-widest",
+                                  (rel.includes("母") || (rel.includes("外") && !rel.includes("曾")) || rel.includes("姨") || rel.includes("舅"))
+                                    ? "text-purple-500"
+                                    : "text-slate-900"
+                                )}>
                                   {rel}
                                 </p>
                               </div>
