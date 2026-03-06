@@ -134,7 +134,8 @@ export const AddMemberPage: React.FC = () => {
 
   React.useEffect(() => {
     const rel = (relationship === "其他" ? customRelationship : relationship) || "";
-    const ambiguous = ["叔叔", "伯伯", "堂叔", "二爸", "小叔", "叔伯"].some(k => rel.includes(k));
+    // 不仅是长辈，平辈和晚辈中的“堂/表/侄/甥”也需要追问父辈关系来锚定
+    const ambiguous = ["叔叔", "伯伯", "堂叔", "二爸", "小叔", "叔伯", "堂", "表", "侄", "甥"].some(k => rel.includes(k));
     if (ambiguous) {
       setSafetyStep('ask');
     } else {
@@ -639,7 +640,12 @@ export const AddMemberPage: React.FC = () => {
                 <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none"><Check size={60} /></div>
                 <div className="space-y-2">
                   <h3 className="text-xl font-black text-slate-800">确认亲属关系</h3>
-                  <p className="text-sm text-slate-500">这位长辈是您父亲的亲兄弟，还是堂兄弟？</p>
+                  <p className="text-sm text-slate-500">
+                    {["哥", "姐", "弟", "妹", "甥", "侄", "孙"].some(k => (relationship === "其他" ? customRelationship : relationship).includes(k))
+                      ? `请问这位 ${relationship === "其他" ? customRelationship : relationship} 的父亲，是您父亲的亲兄弟（伯伯/叔叔），还是堂兄弟？`
+                      : `这位长辈是您父亲的亲兄弟，还是堂兄弟？`
+                    }
+                  </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <button
