@@ -529,11 +529,11 @@ export function getRigorousRelationship(
             "爸爸": { male: "儿子", female: "女儿" },
             "妈妈": { male: "儿子", female: "女儿" },
             "亲侄": { male: "亲伯/叔", female: "亲姑/婶" },
-            "亲外甥": { male: "舅舅/姨丈", female: "阿姨/舅妈" },
-            "侄子": { male: "亲伯/叔", female: "亲姑/婶" },
-            "外甥": { male: "舅舅/姨丈", female: "阿姨/舅妈" },
-            "侄女": { male: "亲伯/叔", female: "亲姑/婶" },
-            "外甥女": { male: "舅舅/姨丈", female: "阿姨/舅妈" },
+            "亲外甥": { male: "舅舅", female: "阿姨" },
+            "侄子": { male: "伯伯/叔叔", female: "姑姑" },
+            "外甥": { male: "舅舅", female: "阿姨" },
+            "侄女": { male: "伯伯/叔叔", female: "姑姑" },
+            "外甥女": { male: "舅舅", female: "阿姨" },
             "内侄": { male: "姑丈", female: "姑姑" },
             "内侄女": { male: "姑丈", female: "姑姑" },
             "孙子": { male: "爷爷/外公", female: "奶奶/外婆" },
@@ -693,11 +693,13 @@ export function getRigorousRelationship(
                 return manualRel;
             }
 
-            // viewer 是被 target 创建的。viewer 自身的 relationship 字段存的是“我是 target 的 XX”
+            // viewer 是被 target 创建ed。viewer 自身的 relationship 字段存的是“我是 target 的 XX”
             const myRoleToCreator = vNode.relationship || "";
             for (const [key, value] of Object.entries(inverseMap)) {
                 if (myRoleToCreator.includes(key)) {
-                    return tNode.gender === "female" ? value.female : value.male;
+                    const titleRaw = tNode.gender === "female" ? value.female : value.male;
+                    const finalTitle = titleRaw.split("/")[0];
+                    return injectRankingAndRemark(finalTitle, tNode, members);
                 }
             }
         }
@@ -836,9 +838,11 @@ export function getRigorousRelationship(
 
             // 3. 备注增强 (语义去重优化)
             const rawRemark = (tNode.relationship || "").trim();
+            const standardLabels = Object.values(STANDARD_ROLE_LABELS);
             const isDuplicate =
                 !rawRemark ||
-                ["本人", "家人", "创建者"].includes(rawRemark) ||
+                ["本人", "家人", "创建者", "创建人", "其他"].includes(rawRemark) ||
+                standardLabels.some(label => label.split('/').some(part => rawRemark === part)) ||
                 finalTitle === rawRemark ||
                 getCleanRelationship(finalTitle) === getCleanRelationship(rawRemark);
 
