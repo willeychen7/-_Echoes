@@ -1,0 +1,21 @@
+import { createClient } from "@supabase/supabase-js";
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+
+const supabase = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_ANON_KEY!);
+
+async function checkSchema() {
+    const { data, error } = await supabase.rpc('exec_sql', {
+        sql_query: "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'family_members';"
+    });
+
+    if (error) {
+        console.error("Error fetching schema via RPC:", error);
+        // Fallback or just report error
+        return;
+    }
+
+    console.log("family_members columns:", JSON.stringify(data, null, 2));
+}
+
+checkSchema();

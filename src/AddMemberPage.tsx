@@ -100,6 +100,14 @@ export const AddMemberPage: React.FC = () => {
   React.useEffect(() => {
     const savedUser = localStorage.getItem("currentUser");
     const currentUser = savedUser ? JSON.parse(savedUser) : null;
+
+    // 初始化我的姓氏
+    if (currentUser?.surname) {
+      setMySurname(currentUser.surname);
+    } else if (currentUser?.name) {
+      setMySurname(currentUser.name.trim().charAt(0));
+    }
+
     if (isDemoMode(currentUser)) {
       const demoMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
       setMembers([...demoMembers]);
@@ -270,13 +278,16 @@ export const AddMemberPage: React.FC = () => {
     }
 
     const side = lineageSide || 'paternal';
+    const computedTargetSurname = targetSurname || name.trim().charAt(0);
 
     // 智能打标签：如果是母系但恰好同姓，加个逻辑补丁
-    if (side === 'maternal' && mySurname && targetSurname && mySurname === targetSurname) {
+    if (side === 'maternal' && mySurname && computedTargetSurname && mySurname === computedTargetSurname) {
       if (!relationshipToStore.includes('(母家同姓)')) {
         relationshipToStore = `${relationshipToStore}(母家同姓)`;
       }
     }
+
+    const currentLogicTag = logicTag || getLogicTag(side as any, connectorNode as string, selectedRank || '', mySurname !== "" && computedTargetSurname !== "" && mySurname === computedTargetSurname);
 
     const deducedRole = deduceRole(finalRelationship);
 
@@ -347,8 +358,11 @@ export const AddMemberPage: React.FC = () => {
           gender,
           memberType,
           fatherId: currentParentId,
+          originSide: side,
+          origin_side: side,
+          surname: computedTargetSurname,
           ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null)),
-          logicTag: logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '', mySurname !== "" && targetSurname !== "" && mySurname === targetSurname)
+          logicTag: currentLogicTag
         })
       });
       const data = await response.json().catch(() => ({}));
@@ -370,8 +384,11 @@ export const AddMemberPage: React.FC = () => {
           gender,
           memberType,
           fatherId: currentParentId,
+          originSide: side,
+          origin_side: side,
+          surname: computedTargetSurname,
           ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null)),
-          logicTag: logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '', mySurname !== "" && targetSurname !== "" && mySurname === targetSurname)
+          logicTag: currentLogicTag
         });
         localStorage.setItem("demoCustomMembers", JSON.stringify(customMembers));
       } else if (!data.id) {

@@ -398,6 +398,14 @@ export function isClan(vNode: any, tNode: any, currentSide?: 'paternal' | 'mater
         }
         return true;
     }
+
+    // 备选逻辑：如果明确打上了父系烙印且方位正确，优先信任
+    if (tNode.originSide === 'paternal' || tNode.origin_side === 'paternal') {
+        // 如果没有姓氏数据，信任方位；如果有姓氏且不同，则可能是姑表亲（需结合逻辑坐标进一步判定）
+        if (!tNode.surname || !vNode.surname) return true;
+        if (tNode.surname === vNode.surname) return true;
+    }
+
     return false;
 }
 
@@ -563,7 +571,13 @@ function computeRigorousRelationship(
                 if (isRealSibling) {
                     const vDate = vNode.birthDate || vNode.birth_date || "9999-99-99";
                     const tDate = tNode.birthDate || tNode.birth_date || "9999-99-99";
-                    const isOlder = tDate < vDate;
+                    let isOlder = tDate < vDate;
+
+                    if (vDate === tDate) {
+                        const rel = tNode.relationship || "";
+                        if (rel.includes("哥") || rel.includes("姐") || rel.includes("兄")) isOlder = true;
+                        if (rel.includes("弟") || rel.includes("妹")) isOlder = false;
+                    }
 
                     if (tNode.gender === "female") {
                         return isOlder ? "姐姐" : "妹妹";
@@ -574,7 +588,14 @@ function computeRigorousRelationship(
                 if (clan) {
                     const vDate = vNode.birthDate || vNode.birth_date || "9999-99-99";
                     const tDate = tNode.birthDate || tNode.birth_date || "9999-99-99";
-                    const isOlder = tDate < vDate;
+                    let isOlder = tDate < vDate;
+
+                    if (vDate === tDate) {
+                        const rel = tNode.relationship || "";
+                        if (rel.includes("哥") || rel.includes("姐") || rel.includes("兄")) isOlder = true;
+                        if (rel.includes("弟") || rel.includes("妹")) isOlder = false;
+                    }
+
                     if (tNode.gender === "female") {
                         return isOlder ? `${prefix}堂姐` : `${prefix}堂妹`;
                     } else {
@@ -583,7 +604,14 @@ function computeRigorousRelationship(
                 } else {
                     const vDate = vNode.birthDate || vNode.birth_date || "9999-99-99";
                     const tDate = tNode.birthDate || tNode.birth_date || "9999-99-99";
-                    const isOlder = tDate < vDate;
+                    let isOlder = tDate < vDate;
+
+                    if (vDate === tDate) {
+                        const rel = tNode.relationship || "";
+                        if (rel.includes("哥") || rel.includes("姐") || rel.includes("兄")) isOlder = true;
+                        if (rel.includes("弟") || rel.includes("妹")) isOlder = false;
+                    }
+
                     if (tNode.gender === "female") {
                         return isOlder ? `${prefix}表姐` : `${prefix}表妹`;
                     } else {
