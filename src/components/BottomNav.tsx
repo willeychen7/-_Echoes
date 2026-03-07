@@ -8,7 +8,7 @@ export const BottomNav: React.FC = () => {
   const navigate = useNavigate();
   const navItems = [
     { to: "/square", label: "广场", icon: Home },
-    { to: "/square#archive", label: "档案", icon: BookOpen },
+    { to: "/square#archive-map", label: "族谱", icon: BookOpen },
     { to: "/calendar", label: "日历", icon: Calendar },
     { to: "/profile", label: "我的", icon: User },
   ];
@@ -31,9 +31,9 @@ export const BottomNav: React.FC = () => {
     <div className="w-full shrink-0 z-50 glass-morphism border-t border-slate-100 bg-white/95 pb-1">
       <nav className="flex justify-around items-center px-2 py-3">
         {navItems.map((item) => {
-          // 自定义激活状态逻辑，用于区分 /square 和 /square#archive
+          // 自定义激活状态逻辑，用于区分 /square 和 /square#archive 或者 /square#archive-map
           const isItemActive = item.to.includes("#")
-            ? location.pathname === item.to.split("#")[0] && location.hash === "#" + item.to.split("#")[1]
+            ? location.pathname === item.to.split("#")[0] && location.hash.startsWith("#" + item.to.split("#")[1].split('-')[0])
             : location.pathname === item.to && location.hash === "";
 
           return (

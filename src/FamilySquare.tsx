@@ -228,8 +228,10 @@ export const FamilySquare: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (location.hash === "#archive") {
+    if (location.hash.startsWith("#archive")) {
       setActiveTab("archive");
+      if (location.hash === "#archive-map") setArchiveView("map");
+      else setArchiveView("list");
       setTimeout(() => document.getElementById("archive-section")?.scrollIntoView({ behavior: "smooth" }), 100);
     } else {
       setActiveTab("events");
