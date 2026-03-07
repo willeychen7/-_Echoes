@@ -335,6 +335,20 @@ export const AddMemberPage: React.FC = () => {
     setIsSubmitting(true);
     let currentParentId = parentId;
 
+    // 🚀 核心修复：对于亲兄弟姐妹模式，自动尝试获取当前用户的父辈 ID，实现血脉真正的双向绑定
+    if (connectorNode === 'sibling' && !currentParentId) {
+      const meNode = members.find(m =>
+        (m.id && currentUser?.memberId && String(m.id) === String(currentUser.memberId)) ||
+        (m.userId && currentUser?.id && String(m.userId) === String(currentUser.id))
+      );
+      if (meNode?.fatherId) {
+        currentParentId = meNode.fatherId;
+      } else if (meNode?.motherId) {
+        // 如果没有 fatherId 分支，退而求其次用母系 ID 衔接（虽然逻辑上还是会存入 father_id 字段作为主要 parent）
+        currentParentId = meNode.motherId;
+      }
+    }
+
     // 虚拟父辈创建逻辑 (保持完整)
     if ((isCreatingVirtualParent || (safetyStep === 'ask' && !parentId)) && !currentParentId) {
       try {

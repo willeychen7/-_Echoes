@@ -705,7 +705,13 @@ export const ArchivePage: React.FC = () => {
             )}
           </div>
           {(() => {
-            const rel = getRigorousRelationship(currentUser, member, members);
+            // 🚀 核心修复：找到当前用户自己的完整档案节点作为参考系
+            const meNode = members.find(m =>
+              (m.id && currentUser?.memberId && String(m.id) === String(currentUser.memberId)) ||
+              (m.userId && currentUser?.id && String(m.userId) === String(currentUser.id))
+            ) || currentUser;
+
+            const rel = getRigorousRelationship(meNode, member, members);
             const type = getRelationType(rel);
 
             return (
@@ -742,8 +748,8 @@ export const ArchivePage: React.FC = () => {
                           "text-slate-300 bg-slate-50 border-slate-100"
                     )}>
                       <Sparkles size={12} fill="currentColor" /> {rel}
-                      {getKinshipLabel(currentUser, member, members) && (
-                        <span className="opacity-50 text-[10px] ml-1">· {getKinshipLabel(currentUser, member, members)?.replace(/【|】/g, '')}</span>
+                      {getKinshipLabel(meNode, member, members) && (
+                        <span className="opacity-50 text-[10px] ml-1">· {getKinshipLabel(meNode, member, members)?.replace(/【|】/g, '')}</span>
                       )}
                     </span>
                     {(member.logicTag || member.logic_tag) && (
