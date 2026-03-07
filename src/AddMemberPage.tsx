@@ -279,7 +279,7 @@ export const AddMemberPage: React.FC = () => {
   };
 
   const handleAdd = async () => {
-    if (!name || (!relationship && !customRelationship)) return;
+    if (!name || (connectorNode !== 'sibling' && !relationship && !customRelationship)) return;
 
     const savedUser = localStorage.getItem("currentUser");
     const currentUser = savedUser ? JSON.parse(savedUser) : null;
@@ -684,8 +684,14 @@ export const AddMemberPage: React.FC = () => {
               <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(1)}>上一步</Button>
               <Button className="flex-1 h-14 bg-[#eab308] text-black hover:bg-[#d9a306] font-bold" onClick={() => {
                 if (!lineageSide || !connectorNode) { alert("请选择方位和分支"); return; }
-                setWizardStep(3);
-              }}>下一步：确认称谓明细</Button>
+                if (connectorNode === 'sibling') {
+                  setWizardStep(4);
+                } else {
+                  setWizardStep(3);
+                }
+              }}>
+                {connectorNode === 'sibling' ? '下一步：确认排行' : '下一步：确认称谓明细'}
+              </Button>
             </div>
           </motion.div>
         )}
@@ -865,7 +871,7 @@ export const AddMemberPage: React.FC = () => {
             </div>
 
             <div className="flex gap-4">
-              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(3)}>上一步</Button>
+              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(connectorNode === 'sibling' ? 2 : 3)}>上一步</Button>
               <Button disabled={isSubmitting} className="flex-1 h-14 bg-black text-[#eab308] hover:bg-slate-800 font-bold" onClick={handleAdd}>建立专属档案</Button>
             </div>
           </motion.div>
