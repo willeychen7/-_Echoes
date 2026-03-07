@@ -721,12 +721,17 @@ function computeRigorousRelationship(
                 if (clan) {
                     if (isRealFatherSibling) {
                         if (isFemale(tNode)) return `${prefix}姑姑`;
-                        const fNode = members.find(m => eq(m.id, vfId));
+                        const fNode = ctx.membersMap.get(Number(vfId));
                         const fDate = fNode?.birthDate || fNode?.birth_date || "9999-99-99";
-                        const tDate = tNode?.birthDate || tNode?.birth_date || "9999-99-99";
+                        const tDate = tNode?.birth_date || tNode?.birthDate || "9999-99-99";
                         return tDate < fDate ? `${prefix}伯伯` : `${prefix}叔叔`;
                     } else {
-                        return isFemale(tNode) ? `${prefix}堂姑` : `${prefix}堂叔`;
+                        // 堂系：也需要比对父亲生日
+                        const fNode = ctx.membersMap.get(Number(vfId));
+                        const fDate = fNode?.birthDate || fNode?.birth_date || "9999-99-99";
+                        const tDate = tNode?.birth_date || tNode?.birthDate || "9999-99-99";
+                        if (isFemale(tNode)) return `${prefix}堂姑`;
+                        return tDate < fDate ? `${prefix}堂伯` : `${prefix}堂叔`;
                     }
                 } else {
                     return isFemale(tNode) ? `${prefix}姨妈` : `${prefix}舅舅`;
@@ -736,21 +741,42 @@ function computeRigorousRelationship(
             if (genDiff === 2) {
                 const clan = isClan(vNode, tNode);
                 const prefix = getRankPrefix(tNode, members);
-                if (clan) return isFemale(tNode) ? `${prefix}姑婆` : `${prefix}叔公/伯公`;
+                if (clan) {
+                    if (isFemale(tNode)) return `${prefix}姑婆`;
+                    // 对比亲爷爷的生日
+                    const vfId = vNode.fatherId;
+                    const vffId = ctx.membersMap.get(Number(vfId))?.fatherId;
+                    const vffNode = ctx.membersMap.get(Number(vffId));
+                    const vffDate = vffNode?.birthDate || vffNode?.birth_date || "9999-99-99";
+                    const tDate = tNode?.birth_date || tNode?.birthDate || "9999-99-99";
+                    return tDate < vffDate ? `${prefix}伯公` : `${prefix}叔公`;
+                }
                 return isFemale(tNode) ? `${prefix}姨婆` : `${prefix}舅公`;
             }
 
             if (genDiff === -1) {
                 const clan = isClan(vNode, tNode);
                 const prefix = getRankPrefix(tNode, members);
-                if (clan) return isFemale(tNode) ? `${prefix}堂侄女` : `${prefix}堂侄子`;
+                if (clan) {
+                    // 检查是否是我的亲兄弟姐妹的孩子
+                    const isRealSiblingChild = (tNode.fatherId && Array.from(ctx.membersMap.values()).some(m => eq(m.id, tNode.fatherId) && eq(m.fatherId, vNode.fatherId) && !eq(m.id, vId)));
+                    if (isRealSiblingChild) return isFemale(tNode) ? `${prefix}侄女` : `${prefix}侄子`;
+                    return isFemale(tNode) ? `${prefix}堂侄女` : `${prefix}堂侄子`;
+                }
                 return isFemale(tNode) ? `${prefix}表外甥女` : `${prefix}表外甥`;
             }
 
             if (genDiff === -2) {
                 const clan = isClan(vNode, tNode);
                 const prefix = getRankPrefix(tNode, members);
-                if (clan) return isFemale(tNode) ? `${prefix}堂侄孙女` : `${prefix}堂侄孙`;
+                if (clan) {
+                    // 检查是否是我的亲兄弟姐妹的孙辈 (我的侄子/侄女的孩子)
+                    const tfId = tNode.fatherId;
+                    const tffId = ctx.membersMap.get(Number(tfId))?.fatherId;
+                    const isRealSiblingGrandChild = tffId && Array.from(ctx.membersMap.values()).some(m => eq(m.id, tffId) && eq(m.fatherId, vNode.fatherId) && !eq(m.id, vId));
+                    if (isRealSiblingGrandChild) return isFemale(tNode) ? `${prefix}侄孙女` : `${prefix}侄孙`;
+                    return isFemale(tNode) ? `${prefix}堂侄孙女` : `${prefix}堂侄孙`;
+                }
                 return isFemale(tNode) ? `${prefix}表外甥孙女` : `${prefix}表外甥孙`;
             }
         }

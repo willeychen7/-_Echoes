@@ -135,11 +135,38 @@ export function getReverseKinship(relText: string, side: 'paternal' | 'maternal'
     const rel = relText || "";
     const isMale = String(myGender).toLowerCase() === 'male' || String(myGender) === '男';
 
+    // 1. 祖辈分支 (含堂系祖辈及堂辈长辈)
+    if (connector === 'grandfather' || connector === 'grandmother' || connector === 'm_grandfather' || connector === 'm_grandmother') {
+        const isGrandParentLevel = /公|婆|爷|奶|老祖|太/.test(rel);
+        if (isGrandParentLevel) {
+            if (side === 'paternal') return isMale ? '侄孙' : '侄孙女';
+            return isMale ? '外孙' : '外孙女';
+        }
+        // 堂系长辈 (如：从爷爷分支下来的堂叔、堂伯、堂姑)
+        if (/叔|伯|姑/.test(rel)) return isMale ? '堂侄' : '堂侄女';
+        if (/舅|姨/.test(rel)) return isMale ? '表外甥' : '表外甥女';
+
+        // 兜底：如果是祖辈分支下的其他，默认走侄孙
+        if (side === 'paternal') return isMale ? '侄孙' : '侄孙女';
+        return isMale ? '外孙' : '外孙女';
+    }
+
+    // 2. 堂亲平辈分支 (同房堂兄弟等)
+    if ((connector === 'self_p' || connector === 'self_m') && /叔|伯|姑|舅|姨/.test(rel)) {
+        if (side === 'paternal') return isMale ? '堂侄' : '堂侄女';
+        return isMale ? '外甥' : '外甥女';
+    }
+
+    // 3. 基本长辈 (亲叔伯姑舅姨)
     if (/叔|伯/.test(rel)) return isMale ? '侄子' : '侄女';
     if (/舅/.test(rel)) return isMale ? '外甥' : '外甥女';
     if (/姨/.test(rel)) return isMale ? '姨甥' : '姨甥女';
     if (/姑/.test(rel)) return isMale ? '内侄' : '内侄女';
+
+    // 4. 直系祖辈
     if (/公|爷|婆|奶|老祖|太/.test(rel)) return isMale ? (side === 'paternal' ? '孙子' : '外孙') : (side === 'paternal' ? '孙女' : '外孙女');
+
+    // 5. 其他
     if (/哥|弟/.test(rel)) return isMale ? '兄弟' : '兄妹/姐弟';
     if (/姐|妹/.test(rel)) return isMale ? '姐弟/兄妹' : '姐妹';
     if (/儿子|女儿/.test(rel)) return isMale ? '父亲' : '母亲';
