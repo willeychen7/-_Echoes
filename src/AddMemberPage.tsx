@@ -816,9 +816,30 @@ export const AddMemberPage: React.FC = () => {
               <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl flex items-start gap-4">
                 <Users className="size-8 text-indigo-400 flex-shrink-0" />
                 <div>
-                  <h4 className="font-black text-indigo-800 text-sm tracking-widest mb-1">系统互称推演结果</h4>
-                  <p className="text-indigo-900 font-bold text-lg mb-2">录入成功后，TA 将称呼您为：<span className="text-[#eab308] text-2xl mx-1 bg-white px-3 py-0.5 rounded-lg shadow-sm border border-indigo-50">{getReverseKinship(relationship === '其他' ? customRelationship : relationship, lineageSide as 'paternal' | 'maternal', connectorNode as string, gender)}</span></p>
-                  <p className="text-xs text-indigo-400/80 font-mono font-bold uppercase">Logic_Tag: {logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '')}</p>
+                  <h4 className="font-black text-indigo-800 text-sm tracking-widest mb-1">互称与血脉追踪定位</h4>
+                  <div className="flex items-center gap-2 mb-3 mt-1 bg-white/50 px-3 py-1.5 rounded-lg border border-indigo-100/50">
+                    <span className="text-xs font-black text-indigo-600">血脉航线：</span>
+                    <span className="text-[10px] text-indigo-500/80 font-bold bg-white px-2 py-0.5 rounded shadow-sm flex items-center gap-1">
+                      {lineageSide === 'paternal' ? '父系宗亲左排' : '母系外家右排'}
+                      <ChevronRight size={10} className="inline opacity-50" />
+                      {connectorNode === 'father' ? '手足兄弟连'
+                        : connectorNode === 'grandfather' ? '爷爷支脉'
+                          : connectorNode === 'grandmother' ? '奶奶的外戚'
+                            : connectorNode === 'mother' ? '母亲的娘家'
+                              : connectorNode === 'm_grandfather' ? '外公大树'
+                                : connectorNode === 'm_grandmother' ? '外婆连脉'
+                                  : connectorNode === 'self_p' || connectorNode === 'self_m' ? '同宗同代'
+                                    : '子路晚辈'}
+                      {selectedRank && selectedRank !== '无' && (
+                        <>
+                          <ChevronRight size={10} className="inline opacity-50" />
+                          {selectedRank}房
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  <p className="text-indigo-900 font-bold text-lg mb-2">TA 将称呼您为：<span className="text-[#eab308] text-2xl mx-1 bg-white px-3 py-0.5 rounded-lg shadow-sm border border-indigo-50">{getReverseKinship(relationship === '其他' ? customRelationship : relationship, lineageSide as 'paternal' | 'maternal', connectorNode as string, gender)}</span></p>
+                  <p className="text-xs text-indigo-400/80 font-mono font-bold uppercase border-t border-indigo-100/50 pt-2 mt-2">Logic_Coordinate: {logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '')}</p>
                 </div>
               </div>
             </div>

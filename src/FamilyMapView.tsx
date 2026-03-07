@@ -64,7 +64,7 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
     };
 
     return (
-        <div 
+        <div
             ref={containerRef}
             className="w-full h-full min-h-[600px] relative bg-[#fdfbf7] overflow-hidden rounded-[2.5rem] border-4 border-white shadow-xl touch-none"
             onMouseDown={handleMouseDown}
@@ -132,9 +132,10 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
                 {/* Plotting Members */}
                 {members.map(member => {
                     if (member.mapX == null || member.mapY == null) return null;
-                    
+
                     const isMaternal = member.logicTag?.includes('[M]');
-                    
+                    const isVirtual = member.member_type === 'virtual' || member.memberType === 'virtual' || ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"].some(k => (member.name || "").includes(k));
+
                     return (
                         <motion.div
                             key={member.id}
@@ -149,33 +150,33 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
                                 y: '-50%'
                             }}
                         >
-                            <div 
-                                className={`w-24 h-24 rounded-full border-4 shadow-xl overflow-hidden cursor-pointer hover:scale-110 active:scale-95 transition-all
-                                    ${isMaternal ? 'border-purple-200 shadow-purple-200/50 hover:shadow-purple-300' : 'border-amber-200 shadow-amber-200/50 hover:shadow-amber-300'}
+                            <div
+                                className={`rounded-full border-4 shadow-xl overflow-hidden cursor-pointer hover:scale-110 active:scale-95 transition-all
+                                    ${isVirtual ? 'w-16 h-16 border-slate-200 opacity-60 grayscale' : 'w-24 h-24 ' + (isMaternal ? 'border-purple-200 shadow-purple-200/50 hover:shadow-purple-300' : 'border-amber-200 shadow-amber-200/50 hover:shadow-amber-300')}
                                     bg-slate-50 relative z-10
                                 `}
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    navigate(`/archive/${member.id}`);
+                                    if (!isVirtual) navigate(`/archive/${member.id}`);
                                 }}
                             >
-                                <img 
-                                    src={member.avatarUrl || member.avatar_url || `https://picsum.photos/seed/${member.name}/200/200`} 
+                                <img
+                                    src={member.avatarUrl || member.avatar_url || (isVirtual ? '' : `https://picsum.photos/seed/${member.name}/200/200`)}
                                     alt={member.name}
                                     className="w-full h-full object-cover"
                                 />
-                                {member.isRegistered && (
-                                   <div className={`absolute bottom-0 inset-x-0 h-4 ${isMaternal ? 'bg-purple-500' : 'bg-emerald-500'} flex justify-center items-center`}>
-                                     <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                                   </div>
+                                {(!isVirtual && member.isRegistered) && (
+                                    <div className={`absolute bottom-0 inset-x-0 h-4 ${isMaternal ? 'bg-purple-500' : 'bg-emerald-500'} flex justify-center items-center`}>
+                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                                    </div>
                                 )}
                             </div>
-                            
+
                             <div className={`mt-3 flex flex-col items-center bg-white/95 backdrop-blur-md px-5 py-2.5 rounded-[1.5rem] shadow-lg border relative z-20 transition-transform group-hover:-translate-y-1
-                                ${isMaternal ? 'border-purple-100 shadow-purple-100/50' : 'border-amber-100 shadow-amber-100/50'}`}
+                                ${isVirtual ? 'border-slate-100 shadow-none opacity-70 px-3 py-1.5' : (isMaternal ? 'border-purple-100 shadow-purple-100/50' : 'border-amber-100 shadow-amber-100/50')}`}
                             >
-                                <span className={`font-black text-xl whitespace-nowrap ${isMaternal ? 'text-purple-900' : 'text-slate-800'}`}>{member.name}</span>
-                                {member.relationship && (
+                                <span className={`font-black whitespace-nowrap ${isVirtual ? 'text-xs text-slate-400' : 'text-xl ' + (isMaternal ? 'text-purple-900' : 'text-slate-800')}`}>{member.name}</span>
+                                {(!isVirtual && member.relationship) && (
                                     <span className={`text-[10px] font-black uppercase tracking-widest mt-0.5
                                         ${isMaternal ? 'text-purple-500' : 'text-[#eab308]'}
                                     `}>

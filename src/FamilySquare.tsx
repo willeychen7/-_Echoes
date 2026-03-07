@@ -12,7 +12,7 @@ import { supabase } from "./lib/supabase";
 import { DEFAULT_AVATAR, getSafeAvatar } from "./constants";
 import { AudioBar, WallMessages, InlineBlessingPanel } from "./components/FamilyEvents";
 import { updateAvatarCache } from "./lib/useAvatarCache";
-import { createKinshipSearchFilter, generateLayoutFromTags } from "./lib/kinshipEngine";
+import { createKinshipSearchFilter, generateSmartLayout } from "./lib/kinshipEngine";
 import { FamilyMapView } from "./FamilyMapView";
 
 const getZodiac = (year: number) => {
@@ -124,23 +124,14 @@ export const FamilySquare: React.FC = () => {
       if (isDemoMode(modeParsed)) {
         const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
         const allDemoMembers = [...DEMO_MEMBERS, ...customMembers];
-        setMembers(generateLayoutFromTags(allDemoMembers));
+        setMembers(generateSmartLayout(allDemoMembers));
         const customEvents = JSON.parse(localStorage.getItem("demoCustomEvents") || "[]");
         setEvents([...DEMO_EVENTS, ...customEvents]);
       } else if (modeParsed && modeParsed.familyId) {
         const familyId = parseInt(String(modeParsed.familyId));
         fetch(`/api/family-members?familyId=${familyId}`).then(res => res.json()).then(data => {
           if (Array.isArray(data)) {
-            // 过滤掉用于桥接关系的虚拟人物 (memberType === 'virtual' 或 姓名包含特定占位后缀)
-            const filteredMembers = data.filter((m: any) => {
-              const type = m.member_type || m.memberType;
-              const name = m.name || "";
-              if (type === 'virtual') return false;
-              // 增强过滤：拦截所有系统自动生成的“XX的XX”占位符档案
-              const virtualKeywords = ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"];
-              return true;
-            });
-            const uiMembers = generateLayoutFromTags(filteredMembers);
+            const uiMembers = generateSmartLayout(data);
             setMembers(uiMembers);
             data.forEach((m: any) => {
               if (m.id && (m.avatar_url || m.avatarUrl)) {
@@ -653,7 +644,8 @@ export const FamilySquare: React.FC = () => {
                 {/* 第一组：家族宗亲 (血缘) */}
                 {(() => {
                   const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
-                  const bloods = members.filter(searchFilter).filter(member => {
+                  const isRealMember = (m: any) => !(m.member_type === 'virtual' || m.memberType === 'virtual' || ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"].some(k => (m.name || "").includes(k)));
+                  const bloods = members.filter(isRealMember).filter(searchFilter).filter(member => {
                     const rel = getRigorousRelationship(currentUser, member, members);
                     return getRelationType(rel) === 'blood';
                   });
@@ -739,7 +731,8 @@ export const FamilySquare: React.FC = () => {
                 {/* 第二组：家族姻亲 */}
                 {(() => {
                   const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
-                  const affinals = members.filter(searchFilter).filter(member => {
+                  const isRealMember = (m: any) => !(m.member_type === 'virtual' || m.memberType === 'virtual' || ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"].some(k => (m.name || "").includes(k)));
+                  const affinals = members.filter(isRealMember).filter(searchFilter).filter(member => {
                     const rel = getRigorousRelationship(currentUser, member, members);
                     return getRelationType(rel) === 'affinal';
                   });
@@ -812,10 +805,11 @@ export const FamilySquare: React.FC = () => {
                   );
                 })()}
 
-                {/* 第三组：社会关系 */}
+                {/* 第三组：故交或无明确称谓 */}
                 {(() => {
                   const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
-                  const socials = members.filter(searchFilter).filter(member => {
+                  const isRealMember = (m: any) => !(m.member_type === 'virtual' || m.memberType === 'virtual' || ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"].some(k => (m.name || "").includes(k)));
+                  const socials = members.filter(isRealMember).filter(searchFilter).filter(member => {
                     const rel = getRigorousRelationship(currentUser, member, members);
                     return getRelationType(rel) === 'social';
                   });

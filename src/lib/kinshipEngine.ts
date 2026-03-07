@@ -156,73 +156,108 @@ export function createKinshipSearchFilter(query: string) {
 }
 
 /**
- * 为《全家福大地图》自动排版生成坐标
- * Generate SVG coordinates for members based on their Logic Tags.
+ * 为《全家福大地图》自动排版生成坐标：采用弹性智能布局 (Smart Layout)
+ * Generate SVG coordinates for members using an elastic collision-free layout.
  */
-export function generateLayoutFromTags(members: any[]) {
+export function generateSmartLayout(members: any[]) {
     // Canvas settings
     const CENTER_X = 500;
     const START_Y = 100;
-    const LEVEL_HEIGHT = 150;
-    const SIBLING_GAP = 120;
-    const SIDE_OFFSET = 300; // [F] goes left, [M] goes right
+    const LEVEL_HEIGHT = 160;
+    const MIN_NODE_GAP = 140; // 弹性防碰撞节点安全距离
+    const SIDE_OFFSET = 300;
 
-    return members.map((member) => {
-        let x = CENTER_X;
-        let y = START_Y;
-        let generationLevel = 1; // Default generation level
+    // 内部帮助函数：提取代际
+    const getGenLevel = (tag: string) => {
+        if (!tag) return 99; // 未指定，放最后
+        if (tag.includes('f,f') || tag.includes('m,m') || tag.includes('m,f') || tag.includes('f,m')) return -1; // 爷爷辈
+        if (tag.includes('-f') || tag.includes('-m')) return 0; // 父母辈
+        if (tag.includes('-x') || tag.includes('b/p') || tag.includes('self')) return 1; // 同辈
+        if (tag.includes('-s') || tag.includes('child')) return 2; // 晚辈
+        return 99;
+    };
 
-        const tag = member.logicTag || member.logic_tag || "";
+    // 内部帮助函数：提取数字化的房分权重排序
+    const getRankIndex = (tag: string) => {
+        const match = tag.match(/-o(大|一|二|三|四|五|六|七|八|九|十|小|幺|老)$/);
+        if (!match) return 0;
+        const rankMap: Record<string, number> = {
+            '大': 1, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+            '六': 6, '七': 7, '八': 8, '九': 9, '十': 10, '小': 11, '幺': 11, '老': 11
+        };
+        return rankMap[match[1]] || 1;
+    };
 
-        if (!tag) {
-            // 随机摆放在底部
-            return { ...member, mapX: Math.random() * 1000, mapY: START_Y + LEVEL_HEIGHT * 4 };
-        }
-
-        // 解析方位 [F] or [M]
-        const isPaternal = tag.startsWith('[F]');
-        const isMaternal = tag.startsWith('[M]');
-
-        // 中心线左侧或右侧
-        if (isPaternal) {
-            x -= SIDE_OFFSET;
-        } else if (isMaternal) {
-            x += SIDE_OFFSET;
-        }
-
-        // 解析代际和高度 y
-        if (tag.includes('f,f') || tag.includes('m,m') || tag.includes('m,f') || tag.includes('f,m')) {
-            generationLevel = -1; // 爷爷那辈
-        } else if (tag.includes('-f') || tag.includes('-m')) {
-            generationLevel = 0;  // 父母那辈
-        } else if (tag.includes('-x') || tag.includes('b/p')) {
-            generationLevel = 1;  // 同辈
-        } else if (tag.includes('-s')) {
-            generationLevel = 2;  // 晚辈
-        }
-
-        y = START_Y + (generationLevel + 1) * LEVEL_HEIGHT;
-
-        // 解析房分（同辈横向位移）
-        const rankMatch = tag.match(/-o(大|一|二|三|四|五|六|七|八|九|十|小|幺|老)$/);
-        let rankOffset = 0;
-        if (rankMatch) {
-            const rankStr = rankMatch[1];
-            const rankMap: Record<string, number> = {
-                '大': 1, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
-                '六': 6, '七': 7, '八': 8, '九': 9, '十': 10, '小': 11, '幺': 11, '老': 11
-            };
-            const rIndex = rankMap[rankStr] || 1;
-            rankOffset = (rIndex - 2) * SIBLING_GAP; // -2 to center around middle ranks
-        }
-
-        // 最终 X 轴加入房分偏移
-        x += rankOffset;
-
+    // 注入排序预处理辅助字段
+    const parsedMembers = members.map(m => {
+        const tag = m.logicTag || m.logic_tag || "";
         return {
-            ...member,
-            mapX: x,
-            mapY: y
+            ...m,
+            _gen: getGenLevel(tag),
+            _side: tag.startsWith('[F]') ? 'paternal' : (tag.startsWith('[M]') ? 'maternal' : 'unknown'),
+            _rank: getRankIndex(tag),
+            _rawTag: tag
         };
     });
+
+    // 按代际和方位分组，实现“地皮”动态延展
+    const grouped: Record<string, any[]> = {};
+    parsedMembers.forEach(m => {
+        const key = `${m._side}_${m._gen}`;
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(m);
+    });
+
+    const finalMembers: any[] = [];
+
+    // 为每个分组分别计算居中对齐的防碰撞X轴坐标
+    Object.keys(grouped).forEach(key => {
+        const group = grouped[key];
+
+        // 分组内排序规则：先看长幼排位(大中小)，再看具体分支(堂系vs亲系)
+        group.sort((a, b) => {
+            if (a._rank !== b._rank) return a._rank - b._rank;
+            return a._rawTag.localeCompare(b._rawTag); // 将带有相同tag分支的人紧贴排在一起
+        });
+
+        const isPaternal = key.startsWith('paternal');
+        const isMaternal = key.startsWith('maternal');
+        const gen = parseInt(key.split('_')[1]);
+
+        // 计算该层级/阵营需要的总横向长度
+        const count = group.length;
+        const totalWidth = (count - 1) * MIN_NODE_GAP;
+
+        group.forEach((m, index) => {
+            let x = CENTER_X;
+            let y = START_Y + (gen + 1) * LEVEL_HEIGHT;
+
+            if (gen === 99) {
+                // 没有Tag的随意发配到底部或周边
+                x = CENTER_X + (Math.random() * 800 - 400);
+                y = START_Y + 4 * LEVEL_HEIGHT + Math.random() * 100;
+            } else {
+                // 弹性分布：基于中心偏移，向两端蔓延
+                if (isPaternal) {
+                    const centerX = CENTER_X - SIDE_OFFSET;
+                    x = centerX - (totalWidth / 2) + index * MIN_NODE_GAP;
+                } else if (isMaternal) {
+                    const centerX = CENTER_X + SIDE_OFFSET;
+                    x = centerX - (totalWidth / 2) + index * MIN_NODE_GAP;
+                } else {
+                    x = CENTER_X - (totalWidth / 2) + index * MIN_NODE_GAP;
+                }
+            }
+
+            // 清理辅助字段，推入结果
+            const { _gen, _side, _rank, _rawTag, ...cleanMember } = m;
+            finalMembers.push({
+                ...cleanMember,
+                mapX: x,
+                mapY: y
+            });
+        });
+    });
+
+    return finalMembers;
 }
