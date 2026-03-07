@@ -272,58 +272,64 @@ export const AddMemberPage: React.FC = () => {
     const createdByMemberId = currentUser?.memberId;
 
     // 1. 获取基础称谓
-    // 💡 逻辑锚定 V5.0：不再信任原始输入，根据 Logic_Coordinate 强制重写名分
+    // 💡 逻辑前置 (Logic-First) 重构 V6.0：保证变量闭环与提交同步
     const rawRel = (relationship === "其他" ? customRelationship : relationship) || "";
     let finalRel = rawRel;
 
+    // A. 行星级纠偏 (根据衔接点强制锚定名分)
     if (connectorNode === 'sibling') {
-      // 只要是亲兄弟路径 [F]-SIB，强行剔除 表/堂
+      // 路径是 [F]-SIB (亲兄弟姐妹)，强制剔除“表/堂”字
       finalRel = rawRel.replace(/[表堂]/g, '');
-      if (!finalRel.includes('哥') && !finalRel.includes('弟') && !finalRel.includes('姐') && !finalRel.includes('妹')) {
-        finalRel = gender === 'female' ? '妹妹' : '弟弟'; // 兜底防错
+      // 兜底：如果用户删减后只剩空字或非汉字，根据性别补全
+      if (!/[\u4e00-\u9fa5]/.test(finalRel)) {
+        finalRel = gender === 'female' ? '妹妹' : '弟弟';
       }
     } else if (lineageSide === 'paternal') {
-      if (connectorNode === 'self_p' || connectorNode === 'father' || connectorNode === 'grandfather') {
-        // 父系宗亲路径，如果没有“堂”字则补齐，且严禁有“表”字
+      // 父系路径逻辑：确保有“堂”无“表”
+      if (['self_p', 'father', 'grandfather'].includes(connectorNode!)) {
         const isStandardPaternal = ["叔叔", "伯伯", "姑姑", "叔伯"].includes(rawRel);
         if (!isStandardPaternal && !finalRel.includes('堂')) {
           finalRel = '堂' + finalRel.replace('表', '');
         }
       }
     } else if (lineageSide === 'maternal') {
-      // 母系外戚路径，强制使用“表”系
-      if (connectorNode === 'mother' || connectorNode === 'm_grandfather' || connectorNode === 'self_m') {
-        if (!finalRel.includes('表') && !/舅|姨/.test(finalRel)) {
-          finalRel = '表' + finalRel.replace('堂', '');
-        }
+      // 母系路径逻辑：确保有“表”无“堂”，或者属于“舅/姨”体系
+      if (!finalRel.includes('表') && !/舅|姨/.test(finalRel)) {
+        finalRel = '表' + finalRel.replace('堂', '');
       }
     }
 
-    // 拼接排行 (例如：二 + 哥 = 二哥)
+    // B. 拼接排行 (例如：二 + 哥 = 二哥)
     if (selectedRank && selectedRank !== '无' && !finalRel.startsWith(selectedRank)) {
       finalRel = `${selectedRank}${finalRel}`;
     }
 
+    // C. 判定同姓逻辑 (用于 LogicTag 生成及备注)
+    const computedTargetSurname = targetSurname || name.trim().charAt(0);
+    const isSameSurname = mySurname !== "" && computedTargetSurname !== "" && mySurname === computedTargetSurname;
+
+    if (lineageSide === 'maternal' && isSameSurname) {
+      if (!finalRel.includes('(母家同姓)')) finalRel += '(母家同姓)';
+    }
+
+    // D. 变量闭环：最终要进入数据库的各项关键数据
     const relationshipToStore = finalRel;
     const side = lineageSide || 'paternal';
-    const computedTargetSurname = targetSurname || name.trim().charAt(0);
-    const myGen = currentUser?.generationNum ?? 30;
+    const currentLogicTag = getLogicTag(
+      side as 'paternal' | 'maternal',
+      connectorNode as string,
+      selectedRank || '',
+      isSameSurname
+    );
 
-    // 代际逻辑
+    // E. 代际自动推导
+    const myGen = currentUser?.generationNum ?? 30;
     let targetGen = myGen;
     if (connectorNode === 'father' || connectorNode === 'mother') targetGen = myGen - 1;
     else if (['grandfather', 'grandmother', 'm_grandfather', 'm_grandmother'].includes(connectorNode!)) targetGen = myGen - 2;
     else if (['child_p', 'child_m'].includes(connectorNode!)) targetGen = myGen + 1;
     else targetGen = myGen;
 
-    // 同姓标记
-    if (side === 'maternal' && mySurname && computedTargetSurname && mySurname === computedTargetSurname) {
-      if (!relationshipToStore.includes('(母家同姓)')) finalRel = `${finalRel}(母家同姓)`;
-    }
-
-    const currentLogicTag = logicTag || getLogicTag(side as any, connectorNode as string, selectedRank || '', mySurname !== "" && computedTargetSurname !== "" && mySurname === computedTargetSurname);
-
-    // ✅ 关键：使用修正后的 relationshipToStore 进行角色推断
     const deducedRole = deduceRole(relationshipToStore);
     setIsSubmitting(true);
     let currentParentId = parentId;

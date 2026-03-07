@@ -6,7 +6,7 @@
 export const CONNECTOR_SUGGESTIONS: Record<string, string[]> = {
     'father': ['叔叔', '伯伯', '姑姑'],
     'grandfather': ['伯公', '叔公', '姑婆', '堂伯', '堂叔'],
-    'grandmother': ['舅公', '姨婆', '堂舅', '堂姨'],
+    'grandmother': ['舅公', '姨婆', '堂舅公', '堂姨婆'],
     'sibling': ['哥哥', '弟弟', '姐姐', '妹妹'], // 亲兄弟姐妹
     'self_p': ['堂哥', '堂弟', '堂姐', '堂妹'], // 父系堂亲
     'child_p': ['儿子', '女儿', '侄子', '侄女', '孙子', '孙女'],
@@ -94,6 +94,14 @@ export function validateKinshipLogic(
 
     // 2. 父系-母族识别：奶奶分支
     if (side === 'paternal' && connector === 'grandmother') {
+        if (rel.includes('堂') && /舅|姨/.test(rel)) {
+            return {
+                isValid: false,
+                warning: '礼法冲突：奶奶的分支属于外戚（母族），不应出现“堂舅/姨”。建议改为“堂舅公/堂姨婆”。',
+                type: 'error',
+                tag
+            };
+        }
         if (/舅|姨/.test(rel)) {
             return { isValid: true, warning: '✅ 逻辑适配：成功识别父系中的“母族”分支坐标（如舅公）。', type: 'success', tag };
         }
