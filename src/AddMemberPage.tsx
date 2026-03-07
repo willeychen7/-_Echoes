@@ -298,7 +298,7 @@ export const AddMemberPage: React.FC = () => {
 
     // 2. 处理最后录入排行的问题 (排行补偿)
     if (selectedRank && selectedRank !== '无' && !finalRel.startsWith(selectedRank)) {
-      // 清除可能存在的旧排行 (如：大、二、小等)，重新拼接最新的排行
+      // ⚡️ 核心修复：先去掉可能存在的所有旧排行前缀，再补上最新的
       const cleanRel = finalRel.replace(/^(大|一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|小|老)/, '');
       finalRel = `${selectedRank}${cleanRel}`;
     }
@@ -427,7 +427,7 @@ export const AddMemberPage: React.FC = () => {
           surname: computedTargetSurname,
           generationNum: targetGen,
           generation_num: targetGen,
-          ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null)),
+          ancestralHall: (selectedRank && selectedRank !== '无' ? `${selectedRank}房` : (parent?.ancestralHall || null)),
           logicTag: currentLogicTag
         });
         localStorage.setItem("demoCustomMembers", JSON.stringify(customMembers));
