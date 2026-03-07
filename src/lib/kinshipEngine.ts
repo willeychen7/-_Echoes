@@ -137,8 +137,15 @@ export function getReverseKinship(relText: string, side: 'paternal' | 'maternal'
 
     // 1. 祖辈分支 (含堂系祖辈及堂辈长辈)
     if (connector === 'grandfather' || connector === 'grandmother' || connector === 'm_grandfather' || connector === 'm_grandmother') {
+        // 🚀 核心优化：如果是亲爷爷/奶奶/外公/外婆本尊
+        if (/^(爷爷|奶奶|外公|外婆|阿公|阿嬷|姥姥|姥爷)$/.test(rel)) {
+            if (side === 'paternal') return isMale ? '孙子' : '孙女';
+            return isMale ? '外孙' : '外孙女';
+        }
+
         const isGrandParentLevel = /公|婆|爷|奶|老祖|太/.test(rel);
         if (isGrandParentLevel) {
+            // 旁系祖辈 (伯公/叔公/姑婆/等)
             if (side === 'paternal') return isMale ? '侄孙' : '侄孙女';
             return isMale ? '外孙' : '外孙女';
         }
