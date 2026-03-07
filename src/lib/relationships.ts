@@ -290,7 +290,7 @@ export function isBloodRelation(rel: string): boolean {
 
 export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string | null {
     if (!vNode || !tNode) return null;
-    const rel = getRigorousRelationship(vNode, tNode, members);
+    const rel = getRigorousRelationship(vNode, tNode, members) || "";
     const type = getRelationType(rel);
 
     // 获取房头信息 (如：大房)
@@ -302,17 +302,20 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
 
     const tTag = (tNode.logicTag || tNode.logic_tag || "").toString().toUpperCase();
 
-    // 🚀 核心判定：判定是否为“至亲”
-    // 直系定义：父母(f,m)、亲手足(sib)、儿女(s,d)、以及两代以内的直系祖辈(f,f / f,m / m,f / m,m)
+    // 1. 🚀 核心判定：判定是否为“至亲”
     const corePath = tTag.replace(/^\[[FM]\](!S)?-/, '').split('-O')[0].toLowerCase();
     const directPaths = ['f', 'm', 'sib', 's', 'd', 'f,f', 'f,m', 'm,f', 'm,m'];
+    const isDirect = directPaths.includes(corePath) || corePath === 'self' || rel === '父亲' || rel === '母亲' || /^(爷爷|奶奶|外公|外婆|爸爸|妈妈|哥哥|弟弟|姐姐|妹妹|儿子|女儿)$/.test(rel);
 
-    if (directPaths.includes(corePath) || corePath === 'self' || rel === '父亲' || rel === '母亲') {
-        return "【至亲】";
-    }
+    if (isDirect) return "【至亲】";
 
+    // 2. ⚡️ 第一优先级：基于 Logic Tag 判定
     if (tTag.startsWith('[F]')) return `【宗亲】${hallSuffix}`;
     if (tTag.startsWith('[M]')) return `【外戚】${hallSuffix}`;
+
+    // 3. 🛡️ 第二优先级：基于称谓文字兜底 (增强稳健性)
+    if (/堂|叔|伯|姑/.test(rel)) return `【宗亲】${hallSuffix}`;
+    if (/表|舅|姨/.test(rel)) return `【外戚】${hallSuffix}`;
 
     return "【血亲】";
 }
