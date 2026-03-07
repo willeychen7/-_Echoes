@@ -385,16 +385,17 @@ function getParentIds(nodeId: any, members: any[]) {
 export function isClan(vNode: any, tNode: any, currentSide?: 'paternal' | 'maternal'): boolean {
     if (!vNode || !tNode) return false;
 
-    // 1. 档案打标优先 (存入数据库的标记具有最高法律效力)
+    // 1. 逻辑标签优先 (LogicTag First) - 核心修复
+    const tTag = tNode.logicTag || tNode.logic_tag || "";
+    if (tTag.startsWith('[F]')) return true;  // [F] 开头绝对是父系宗亲
+    if (tTag.startsWith('[M]')) return false; // [M] 开头绝对是母系外戚
+
+    // 2. 档案打标 (存入数据库的标记)
     const tSide = tNode.origin_side || tNode.originSide;
     if (tSide === 'maternal') return false;
     if (tSide === 'paternal') return true;
 
-    // 2. 当前方位参数优先 (用于实时计算/校验)
-    if (currentSide === 'maternal') return false;
-    if (currentSide === 'paternal') return true;
-
-    // 3. 姓氏兜底逻辑
+    // 3. 姓氏兜底
     if (vNode.surname && tNode.surname) {
         return vNode.surname === tNode.surname;
     }
