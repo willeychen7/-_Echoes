@@ -577,13 +577,13 @@ function computeRigorousRelationship(
         if (eq(tId, vNodeMap.motherId)) return "妈妈";
 
         // 3. 直系向下 (子女)
-        if (eq(vId, tNodeMap.fatherId) || eq(vId, tNodeMap.motherId)) {
-            return isFemale(tNodeMap) ? "女儿" : "儿子";
+        if (eq(vId, tNode.fatherId) || eq(vId, tNode.motherId)) {
+            return isFemale(tNode) ? "女儿" : "儿子";
         }
 
-        // 4. 直系向上 (祖辈) - 极其重要：防止爷爷变堂弟
-        const vfId = vNodeMap.fatherId;
-        const vmId = vNodeMap.motherId;
+        // 4. 直系向上 (祖辈)
+        const vfId = vNode.fatherId;
+        const vmId = vNode.motherId;
         if (vfId) {
             const vffId = ctx.membersMap.get(Number(vfId))?.fatherId;
             const vfmId = ctx.membersMap.get(Number(vfId))?.motherId;
@@ -597,29 +597,35 @@ function computeRigorousRelationship(
             if (eq(tId, vmmId)) return "外婆";
         }
 
-        // --- 闽系核心：昭穆（代数）判定逻辑 ---
-        const vGen = vNodeMap.generationNum ?? vNodeMap.generation_num ?? 30;
-        const tGen = tNodeMap.generationNum ?? tNodeMap.generation_num ?? 30;
-        const rawTag = tNodeMap.logicTag || tNodeMap.logic_tag || target.logicTag || target.logic_tag || "";
+        // --- 🚀 坐标 Hub: 逻辑路径绝对优先 (Logic Path Hub) ---
+        // 如果数据库 ID 链接缺失，物理路径标识符是最强证据
+        const rawTag = tNode.logicTag || tNode.logic_tag || target.logicTag || target.logic_tag || "";
         const tTag = rawTag.toString().toUpperCase();
+        const cleanTag = tTag.replace(/^\[[FM]\](\!S)?-/, ''); // 提取核心路径，如 f,f 或 sib
+
+        if (cleanTag === 'F') return isFemale(tNode) ? "妈妈" : "爸爸";
+        if (cleanTag === 'M') return isFemale(tNode) ? "妈妈" : "爸爸";
+        if (cleanTag.startsWith('F,F')) return isFemale(tNode) ? "奶奶" : "爷爷";
+        if (cleanTag.startsWith('M,F')) return isFemale(tNode) ? "外婆" : "外公";
+        if (cleanTag.startsWith('M,M')) return isFemale(tNode) ? "外婆" : "外公";
+        if (cleanTag.startsWith('F,M')) return isFemale(tNode) ? "奶奶" : "爷爷";
+
+        // --- 闽系核心：昭穆（代数）判定逻辑 ---
+        const vGen = vNode.generationNum ?? vNode.generation_num ?? 30;
+        const tGen = tNode.generationNum ?? tNode.generation_num ?? 30;
 
         if (true) {
             let genDiff = vGen - tGen; // V相对于T的代差
 
-            // 🚀 核心纠偏：逻辑标签精度匹配 (Preventing Partial Match Collision)
+            // 🚀 代际纠偏强制对冲 (Generation Correction)
             if (tTag) {
-                // 优先匹配远代 (Depth first)
                 if (tTag.includes('F,F') || tTag.includes('M,M') || tTag.includes('M,F') || tTag.includes('F,M')) {
                     genDiff = 2;
-                } else if (tTag.match(/-[A-Z]$/) || tTag.includes('-F') || tTag.includes('-M')) {
-                    // 仅当是单层路径时判定为 1 代差 (如 -F, -M, 而非 -F,F)
+                } else if (tTag.includes('SIB') || tTag.includes('SELF') || tTag.includes('-X')) {
+                    genDiff = 0;
+                } else if (tTag.includes('-F') || tTag.includes('-M')) {
                     if (!tTag.includes(',')) genDiff = 1;
                     else if (tTag.split('-')[1]?.split(',').length === 2) genDiff = 2;
-                }
-
-                // 平辈强制重置
-                if (tTag.includes('SIB') || tTag.includes('SELF') || tTag.includes('-X')) {
-                    genDiff = 0;
                 } else if (tTag.includes('-S') || tTag.includes('CHILD')) {
                     genDiff = -1;
                 }
@@ -741,6 +747,14 @@ function computeRigorousRelationship(
             if (genDiff === 2) {
                 const clan = isClan(vNode, tNode);
                 const prefix = getRankPrefix(tNode, members);
+
+                // 🚀 核心补强：即使 ID 链接断了，如果标签是 f,f 且没有排行，也该是爷爷
+                if (cleanTag === 'F,F') return isFemale(tNode) ? "奶奶" : "爷爷";
+                if (cleanTag === 'M,F' || cleanTag === 'M,M' || cleanTag === 'F,M') {
+                    if (isFemale(tNode)) return cleanTag.includes('M,M') ? "外婆" : "奶奶";
+                    return cleanTag.includes('M,F') ? "外公" : "爷爷";
+                }
+
                 if (clan) {
                     if (isFemale(tNode)) return `${prefix}姑婆`;
                     // 对比亲爷爷的生日
