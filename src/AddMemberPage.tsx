@@ -271,61 +271,51 @@ export const AddMemberPage: React.FC = () => {
     const familyId = currentUser?.familyId || null;
     const createdByMemberId = currentUser?.memberId;
 
-    // 💡 核心：全量关系名分修正引擎 (Logic-First Correction) V8.0
+    // 💡 核心：全量名分修正引擎 (Logic-First Correction) V9.0 兼容版
     const baseRel = (relationship === "其他" ? customRelationship : relationship) || "";
     let finalRel = baseRel;
+    const side = lineageSide || 'paternal';
 
-    // 1. 物理路径纠偏 (无论用户选了什么文字，根据 Step 2 的路径强制清洗)
+    // 1. 物理路径驱动的智能名分修正
     if (connectorNode === 'sibling') {
-      // 【亲兄弟姐妹】绝对禁止出现“表/堂”
+      // 【亲兄弟姐妹】绝对禁止表/堂
       finalRel = baseRel.replace(/[表堂]/g, '');
       if (!/[\u4e00-\u9fa5]/.test(finalRel)) finalRel = gender === 'female' ? '姐姐/妹妹' : '哥哥/弟弟';
-    } else if (lineageSide === 'paternal') {
-      // 【父系宗亲分支】
-      if (['father', 'grandfather', 'self_p'].includes(connectorNode!)) {
-        // 宗亲主干严禁出现“表”字，如果是旁系则确保有“堂”字
+    } else if (side === 'paternal') {
+      // 【父系分支】
+      if (connectorNode === 'self_p') {
+        // 堂亲路径 (父系同代)：强制“堂”，剔除“表”
         finalRel = baseRel.replace('表', '堂');
-        // 如果是堂亲但没带堂字，且不是伯叔姑，补齐
-        if (connectorNode === 'self_p' && !finalRel.includes('堂')) finalRel = '堂' + finalRel;
-        if (connectorNode === 'father' && !/叔|伯|姑/.test(finalRel)) finalRel = '叔/伯';
-      } else if (connectorNode === 'grandmother') {
-        // 奶奶的分支属于父系里的“母族”，建议称谓含“舅/姨/公/婆”
-        if (/叔|伯|姑/.test(baseRel)) finalRel = gender === 'female' ? '姨婆' : '舅公';
+        if (!finalRel.includes('堂')) finalRel = '堂' + finalRel;
       }
-    } else if (lineageSide === 'maternal') {
-      // 【母系外戚分支】
-      if (['mother', 'm_grandfather', 'm_grandmother', 'self_m'].includes(connectorNode!)) {
-        // 外戚分支严禁出现“堂”字，若是表亲则确保有“表”字
-        finalRel = baseRel.replace('堂', '表');
-        if (connectorNode === 'self_m' && !finalRel.includes('表')) finalRel = '表' + finalRel;
-      }
+      // 💡 重点：如果是在 father 或 grandfather 路径下录入“表” (如：姑表亲)
+      // 我们不做强制剔除，尊重用户的专业录入
+    } else if (side === 'maternal') {
+      // 【母系分支】强制使用“表”系，屏蔽“堂”
+      finalRel = baseRel.replace('堂', '表');
+      if (connectorNode === 'self_m' && !finalRel.includes('表')) finalRel = '表' + finalRel;
     }
 
-    // 2. 注入排行补偿：解决了“最后才录入排行”的问题
+    // 2. 处理最后录入排行的问题 (排行补偿)
     if (selectedRank && selectedRank !== '无' && !finalRel.startsWith(selectedRank)) {
-      // 清除旧排行，注入新排行 (如：二 + 哥哥 = 二哥)
-      const rankCleaned = finalRel.replace(/^(大|一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|小|老)/, '');
-      finalRel = `${selectedRank}${rankCleaned}`;
+      // 清除可能存在的旧排行 (如：大、二、小等)，重新拼接最新的排行
+      const cleanRel = finalRel.replace(/^(大|一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|小|老)/, '');
+      finalRel = `${selectedRank}${cleanRel}`;
     }
 
-    // 3. 判定同姓逻辑（用于同姓外戚）
+    // 3. 判定同姓逻辑（用于同姓外戚打标）
     const computedTargetSurname = targetSurname || name.trim().charAt(0);
     const isSameSurname = mySurname !== "" && computedTargetSurname !== "" && mySurname === computedTargetSurname;
-    if (lineageSide === 'maternal' && isSameSurname) {
+    if (side === 'maternal' && isSameSurname) {
       if (!finalRel.includes('(母家同姓)')) finalRel += '(母家同姓)';
     }
 
     const relationshipToStore = finalRel;
-    const side = lineageSide || 'paternal';
 
-    // 4. 角色角色(Standard Role)强制锁定：防止 deduceRole 误判导致颜色错误
+    // 4. 角色与方位锁定：防止推导干扰
     let finalRole = deduceRole(relationshipToStore);
     if (connectorNode === 'sibling') {
       finalRole = gender === 'female' ? 'sister' : 'brother';
-    } else if (connectorNode === 'father' && gender !== 'female') {
-      finalRole = 'uncle_paternal';
-    } else if (connectorNode === 'mother' && gender === 'female') {
-      finalRole = 'aunt_maternal';
     }
 
     const currentLogicTag = getLogicTag(
