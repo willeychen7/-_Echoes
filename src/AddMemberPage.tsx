@@ -280,7 +280,7 @@ export const AddMemberPage: React.FC = () => {
       // 只要是 [F]-SIB 亲兄弟路径，暴力剥离一切 表/堂
       correctedRel = rawRel.replace(/[表堂]/g, '');
       if (!/[\u4e00-\u9fa5]/.test(correctedRel)) {
-        correctedRel = gender === 'female' ? '妹妹' : '弟弟';
+        correctedRel = gender === 'female' ? '姐姐/妹妹' : '哥哥/弟弟'; // 💡 按照用户建议，补全更友好的组合
       }
     } else if (lineageSide === 'paternal') {
       // 父系宗亲分支：强制不带“表”字。如果没有“堂”且不是伯叔姑，补齐“堂”。
@@ -747,14 +747,15 @@ export const AddMemberPage: React.FC = () => {
                     <span className="text-[10px] text-indigo-500/80 font-bold bg-white px-2 py-0.5 rounded shadow-sm flex items-center gap-1">
                       {lineageSide === 'paternal' ? '父系宗亲左排' : '母系外家右排'}
                       <ChevronRight size={10} className="inline opacity-50" />
-                      {connectorNode === 'father' ? '手足兄弟连'
-                        : connectorNode === 'grandfather' ? '爷爷支脉'
-                          : connectorNode === 'grandmother' ? '奶奶的外戚'
-                            : connectorNode === 'mother' ? '母亲的娘家'
-                              : connectorNode === 'm_grandfather' ? '外公大树'
-                                : connectorNode === 'm_grandmother' ? '外婆连脉'
-                                  : connectorNode === 'self_p' || connectorNode === 'self_m' ? '同宗同代'
-                                    : '子路晚辈'}
+                      {connectorNode === 'sibling' ? '亲兄弟姐妹'
+                        : connectorNode === 'father' ? '手足兄弟连'
+                          : connectorNode === 'grandfather' ? '爷爷支脉'
+                            : connectorNode === 'grandmother' ? '奶奶的外戚'
+                              : connectorNode === 'mother' ? '母亲的娘家'
+                                : connectorNode === 'm_grandfather' ? '外公大树'
+                                  : connectorNode === 'm_grandmother' ? '外婆连脉'
+                                    : connectorNode === 'self_p' || connectorNode === 'self_m' ? '同宗同代'
+                                      : '子路晚辈'}
                       {selectedRank && selectedRank !== '无' && (
                         <>
                           <ChevronRight size={10} className="inline opacity-50" />
