@@ -20,6 +20,7 @@ export const DEMO_MEMBERS: FamilyMember[] = [
         standardRole: "mother",
         gender: "female",
         isRegistered: false,
+        logicTag: "[F]-f,m"
     },
     {
         id: 1002,
@@ -32,6 +33,7 @@ export const DEMO_MEMBERS: FamilyMember[] = [
         standardRole: "father",
         gender: "male",
         isRegistered: false,
+        logicTag: "[F]-f,f"
     },
     {
         id: 1003,
@@ -46,6 +48,7 @@ export const DEMO_MEMBERS: FamilyMember[] = [
         fatherId: 1002,
         motherId: 1001,
         isRegistered: true,
+        logicTag: "[F]-f"
     },
     {
         id: 1004,
@@ -58,6 +61,7 @@ export const DEMO_MEMBERS: FamilyMember[] = [
         standardRole: "mother",
         gender: "female",
         isRegistered: false,
+        logicTag: "[M]-m"
     },
     {
         id: 1005,
@@ -72,6 +76,7 @@ export const DEMO_MEMBERS: FamilyMember[] = [
         fatherId: 1003,
         motherId: 1004,
         isRegistered: true,
+        logicTag: "[F]-s"
     },
 ];
 
@@ -122,7 +127,7 @@ export const DEMO_EVENTS: FamilyEvent[] = [
         notes: "她最喜欢的蛋糕是芒果千层",
     },
     {
-        id: 2003,
+        id: 2002,
         title: "全家聚餐",
         date: toDateStr(in15Days),
         type: "event",

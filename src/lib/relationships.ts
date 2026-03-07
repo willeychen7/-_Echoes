@@ -301,19 +301,35 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
     if (type === 'affinal') return `【姻】${hallSuffix}`;
 
     const tTag = (tNode.logicTag || tNode.logic_tag || "").toString().toUpperCase();
+    if (!tTag) {
+        // 🛡️ 暴力兜底：基于称谓文字判定
+        if (/堂|叔|伯|姑/.test(rel)) return `【宗亲】${hallSuffix}`;
+        if (/表|舅|姨/.test(rel)) return `【外戚】${hallSuffix}`;
+        if (/爷爷|奶奶|外公|外婆|爸爸|妈妈|哥哥|弟弟|姐姐|妹妹|儿子|女儿/.test(rel)) return "【至亲】";
+        return "【血亲】";
+    }
 
-    // 1. 🚀 核心判定：判定是否为“至亲”
-    const corePath = tTag.replace(/^\[[FM]\](!S)?-/, '').split('-O')[0].toLowerCase();
-    const directPaths = ['f', 'm', 'sib', 's', 'd', 'f,f', 'f,m', 'm,f', 'm,m'];
-    const isDirect = directPaths.includes(corePath) || corePath === 'self' || rel === '父亲' || rel === '母亲' || /^(爷爷|奶奶|外公|外婆|爸爸|妈妈|哥哥|弟弟|姐姐|妹妹|儿子|女儿)$/.test(rel);
+    // 1. 🚀 核心判定：判定是否为“至亲” (Immediate family)
+    // 条件：直系路径 + 不能有排行（除非是亲兄弟姐妹 sib）
+    const tagParts = tTag.replace(/^\[[FM]\](!S)?-/, '').split(/-O/i);
+    const corePath = tagParts[0].toLowerCase();
+    const hasRank = tagParts.length > 1;
 
-    if (isDirect) return "【至亲】";
+    const directPaths = ['f', 'm', 's', 'd', 'f,f', 'f,m', 'm,f', 'm,m'];
+    const isDirectAncestorsOrKids = directPaths.includes(corePath);
+    const isSib = corePath === 'sib';
+    const isSelf = corePath === 'self';
 
-    // 2. ⚡️ 第一优先级：基于 Logic Tag 判定
+    // 如果是直系长辈/儿女，必须没有排行才是至亲（有排行就是叔伯舅姨了）
+    if (isSelf || isSib || (isDirectAncestorsOrKids && !hasRank) || /^(爷爷|奶奶|外公|外婆|爸爸|妈妈|哥哥|弟弟|姐姐|妹妹|儿子|女儿)$/.test(rel)) {
+        return "【至亲】";
+    }
+
+    // 2. ⚡️ 分类判定
     if (tTag.startsWith('[F]')) return `【宗亲】${hallSuffix}`;
     if (tTag.startsWith('[M]')) return `【外戚】${hallSuffix}`;
 
-    // 3. 🛡️ 第二优先级：基于称谓文字兜底 (增强稳健性)
+    // 3. 🛡️ 文字兜底
     if (/堂|叔|伯|姑/.test(rel)) return `【宗亲】${hallSuffix}`;
     if (/表|舅|姨/.test(rel)) return `【外戚】${hallSuffix}`;
 
