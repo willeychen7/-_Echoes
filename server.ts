@@ -715,8 +715,8 @@ export async function createApp() {
     app.post("/api/register-claim", async (req, res) => {
       try {
         const { inviteCode, name, avatarUrl, relationshipToInviter, standardRole, phone, password } = req.body;
-        console.log("[CLAIM] Request:", { inviteCode, name, phone, standardRole, hasAvatar: !!avatarUrl });
         if (!inviteCode || !name || !phone || !password) {
+          console.error("[CLAIM:ERROR] Missing fields:", { inviteCode: !!inviteCode, name: !!name, phone: !!phone, password: !!password });
           return res.status(400).json({ error: "Required fields missing" });
         }
 
@@ -927,14 +927,18 @@ export async function createApp() {
 
     // 预检：先查询用户当前家族情况，为迁移对话框提供数据
     app.get("/api/check-migration", async (req, res) => {
-      const phone = req.query.phone as string;
+      // NOTE: 优先使用 userId（UUID）进行身份识别，比手机号更安全，避免 phone 字段丢失
+      const userId = req.query.userId as string;
+      const phone = req.query.phone as string; // 向下兼容旧调用
       const targetFamilyId = parseInt(req.query.targetFamilyId as string);
-      if (!phone || !targetFamilyId) return res.status(400).json({ error: "Missing params" });
+      if ((!userId && !phone) || !targetFamilyId) return res.status(400).json({ error: "Missing params" });
 
       try {
-        const { data: currentUser } = await supabase.from("users")
-          .select("id, name, family_id, member_id")
-          .eq("phone_or_email", phone).maybeSingle();
+        // 优先用 UUID 查询，降级到 phone
+        const query = userId
+          ? supabase.from("users").select("id, name, family_id, member_id").eq("id", userId).maybeSingle()
+          : supabase.from("users").select("id, name, family_id, member_id").eq("phone_or_email", phone).maybeSingle();
+        const { data: currentUser } = await query;
 
         if (!currentUser || !currentUser.family_id) {
           return res.json({ needsMigration: false });
@@ -977,10 +981,14 @@ export async function createApp() {
 
     app.post("/api/accept-invite", async (req, res) => {
       try {
-        const { phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl, mode } = req.body;
+        // NOTE: 优先使用 userId（UUID）识别用户，不再依赖容易丢失的 phone 字段
+        const { userId, phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl, mode } = req.body;
         // mode: "migrate" 迁移内容 | "clear" 清空内容 | "direct" 默认直接加入
         let effectiveMode: string = mode || "direct";
-        if (!phone || !inviteCode) return res.status(400).json({ error: "Required fields missing" });
+        if ((!userId && !phone) || !inviteCode) {
+          console.error("[ACCEPT:ERROR] Missing fields:", { userId: !!userId, phone: !!phone, inviteCode: !!inviteCode });
+          return res.status(400).json({ error: "Required fields missing" });
+        }
 
         let targetId: number | null = null;
         let inviterId: number | null = null;
@@ -1131,9 +1139,13 @@ export async function createApp() {
         };
 
         // 1.5 IDENTITY GUARD & DATA MIGRATION
-        const { data: currentUser, error: userErr } = await supabase.from("users").select("id, name, avatar_url, family_id, member_id").eq("phone_or_email", phone).maybeSingle();
+        // NOTE: 优先用 userId（UUID）查询，不再依赖 phone——UUID 是最稳定的用户唯一标识
+        const userQuery = userId
+          ? supabase.from("users").select("id, name, avatar_url, family_id, member_id").eq("id", userId).maybeSingle()
+          : supabase.from("users").select("id, name, avatar_url, family_id, member_id").eq("phone_or_email", phone).maybeSingle();
+        const { data: currentUser, error: userErr } = await userQuery;
         if (userErr) console.error("[ACCEPT-INVITE] fetch user error:", userErr);
-        if (!currentUser) throw new Error("用户未在系统注册");
+        if (!currentUser) throw new Error("用户未在系统注册（userId: " + userId + "，phone: " + phone + "）");
 
         // SECURITY: Check if the profile (target.id) is already "owned" by someone else
         if (target.user_id && target.user_id !== currentUser.id) {

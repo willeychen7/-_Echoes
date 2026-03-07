@@ -206,8 +206,8 @@ export const RegisterPage: React.FC = () => {
             avatarUrl: finalAvatar,
             relationshipToInviter: finalRole,
             standardRole: overrideStdRole || relInfo?.value || "other",
-            phone,
-            password,
+            phone: phone.trim(),
+            password: password.trim(),
             gender: gender // Pass gender to claim
           })
         });

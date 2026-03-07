@@ -69,6 +69,7 @@ export const ProfilePage: React.FC = () => {
       bio: parsed?.bio || parsed?.signature || "热爱生活，记录美好。",
       birthday: parsed?.birthday || parsed?.birthDate || "",
       gender: parsed?.gender || "男",
+      phone: parsed?.phone || "", // 核心修复：防止 phone 字段在后续同步中丢失
       stats: cachedStats,
       isRegistered: !!parsed?.isRegistered
     };
@@ -448,11 +449,17 @@ export const ProfilePage: React.FC = () => {
     if (!finalRole || !finalInviteData) return;
     try {
       const savedUserBefore = JSON.parse(localStorage.getItem("currentUser") || "{}");
-      const phone = savedUserBefore.phone;
+      // NOTE: 优先使用 UUID (id) 进行身份识别，这是最稳定的标识符
+      const userId = savedUserBefore.id || savedUserBefore.userId;
+      const phone = savedUserBefore.phone; // 备用降级
 
       // 如果没有指定 mode，先检查是否需要迁移
       if (!mode && finalInviteData.inviterFamilyId) {
-        const migRes = await fetch(`/api/check-migration?phone=${encodeURIComponent(phone)}&targetFamilyId=${finalInviteData.inviterFamilyId}`);
+        const migParams = new URLSearchParams({
+          targetFamilyId: String(finalInviteData.inviterFamilyId),
+          ...(userId ? { userId } : { phone: phone || '' })
+        });
+        const migRes = await fetch(`/api/check-migration?${migParams.toString()}`);
         if (migRes.ok) {
           const migData = await migRes.json();
           if (migData.needsMigration) {
@@ -468,7 +475,8 @@ export const ProfilePage: React.FC = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phone: phone,
+          userId: userId, // 优先 UUID
+          phone: phone,   // 向下兼容降级
           inviteCode: inviteCodeInput.trim(),
           relationshipToInviter: finalRole,
           standardRole: finalStdRole,
