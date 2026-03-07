@@ -92,9 +92,9 @@ export function validateKinshipLogic(
 /**
  * 反向称谓推导
  */
-export function getReverseKinship(relText: string, side: 'paternal' | 'maternal', connector: string, myGender: 'male' | 'female'): string {
+export function getReverseKinship(relText: string, side: 'paternal' | 'maternal', connector: string, myGender: any): string {
     const rel = relText || "";
-    const isMale = myGender === 'male';
+    const isMale = String(myGender).toLowerCase() === 'male' || String(myGender) === '男';
 
     if (rel.includes('叔') || rel.includes('伯')) {
         return isMale ? '侄子' : '侄女';

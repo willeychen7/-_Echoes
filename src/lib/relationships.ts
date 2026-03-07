@@ -422,9 +422,8 @@ function getRankPrefix(targetNode: any, members: any[]) {
         return index !== -1 ? ["", "大", "二", "三", "四", "五", "六"][index + 1] || "" : "";
     }
 
-    const sibs = members.filter(m => {
+    const sibs = members.filter((m: any) => {
         if (m.memberType === 'pet' || m.type === 'pet') return false;
-        // 关键：代数和房头必须同时匹配，且代数不能是 undefined
         return m.generationNum === targetGen &&
             m.ancestralHall === targetHall &&
             m.gender === targetNode.gender;
@@ -527,8 +526,11 @@ function computeRigorousRelationship(
         const eq = (a: any, b: any) => a && b && Number(a) === Number(b);
 
         // --- 闽系核心：昭穆（代数）判定逻辑 ---
-        if (vNode.generationNum !== undefined && tNode.generationNum !== undefined) {
-            const genDiff = vNode.generationNum - tNode.generationNum; // V相对于T的代差
+        const vGen = vNode.generationNum ?? vNode.generation_num ?? 0;
+        const tGen = tNode.generationNum ?? tNode.generation_num ?? 0;
+
+        if (true) {
+            const genDiff = vGen - tGen; // V相对于T的代差
 
             // 如果是同代 (0: 同辈)
             if (genDiff === 0 && !eq(vId, tId)) {
@@ -536,7 +538,7 @@ function computeRigorousRelationship(
                     (vNode.motherId && eq(vNode.motherId, tNode.motherId));
 
                 // 物理支脉判定：如果没有姓氏房头，但能溯源到共同爷爷，强行定性为“堂”
-                const getFId = (id: any) => members.find(m => eq(m.id, id))?.fatherId;
+                const getFId = (id: any) => ctx.membersMap.get(Number(id))?.fatherId;
                 const vGFId = getFId(vNode.fatherId);
                 const tGFId = getFId(tNode.fatherId);
                 const isPaternalCousin = vGFId && tGFId && eq(vGFId, tGFId);
