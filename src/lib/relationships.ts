@@ -649,6 +649,8 @@ function computeRigorousRelationship(
                     if (isBioChild && pathOnly === 's' && !rankStr) return isFem ? "女儿" : "儿子";
                     if (pathOnly === 's') return isFem ? `${prefix}侄女` : `${prefix}侄子`;
                     if (pathOnly === 's,m') return isFem ? `${prefix}外甥女` : `${prefix}外甥`;
+                    // 兜底旁系晚辈
+                    return isFem ? `${prefix}侄女` : `${prefix}侄子`;
                 }
                 // 深层代际支持
                 if (tagGenDiff === -3) {
@@ -662,10 +664,20 @@ function computeRigorousRelationship(
                     return isFem ? `${prefix}高祖母` : `${prefix}高祖父`;
                 }
                 if (tagGenDiff === 2) {
-                    if (hasValidManual && /孙|媳|婿|儿|侄|甥/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
+                    if (hasValidManual && /孙|侄|甥|媳|婿|儿/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                     const isBioGrand = (tNode.fatherId && (eq(getMB(tNode.fatherId)?.fatherId, vId) || eq(getMB(tNode.fatherId)?.motherId, vId))) ||
                         (tNode.motherId && (eq(getMB(tNode.motherId)?.fatherId, vId) || eq(getMB(tNode.motherId)?.motherId, vId)));
                     if (isBioGrand && !rankStr) return isFem ? "孙女" : "孙子";
+
+                    // 旁系孙辈识别 (叔公/舅公看向晚辈)
+                    const vPath = cleanVTag.toLowerCase();
+                    if (vPath.includes('f,f') || vPath.includes('f,m')) {
+                        return isFem ? `${prefix}侄孙女` : `${prefix}侄孙`;
+                    }
+                    if (vPath.includes('m,f') || vPath.includes('m,m')) {
+                        return isFem ? `${prefix}外侄孙女` : `${prefix}外侄孙`;
+                    }
+
                     if (pathOnly.includes('m')) return isFem ? `${prefix}外孙女` : `${prefix}外孙`;
                     return isFem ? `${prefix}孙女` : `${prefix}孙子`;
                 }
@@ -674,10 +686,14 @@ function computeRigorousRelationship(
             // B. Target 是本人 (SELF)，查询反向称谓
             if (rawTTag.includes('SELF') && !rawVTag.includes('SELF')) {
                 const vPath = cleanVTag.split('-O')[0].toLowerCase();
+                // 如果 Viewer 是长辈分支，反向称呼 Viewer 为晚辈
                 if (vPath === 'f' || vPath === 'm') return isFem ? "女儿" : "儿子";
                 if (vPath === 'f,f' || vPath === 'f,m') return isFem ? "孙女" : "孙子";
                 if (vPath === 'm,f' || vPath === 'm,m') return isFem ? "外孙女" : "外孙";
                 if (vPath === 'sib' || vPath === 'x' || vPath === 'x,m') return isFem ? "姐妹/妹妹" : "兄弟/弟弟";
+                // 叔公/伯公/舅公看向 SELF
+                if (vPath.includes('f,f') || vPath.includes('f,m')) return isFem ? "侄孙女" : "侄孙";
+                if (vPath.includes('m,f') || vPath.includes('m,m')) return isFem ? "外侄孙女" : "外侄孙";
             }
         }
 
@@ -749,7 +765,9 @@ function computeRigorousRelationship(
             return isFem ? `${prefix}侄女` : `${prefix}侄子`;
         }
         if (genDiff === 2) {
-            if (hasValidManual && /孙|媳|婿/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
+            if (hasValidManual && /孙|侄|甥|媳|婿/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
+            if (rawVTag.includes('F,F') || rawVTag.includes('F,M')) return isFem ? `${prefix}侄孙女` : `${prefix}侄孙`;
+            if (rawVTag.includes('M,F') || rawVTag.includes('M,M')) return isFem ? `${prefix}外侄孙女` : `${prefix}外侄孙`;
             return isFem ? `${prefix}孙女` : `${prefix}孙子`;
         }
 
