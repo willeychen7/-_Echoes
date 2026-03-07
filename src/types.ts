@@ -34,6 +34,10 @@ export interface FamilyMember {
   ancestralHall?: string; // 房头/房份 (例如：大房、二房)
   isAdopted?: boolean;    // 是否为继嗣/祧子
   memberType?: 'human' | 'pet'; // 成员类型：人类或宠物
+  logicTag?: string; // 逻辑坐标 (比如 "[F]-f,f-o大")
+  logic_tag?: string; // 数据库蛇形命名兼容
+  mapX?: number; // 家族树地图横坐标
+  mapY?: number; // 家族树地图纵坐标
 }
 
 export interface FamilyEvent {

@@ -746,6 +746,14 @@ export const ArchivePage: React.FC = () => {
                         <span className="opacity-50 text-[10px] ml-1">· {getKinshipLabel(currentUser, member, members)?.replace(/【|】/g, '')}</span>
                       )}
                     </span>
+                    {(member.logicTag || member.logic_tag) && (
+                      <button
+                        onClick={() => navigate('/square#archive-map')}
+                        className="text-[10px] font-mono font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-400 hover:bg-[#eab308]/10 hover:text-[#eab308] cursor-pointer transition-colors active:scale-95 flex items-center gap-1"
+                      >
+                        <span className="opacity-60 text-[8px]">🧭</span> {member.logicTag || member.logic_tag}
+                      </button>
+                    )}
 
                     {member.isRegistered ? (
                       <span className="px-3 py-1 bg-emerald-50 text-emerald-500 rounded-full text-[10px] font-black inline-flex items-center gap-1">
