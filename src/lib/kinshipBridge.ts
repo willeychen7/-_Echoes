@@ -42,15 +42,15 @@ const TAG_TO_MUMUY_MAP: Record<string, string> = {
  * @param path 原始路径
  * @param dSex 目标节点的性别 (0:女, 1:男)
  */
-function inversePath(path: string, dSex: 0 | 1): string {
+function inversePath(path: string, vSex: 0 | 1): string {
     if (!path) return '';
     const invMap: Record<string, string> = {
-        'f': dSex === 0 ? 'd' : 's',
-        'm': dSex === 0 ? 'd' : 's',
+        'f': vSex === 0 ? 'd' : 's',
+        'm': vSex === 0 ? 'd' : 's',
         's': 'f',
         'd': 'm',
-        'xb': 'xb',
-        'xs': 'xs',
+        'xb': vSex === 0 ? 'xs' : 'xb',
+        'xs': vSex === 0 ? 'xs' : 'xb',
         'h': 'w',
         'w': 'h'
     };

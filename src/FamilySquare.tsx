@@ -641,223 +641,155 @@ export const FamilySquare: React.FC = () => {
             ) : (
               <div className="space-y-10">
                 {(() => {
-                  // 🚀 核心修复：预先找到当前用户自己的完整档案节点作为参考系
+                  // 🚀 核心纠偏：优先从档案列表中通过 userId 找到当前用户自己的完整节点，确保获取其 logicTag 坐标
                   const meNode = members.find(m =>
-                    (m.id && currentUser?.memberId && String(m.id) === String(currentUser.memberId)) ||
-                    (m.userId && currentUser?.id && String(m.userId) === String(currentUser.id))
+                    (m.userId && currentUser?.id && String(m.userId) === String(currentUser.id)) ||
+                    (m.id && currentUser?.memberId && String(m.id) === String(currentUser.memberId))
                   ) || currentUser;
 
                   const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
                   const isRealMember = (m: any) => !(m.member_type === 'virtual' || m.memberType === 'virtual' || m.member_type === 'pet' || m.memberType === 'pet' || ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"].some(k => (m.name || "").includes(k)));
 
+                  // 定义内部统一渲染函数
+                  const renderMemberCard = (member: FamilyMember) => {
+                    const rel = getRigorousRelationship(meNode, member, members);
+                    const label = getKinshipLabel(meNode, member, members);
+                    const isMe = currentUser && (
+                      (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
+                      (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
+                    );
+
+                    return (
+                      <Card
+                        key={member.id}
+                        className="p-4 border-none shadow-xl shadow-slate-200/40 bg-white rounded-[2.5rem] cursor-pointer hover:shadow-2xl transition-all group overflow-hidden relative"
+                        onClick={() => navigate(`/archive/${member.id}`)}
+                      >
+                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><FolderOpen size={80} /></div>
+                        {label && (
+                          <div className={cn(
+                            "absolute top-4 left-4 text-[10px] font-black px-2 py-0.5 rounded-full border z-10",
+                            label.includes("外") || label.includes("母")
+                              ? "bg-purple-50 text-purple-400 border-purple-100"
+                              : label.includes("姻")
+                                ? "bg-amber-50 text-amber-600 border-amber-100"
+                                : "bg-slate-900/5 text-slate-400 border-slate-100"
+                          )}>
+                            {label}
+                          </div>
+                        )}
+                        <div className="relative z-10 flex flex-col items-center">
+                          <div className="size-24 rounded-full border-4 border-white shadow-lg overflow-hidden mb-4 group-hover:scale-105 transition-transform relative">
+                            <img
+                              src={isMe ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(member.avatarUrl)}
+                              alt={member.name}
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                            {isMe && (
+                              <div className="absolute bottom-0 right-0 bg-[#eab308] text-black text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-white shadow-sm z-20">
+                                我
+                              </div>
+                            )}
+                            {member.isRegistered && !isMe && (
+                              <div className="absolute bottom-0 right-0 bg-emerald-500 text-white p-1 rounded-full border-2 border-white shadow-sm">
+                                <CheckCircle size={14} fill="currentColor" className="text-white" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-center gap-1.5 mb-2 px-1 text-center">
+                            <h3 className="text-2xl font-black text-black leading-tight flex items-center justify-center gap-2">
+                              {isMe ? currentUser.name : member.name}
+                              {member.ancestralHall && (
+                                <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-bold">
+                                  {member.ancestralHall}
+                                </span>
+                              )}
+                            </h3>
+                          </div>
+                          <p className={cn(
+                            "text-base font-bold uppercase tracking-widest leading-none mt-1",
+                            (rel.includes("母") || (rel.includes("外") && !rel.includes("曾")) || rel.includes("姨") || rel.includes("舅"))
+                              ? "text-purple-600"
+                              : "text-slate-900"
+                          )}>
+                            {rel}
+                          </p>
+                        </div>
+                      </Card>
+                    );
+                  };
+
+                  const allReal = members.filter(isRealMember).filter(searchFilter);
+
                   return (
                     <>
-                      {/* 第一组：家族宗亲 (血缘) */}
+                      {/* 1. 本家至亲 */}
                       {(() => {
-                        const bloods = members.filter(isRealMember).filter(searchFilter).filter(member => {
-                          const rel = getRigorousRelationship(meNode, member, members);
-                          return getRelationType(rel) === 'blood';
-                        });
-
-                        if (bloods.length === 0) return null;
-
+                        const direct = allReal.filter(m => getKinshipLabel(meNode, m, members) === "【至亲】");
+                        if (direct.length === 0) return null;
                         return (
-                          <div className="space-y-4">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
-                              <div className="size-1.5 bg-[#eab308] rounded-full" /> 家族宗亲
+                          <div className="space-y-4 mb-8">
+                            <h3 className="text-sm font-black text-[#eab308] uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                              <div className="size-1.5 bg-[#eab308] rounded-full animate-pulse" /> 本家至亲
                             </h3>
-                            <div className="grid grid-cols-2 gap-4">
-                              {bloods.map(member => {
-                                const rel = getRigorousRelationship(meNode, member, members);
-                                const label = getKinshipLabel(meNode, member, members);
-                                const isMe = currentUser && (
-                                  (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
-                                  (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
-                                );
-                                return (
-                                  <Card
-                                    key={member.id}
-                                    className="p-4 border-none shadow-xl shadow-slate-200/40 bg-white rounded-[2.5rem] cursor-pointer hover:shadow-2xl transition-all group overflow-hidden relative"
-                                    onClick={() => navigate(`/archive/${member.id}`)}
-                                  >
-                                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><FolderOpen size={80} /></div>
-                                    {label && (
-                                      <div className={cn(
-                                        "absolute top-4 left-4 text-[10px] font-black px-2 py-0.5 rounded-full border z-10",
-                                        label.includes("母系") || label.includes("外")
-                                          ? "bg-purple-50 text-purple-400 border-purple-100"
-                                          : "bg-slate-900/5 text-slate-400 border-slate-100"
-                                      )}>
-                                        {label}
-                                      </div>
-                                    )}
-                                    <div className="relative z-10 flex flex-col items-center">
-                                      <div className="size-24 rounded-full border-4 border-white shadow-lg overflow-hidden mb-4 group-hover:scale-105 transition-transform relative">
-                                        <img
-                                          src={isMe ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(member.avatarUrl)}
-                                          alt={member.name}
-                                          className="w-full h-full object-cover"
-                                          referrerPolicy="no-referrer"
-                                        />
-                                        {isMe && (
-                                          <div className="absolute bottom-0 right-0 bg-[#eab308] text-black text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-white shadow-sm z-20">
-                                            我
-                                          </div>
-                                        )}
-                                        {member.isRegistered && !isMe && (
-                                          <div className="absolute bottom-0 right-0 bg-emerald-500 text-white p-1 rounded-full border-2 border-white shadow-sm">
-                                            <CheckCircle size={14} fill="currentColor" className="text-white" />
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div className="flex flex-col items-center gap-1.5 mb-2 px-1 text-center">
-                                        <h3 className="text-2xl font-black text-black leading-tight flex items-center justify-center gap-2">
-                                          {isMe ? currentUser.name : member.name}
-                                          {member.ancestralHall && (
-                                            <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-bold">
-                                              {member.ancestralHall}
-                                            </span>
-                                          )}
-                                        </h3>
-                                      </div>
-                                      <p className={cn(
-                                        "text-base font-bold uppercase tracking-widest leading-none mt-1",
-                                        (rel.includes("母") || (rel.includes("外") && !rel.includes("曾")) || rel.includes("姨") || rel.includes("舅"))
-                                          ? "text-purple-600"
-                                          : "text-slate-900"
-                                      )}>
-                                        {rel}
-                                      </p>
-                                    </div>
-                                  </Card>
-                                );
-                              })}
-                            </div>
+                            <div className="grid grid-cols-2 gap-4">{direct.map(renderMemberCard)}</div>
                           </div>
                         );
                       })()}
 
-                      {/* 第二组：家族姻亲 */}
+                      {/* 2. 家族宗亲 */}
                       {(() => {
-                        const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
-                        const isRealMember = (m: any) => !(m.member_type === 'virtual' || m.memberType === 'virtual' || m.member_type === 'pet' || m.memberType === 'pet' || ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"].some(k => (m.name || "").includes(k)));
-                        const affinals = members.filter(isRealMember).filter(searchFilter).filter(member => {
-                          const rel = getRigorousRelationship(meNode, member, members);
-                          return getRelationType(rel) === 'affinal';
-                        });
-
-                        if (affinals.length === 0) return null;
-
+                        const paternal = allReal.filter(m => getKinshipLabel(meNode, m, members)?.startsWith("【宗亲】"));
+                        if (paternal.length === 0) return null;
                         return (
-                          <div className="space-y-4">
+                          <div className="space-y-4 mb-8">
                             <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
-                              <div className="size-1.5 bg-[#8b5e34] rounded-full opacity-50" /> 家族姻亲
+                              <div className="size-1.5 bg-slate-300 rounded-full" /> 家族宗亲
                             </h3>
-                            <div className="grid grid-cols-2 gap-4">
-                              {affinals.map(member => {
-                                const rel = getRigorousRelationship(meNode, member, members);
-                                const label = getKinshipLabel(meNode, member, members);
-                                return (
-                                  <Card
-                                    key={member.id}
-                                    className="p-4 border-none shadow-md shadow-slate-100/50 bg-white rounded-[2.5rem] cursor-pointer hover:shadow-xl transition-all group overflow-hidden relative"
-                                    onClick={() => navigate(`/archive/${member.id}`)}
-                                  >
-                                    {label && (
-                                      <div className={cn(
-                                        "absolute top-4 left-4 text-[10px] font-black px-2 py-0.5 rounded-full border z-10",
-                                        label.includes("母系") || label.includes("外")
-                                          ? "bg-purple-50 text-purple-400 border-purple-100"
-                                          : "bg-[#8b5e34]/5 text-[#8b5e34]/60 border-[#8b5e34]/10"
-                                      )}>
-                                        {label}
-                                      </div>
-                                    )}
-                                    <div className="relative z-10 flex flex-col items-center">
-                                      <div className="size-22 rounded-full border-4 border-white shadow-sm overflow-hidden mb-4 group-hover:scale-105 transition-transform">
-                                        <img
-                                          src={getSafeAvatar(member.avatarUrl)}
-                                          alt={member.name}
-                                          className="w-full h-full object-cover"
-                                          referrerPolicy="no-referrer"
-                                        />
-                                        {member.isRegistered && (
-                                          <div className="absolute bottom-0 right-0 bg-emerald-500/80 text-white p-1 rounded-full border-2 border-white shadow-sm">
-                                            <CheckCircle size={12} fill="currentColor" className="text-white" />
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div className="flex flex-col items-center gap-1 px-1 text-center">
-                                        <h4 className="text-xl font-black text-[#8b5e34] flex items-center justify-center gap-2">
-                                          {member.name}
-                                          {member.ancestralHall && (
-                                            <span className="text-[10px] bg-[#8b5e34]/5 text-[#8b5e34]/60 px-1.5 py-0.5 rounded-md font-bold">
-                                              {member.ancestralHall}
-                                            </span>
-                                          )}
-                                        </h4>
-                                        <p className={cn(
-                                          "text-xs font-bold uppercase tracking-widest",
-                                          (rel.includes("母") || (rel.includes("外") && !rel.includes("曾")) || rel.includes("姨") || rel.includes("舅"))
-                                            ? "text-purple-500"
-                                            : "text-slate-900"
-                                        )}>
-                                          {rel}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </Card>
-                                );
-                              })}
-                            </div>
+                            <div className="grid grid-cols-2 gap-4">{paternal.map(renderMemberCard)}</div>
                           </div>
                         );
                       })()}
 
+                      {/* 3. 家族外戚 */}
                       {(() => {
-                        const socials = members.filter(isRealMember).filter(searchFilter).filter(member => {
-                          const rel = getRigorousRelationship(meNode, member, members);
-                          return getRelationType(rel) === 'social';
-                        });
-
-                        if (socials.length === 0) return null;
-
+                        const maternal = allReal.filter(m => getKinshipLabel(meNode, m, members)?.startsWith("【外戚】"));
+                        if (maternal.length === 0) return null;
                         return (
-                          <div className="space-y-4">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
-                              <div className="size-1.5 bg-slate-300 rounded-full" /> 社会关系 / 友好
+                          <div className="space-y-4 mb-8">
+                            <h3 className="text-sm font-black text-purple-400/60 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                              <div className="size-1.5 bg-purple-300 rounded-full" /> 家族外戚
                             </h3>
-                            <div className="grid grid-cols-2 gap-4">
-                              {socials.map(member => {
-                                const rel = getRigorousRelationship(meNode, member, members);
-                                return (
-                                  <Card
-                                    key={member.id}
-                                    className="p-4 border-none shadow-sm shadow-slate-50/50 bg-slate-50/30 rounded-[2.5rem] cursor-pointer hover:shadow-md transition-all group overflow-hidden relative opacity-80"
-                                    onClick={() => navigate(`/archive/${member.id}`)}
-                                  >
-                                    <div className="relative z-10 flex flex-col items-center">
-                                      <div className="size-18 rounded-full border-2 border-white shadow-sm overflow-hidden mb-3 group-hover:scale-105 transition-transform grayscale">
-                                        <img
-                                          src={getSafeAvatar(member.avatarUrl)}
-                                          alt={member.name}
-                                          className="w-full h-full object-cover"
-                                          referrerPolicy="no-referrer"
-                                        />
-                                      </div>
-                                      <div className="flex flex-col items-center gap-0.5 px-0.5 text-center">
-                                        <h4 className="text-lg font-bold text-slate-400">
-                                          {member.name}
-                                        </h4>
-                                        <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">
-                                          {rel}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </Card>
-                                );
-                              })}
-                            </div>
+                            <div className="grid grid-cols-2 gap-4">{maternal.map(renderMemberCard)}</div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* 4. 家族姻亲 */}
+                      {(() => {
+                        const affinal = allReal.filter(m => getKinshipLabel(meNode, m, members)?.startsWith("【姻】"));
+                        if (affinal.length === 0) return null;
+                        return (
+                          <div className="space-y-4 mb-8">
+                            <h3 className="text-sm font-black text-amber-700/40 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                              <div className="size-1.5 bg-amber-200 rounded-full" /> 家族姻亲
+                            </h3>
+                            <div className="grid grid-cols-2 gap-4">{affinal.map(renderMemberCard)}</div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* 5. 社会关系 */}
+                      {(() => {
+                        const social = allReal.filter(m => getRelationType(getRigorousRelationship(meNode, m, members)) === 'social');
+                        if (social.length === 0) return null;
+                        return (
+                          <div className="space-y-4 mb-8">
+                            <h3 className="text-sm font-black text-slate-300 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                              <div className="size-1.5 bg-slate-200 rounded-full" /> 社会关系
+                            </h3>
+                            <div className="grid grid-cols-2 gap-4">{social.map(renderMemberCard)}</div>
                           </div>
                         );
                       })()}
@@ -871,12 +803,10 @@ export const FamilySquare: React.FC = () => {
                 </Card>
               </div>
             )}
-
-
           </section>
         )}
       </main>
-      {/* Invitation Modal */}
+
       <AnimatePresence>
         {invitingMember && (
           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
@@ -886,11 +816,20 @@ export const FamilySquare: React.FC = () => {
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className="bg-white w-full max-w-sm rounded-[3rem] p-8 shadow-2xl relative overflow-hidden"
             >
-              <button onClick={() => setInvitingMember(null)} className="absolute top-6 right-6 p-2 bg-slate-50 rounded-full text-slate-400"><X size={20} /></button>
+              <button
+                onClick={() => setInvitingMember(null)}
+                className="absolute top-6 right-6 p-2 bg-slate-50 rounded-full text-slate-400"
+              >
+                <X size={20} />
+              </button>
 
               <div className="text-center space-y-6">
                 <div className="size-24 rounded-full border-4 border-[#eab308]/20 p-1 mx-auto">
-                  <img src={invitingMember.avatarUrl} className="w-full h-full rounded-full object-cover" alt="" />
+                  <img
+                    src={getSafeAvatar(invitingMember.avatarUrl)}
+                    className="w-full h-full rounded-full object-cover"
+                    alt=""
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -898,7 +837,6 @@ export const FamilySquare: React.FC = () => {
                   <p className="text-sm text-slate-500">让 {invitingMember.name} 扫码或输入邀请码开启数字化记忆档案。</p>
                 </div>
 
-                {/* QR Code Section */}
                 <div className="bg-white p-4 rounded-3xl shadow-md border border-slate-100 flex flex-col items-center gap-3">
                   <div className="size-40 bg-slate-50 rounded-2xl flex items-center justify-center p-2 border-2 border-dashed border-slate-200">
                     <img

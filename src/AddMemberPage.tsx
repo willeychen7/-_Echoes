@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Check, ChevronRight, X, Heart, Link, Users, Landmark, Home, UserCircle2, PawPrint, AlertCircle, ArrowLeft, UserPlus, Copy, Camera } from "lucide-react";
 import { Button } from "./components/Button";
 import { motion, AnimatePresence } from "motion/react";
-import { deduceRole, RELATIONSHIP_OPTIONS } from "./lib/relationships";
+import { deduceRole, RELATIONSHIP_OPTIONS, isFemale } from "./lib/relationships";
 import { ImageCropper } from "./components/ImageCropper";
 import { getRelativeTime, cn } from "./lib/utils";
 import { isDemoMode } from "./demo-data";
@@ -709,11 +709,19 @@ export const AddMemberPage: React.FC = () => {
               <div className="space-y-3">
                 <label className="text-xl font-black px-1 block">您如何称呼TA？</label>
                 <div className="grid grid-cols-3 gap-2">
-                  {(CONNECTOR_SUGGESTIONS[connectorNode as string] || ["其他"]).concat(CONNECTOR_SUGGESTIONS[connectorNode as string]?.includes("其他") ? [] : ["其他"]).map(rel => (
-                    <button key={rel} onClick={() => { setRelationship(rel); if (rel !== '其他') setCustomRelationship(""); }} className={`h-12 border-2 rounded-xl font-bold text-sm ${relationship === rel ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
-                      {rel}
-                    </button>
-                  ))}
+                  {(CONNECTOR_SUGGESTIONS[connectorNode as string] || ["其他"])
+                    .filter(rel => {
+                      if (rel === '其他') return true;
+                      const relIsFemale = isFemale({ relationship: rel });
+                      return gender === 'female' ? relIsFemale : !relIsFemale;
+                    })
+                    .concat(["其他"])
+                    .filter((rel, i, arr) => arr.indexOf(rel) === i) // 去重
+                    .map(rel => (
+                      <button key={rel} onClick={() => { setRelationship(rel); if (rel !== '其他') setCustomRelationship(""); }} className={`h-12 border-2 rounded-xl font-bold text-sm ${relationship === rel ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                        {rel}
+                      </button>
+                    ))}
                 </div>
               </div>
 

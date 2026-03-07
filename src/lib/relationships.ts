@@ -222,14 +222,15 @@ function injectRankingAndRemark(baseRel: string, tNode: any, vNode: any, members
 
 export function getRigorousRelationship(viewer: any, target: any, members: any[], depth = 0): string {
     const ctx = getKinshipContext(members);
-    let vId = viewer?.memberId ? Number(viewer.memberId) : (viewer?.id ? Number(viewer.id) : null);
-    const tId = target?.id ? Number(target.id) : null;
 
-    if (vId && !ctx.membersMap.has(vId)) {
-        const boundMember = Array.from(ctx.membersMap.values()).find(m => (m.userId && Number(m.userId) === vId) || (m.user_id && Number(m.user_id) === vId));
-        if (boundMember) vId = Number(boundMember.id);
-    }
-    if (tId === null || vId === null) return target?.relationship || "家人";
+    // 🚀 核心纠偏：优先从档案列表中通过 userId 匹配 Viewer，确保获取带有 logicTag 的完整节点
+    let vNodeFromList = members.find(m =>
+        (m.userId && viewer?.id && String(m.userId) === String(viewer.id)) ||
+        (m.id && viewer?.memberId && String(m.id) === String(viewer.memberId))
+    );
+
+    let vId = vNodeFromList?.id ? Number(vNodeFromList.id) : (viewer?.memberId ? Number(viewer.memberId) : (viewer?.id ? Number(viewer.id) : null));
+    const tId = target?.id ? Number(target.id) : null;
 
     const cacheKey = `${vId}_${tId}_${depth}`;
     if (ctx.memo.has(cacheKey)) return ctx.memo.get(cacheKey)!;
@@ -290,6 +291,8 @@ export function isBloodRelation(rel: string): boolean {
 
 export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string | null {
     if (!vNode || !tNode) return null;
+
+    // 🚀 核心：完全基于“视角关系”进行推演
     const rel = getRigorousRelationship(vNode, tNode, members) || "";
     const type = getRelationType(rel);
 
@@ -297,41 +300,24 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
     const hall = tNode.ancestralHall || tNode.ancestral_hall || "";
     const hallSuffix = hall ? ` · ${hall}` : "";
 
+    // 1. 公共非血缘分类
     if (type === 'social') return "【友】";
     if (type === 'affinal') return `【姻】${hallSuffix}`;
 
-    const tTag = (tNode.logicTag || tNode.logic_tag || "").toString().toUpperCase();
-    if (!tTag) {
-        // 🛡️ 暴力兜底：基于称谓文字判定
-        if (/堂|叔|伯|姑/.test(rel)) return `【宗亲】${hallSuffix}`;
-        if (/表|舅|姨/.test(rel)) return `【外戚】${hallSuffix}`;
-        if (/爷爷|奶奶|外公|外婆|爸爸|妈妈|哥哥|弟弟|姐姐|妹妹|儿子|女儿/.test(rel)) return "【至亲】";
-        return "【血亲】";
-    }
+    // 2. 核心判定：判定是否为“至亲” (相对视角下的核心直系)
+    // 无论从谁的视角看，只要对方是自己的 父母/子女/手足/祖辈，即为【至亲】
+    const isDirect = /^(本人|爷爷|奶奶|外公|外婆|爸爸|妈妈|哥哥|弟弟|姐姐|妹妹|儿子|女儿|父亲|母亲|祖父|祖母|外祖父|外祖母)$/.test(rel);
+    if (isDirect) return "【至亲】";
 
-    // 1. 🚀 核心判定：判定是否为“至亲” (Immediate family)
-    // 条件：直系路径 + 不能有排行（除非是亲兄弟姐妹 sib）
-    const tagParts = tTag.replace(/^\[[FM]\](!S)?-/, '').split(/-O/i);
-    const corePath = tagParts[0].toLowerCase();
-    const hasRank = tagParts.length > 1;
-
-    const directPaths = ['f', 'm', 's', 'd', 'f,f', 'f,m', 'm,f', 'm,m'];
-    const isDirectAncestorsOrKids = directPaths.includes(corePath);
-    const isSib = corePath === 'sib';
-    const isSelf = corePath === 'self';
-
-    // 如果是直系长辈/儿女，必须没有排行才是至亲（有排行就是叔伯舅姨了）
-    if (isSelf || isSib || (isDirectAncestorsOrKids && !hasRank) || /^(爷爷|奶奶|外公|外婆|爸爸|妈妈|哥哥|弟弟|姐姐|妹妹|儿子|女儿)$/.test(rel)) {
-        return "【至亲】";
-    }
-
-    // 2. ⚡️ 分类判定
-    if (tTag.startsWith('[F]')) return `【宗亲】${hallSuffix}`;
-    if (tTag.startsWith('[M]')) return `【外戚】${hallSuffix}`;
-
-    // 3. 🛡️ 文字兜底
+    // 3. 相对支脉判定：根据相对称谓中的关键字决定“宗”还是“外”
+    // 这种方式完美解决了用户提到的“随迁”场景：A看B是外戚，B看A也是外戚（因为跨了母系）
     if (/堂|叔|伯|姑/.test(rel)) return `【宗亲】${hallSuffix}`;
     if (/表|舅|姨/.test(rel)) return `【外戚】${hallSuffix}`;
+
+    // 4. 极端兜底：如果无法推算相对路径，尝试参考物理坐标（仅作参考）
+    const tTag = (tNode.logicTag || tNode.logic_tag || "").toString().toUpperCase();
+    if (tTag.startsWith('[F]')) return `【宗亲】${hallSuffix}`;
+    if (tTag.startsWith('[M]')) return `【外戚】${hallSuffix}`;
 
     return "【血亲】";
 }

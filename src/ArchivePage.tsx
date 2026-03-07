@@ -767,10 +767,10 @@ export const ArchivePage: React.FC = () => {
             )}
           </div>
           {(() => {
-            // 🚀 核心修复：找到当前用户自己的完整档案节点作为参考系
+            // 🚀 核心纠偏：优先从档案列表中通过 userId 找到当前用户自己的完整节点，确保获取其 logicTag 坐标
             const meNode = members.find(m =>
-              (m.id && currentUser?.memberId && String(m.id) === String(currentUser.memberId)) ||
-              (m.userId && currentUser?.id && String(m.userId) === String(currentUser.id))
+              (m.userId && currentUser?.id && String(m.userId) === String(currentUser.id)) ||
+              (m.id && currentUser?.memberId && String(m.id) === String(currentUser.memberId))
             ) || currentUser;
 
             const rel = getRigorousRelationship(meNode, member, members);
