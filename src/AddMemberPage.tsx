@@ -505,7 +505,8 @@ export const AddMemberPage: React.FC = () => {
           gender,
           memberType,
           fatherId: currentParentId,
-          ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null))
+          ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null)),
+          logicTag: logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '')
         })
       });
       const data = await response.json().catch(() => ({}));
@@ -527,7 +528,8 @@ export const AddMemberPage: React.FC = () => {
           gender,
           memberType,
           fatherId: currentParentId,
-          ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null))
+          ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null)),
+          logicTag: logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '')
         });
         localStorage.setItem("demoCustomMembers", JSON.stringify(customMembers));
       } else if (!data.id) {
@@ -621,18 +623,18 @@ export const AddMemberPage: React.FC = () => {
 
       <main className="flex-1 px-6 py-8 max-w-md mx-auto w-full space-y-10 relative">
         <div className="flex items-center justify-between mb-8">
-            {[1, 2, 3, 4].map(step => (
-                <div key={step} className={`flex-1 h-2 rounded-full mx-1 ${wizardStep >= step ? 'bg-[#eab308]' : 'bg-slate-200'}`} />
-            ))}
+          {[1, 2, 3, 4].map(step => (
+            <div key={step} className={`flex-1 h-2 rounded-full mx-1 ${wizardStep >= step ? 'bg-[#eab308]' : 'bg-slate-200'}`} />
+          ))}
         </div>
 
         {wizardStep === 1 && (
-          <motion.div initial={{opacity: 0, x: 20}} animate={{opacity: 1, x: 0}} className="space-y-8">
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
             <div className="text-center space-y-4">
               <h2 className="text-3xl font-bold">基础信息录入</h2>
               <p className="text-slate-500 italic text-lg">第1步：建立档案基础配置</p>
             </div>
-            
+
             <div className="space-y-6">
               <div className="space-y-3">
                 <label className="text-xl font-black px-1 block">成员姓名</label>
@@ -687,16 +689,16 @@ export const AddMemberPage: React.FC = () => {
                 </div>
               </div>
             </div>
-            
+
             <Button size="lg" className="w-full h-14 text-lg font-bold bg-[#eab308] text-black hover:bg-[#d9a306]" onClick={() => {
-                if(!name) { alert("请填写姓名"); return; }
-                setWizardStep(2);
+              if (!name) { alert("请填写姓名"); return; }
+              setWizardStep(2);
             }}>下一步：选择代际归属</Button>
           </motion.div>
         )}
 
         {wizardStep === 2 && (
-          <motion.div initial={{opacity: 0, x: 20}} animate={{opacity: 1, x: 0}} className="space-y-8">
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
             <div className="text-center space-y-4">
               <h2 className="text-3xl font-bold">代际与衔接点</h2>
               <p className="text-slate-500 italic text-lg">第2步：确定该亲属所属的家族分支</p>
@@ -732,19 +734,19 @@ export const AddMemberPage: React.FC = () => {
                 </div>
               )}
             </div>
-            
+
             <div className="flex gap-4">
               <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(1)}>上一步</Button>
               <Button className="flex-1 h-14 bg-[#eab308] text-black hover:bg-[#d9a306] font-bold" onClick={() => {
-                  if(!lineageSide || !connectorNode) { alert("请选择方位和分支"); return; }
-                  setWizardStep(3);
+                if (!lineageSide || !connectorNode) { alert("请选择方位和分支"); return; }
+                setWizardStep(3);
               }}>下一步：确认称谓明细</Button>
             </div>
           </motion.div>
         )}
 
         {wizardStep === 3 && (
-          <motion.div initial={{opacity: 0, x: 20}} animate={{opacity: 1, x: 0}} className="space-y-8">
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
             <div className="text-center space-y-4">
               <h2 className="text-3xl font-bold">称谓与逻辑守卫</h2>
               <p className="text-slate-500 italic text-lg">第3步：根据传统宗法智能实时校验</p>
@@ -754,39 +756,39 @@ export const AddMemberPage: React.FC = () => {
               <div className="space-y-3">
                 <label className="text-xl font-black px-1 block">您如何称呼TA？</label>
                 <div className="grid grid-cols-3 gap-2">
-                   {["叔叔", "伯伯", "姑姑", "舅舅", "阿姨", "堂哥", "堂弟", "表姐", "堂妹", "其他"].map(rel => (
-                     <button key={rel} onClick={() => { setRelationship(rel); if(rel !== '其他') setCustomRelationship(""); }} className={`h-12 border-2 rounded-xl font-bold text-sm ${relationship === rel ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
-                        {rel}
-                     </button>
-                   ))}
+                  {["叔叔", "伯伯", "姑姑", "舅舅", "阿姨", "堂哥", "堂弟", "表姐", "堂妹", "其他"].map(rel => (
+                    <button key={rel} onClick={() => { setRelationship(rel); if (rel !== '其他') setCustomRelationship(""); }} className={`h-12 border-2 rounded-xl font-bold text-sm ${relationship === rel ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                      {rel}
+                    </button>
+                  ))}
                 </div>
               </div>
 
               {relationship === '其他' && (
                 <div className="space-y-3">
-                    <input type="text" placeholder="请输入具体称谓 (如: 表姨, 堂叔)" className="w-full h-14 px-5 rounded-xl border-none shadow-inner bg-white font-bold text-lg" value={customRelationship} onChange={e => setCustomRelationship(e.target.value)} />
+                  <input type="text" placeholder="请输入具体称谓 (如: 表姨, 堂叔)" className="w-full h-14 px-5 rounded-xl border-none shadow-inner bg-white font-bold text-lg" value={customRelationship} onChange={e => setCustomRelationship(e.target.value)} />
                 </div>
               )}
 
               {/* 逻辑反馈区 / 实时校验看板 */}
               <AnimatePresence>
-              {correctionNotice && (
-                <motion.div initial={{opacity:0, scale:0.95}} animate={{opacity:1, scale:1}} exit={{opacity:0}} className={`p-4 rounded-2xl border-2 flex items-start gap-3 shadow-sm ${correctionType === 'error' ? 'bg-rose-50 border-rose-200' : correctionType === 'warning' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
-                  <AlertCircle className={`size-6 mt-0.5 flex-shrink-0 ${correctionType==='error'?'text-rose-500':correctionType==='warning'?'text-amber-500':'text-green-500'}`} />
-                  <p className={`text-sm font-bold leading-relaxed ${correctionType==='error'?'text-rose-700':correctionType==='warning'?'text-amber-700':'text-green-700'}`}>
-                    {correctionNotice}
-                  </p>
-                </motion.div>
-              )}
+                {correctionNotice && (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className={`p-4 rounded-2xl border-2 flex items-start gap-3 shadow-sm ${correctionType === 'error' ? 'bg-rose-50 border-rose-200' : correctionType === 'warning' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+                    <AlertCircle className={`size-6 mt-0.5 flex-shrink-0 ${correctionType === 'error' ? 'text-rose-500' : correctionType === 'warning' ? 'text-amber-500' : 'text-green-500'}`} />
+                    <p className={`text-sm font-bold leading-relaxed ${correctionType === 'error' ? 'text-rose-700' : correctionType === 'warning' ? 'text-amber-700' : 'text-green-700'}`}>
+                      {correctionNotice}
+                    </p>
+                  </motion.div>
+                )}
               </AnimatePresence>
 
               {connectorNode === 'grandfather' && (
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
-                   <p className="text-sm font-bold text-slate-600">由于选择了爷爷分支，系统启动姓氏智能辅助：</p>
-                   <div className="flex gap-4">
-                     <div className="flex-1"><label className="text-xs font-bold text-slate-400">您的姓氏</label><input type="text" value={mySurname} onChange={(e)=>setMySurname(e.target.value)} className="w-full h-10 px-3 rounded-lg border-none shadow-sm" /></div>
-                     <div className="flex-1"><label className="text-xs font-bold text-slate-400">家属姓氏</label><input type="text" value={targetSurname} onChange={(e)=>setTargetSurname(e.target.value)} className="w-full h-10 px-3 rounded-lg border-none shadow-sm" /></div>
-                   </div>
+                  <p className="text-sm font-bold text-slate-600">由于选择了爷爷分支，系统启动姓氏智能辅助：</p>
+                  <div className="flex gap-4">
+                    <div className="flex-1"><label className="text-xs font-bold text-slate-400">您的姓氏</label><input type="text" value={mySurname} onChange={(e) => setMySurname(e.target.value)} className="w-full h-10 px-3 rounded-lg border-none shadow-sm" /></div>
+                    <div className="flex-1"><label className="text-xs font-bold text-slate-400">家属姓氏</label><input type="text" value={targetSurname} onChange={(e) => setTargetSurname(e.target.value)} className="w-full h-10 px-3 rounded-lg border-none shadow-sm" /></div>
+                  </div>
                 </div>
               )}
 
@@ -795,43 +797,43 @@ export const AddMemberPage: React.FC = () => {
             <div className="flex gap-4">
               <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(2)}>上一步</Button>
               <Button disabled={correctionType === 'error'} className="flex-1 h-14 bg-[#eab308] text-black hover:bg-[#d9a306] font-bold disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => {
-                  const relText = relationship === '其他' ? customRelationship : relationship;
-                  if(!relText) { alert("请录入称谓"); return; }
-                  setWizardStep(4);
+                const relText = relationship === '其他' ? customRelationship : relationship;
+                if (!relText) { alert("请录入称谓"); return; }
+                setWizardStep(4);
               }}>下一步：确认房分排行</Button>
             </div>
           </motion.div>
         )}
 
         {wizardStep === 4 && (
-          <motion.div initial={{opacity: 0, x: 20}} animate={{opacity: 1, x: 0}} className="space-y-8">
-             <div className="text-center space-y-4">
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
+            <div className="text-center space-y-4">
               <h2 className="text-3xl font-bold">互称与核准提交</h2>
               <p className="text-slate-500 italic text-lg">第4步：明确排行及关系互认</p>
             </div>
 
             <div className="space-y-6">
-               <div className="space-y-3">
+              <div className="space-y-3">
                 <label className="text-xl font-black px-1 block">TA在自家兄弟姐妹中排行极老？</label>
                 <div className="grid grid-cols-5 gap-2">
-                    {['大', '二', '三', '四', '五', '小', '无'].map(rk => (
-                        <button key={rk} onClick={()=>setSelectedRank(rk)} className={`h-12 border-2 rounded-xl font-bold text-sm ${selectedRank === rk ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100'}`}>{rk}</button>
-                    ))}
+                  {['大', '二', '三', '四', '五', '小', '无'].map(rk => (
+                    <button key={rk} onClick={() => setSelectedRank(rk)} className={`h-12 border-2 rounded-xl font-bold text-sm ${selectedRank === rk ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100'}`}>{rk}</button>
+                  ))}
                 </div>
                 <p className="text-xs font-medium text-slate-400 px-1 mt-2">选填项，录入后系统会自动生成对应的‘房分’（Ancestral Hall）。</p>
-               </div>
+              </div>
 
-               <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl flex items-start gap-4">
-                  <Users className="size-8 text-indigo-400 flex-shrink-0" />
-                  <div>
-                    <h4 className="font-black text-indigo-800 text-sm tracking-widest mb-1">系统互称推演结果</h4>
-                    <p className="text-indigo-900 font-bold text-lg mb-2">录入成功后，TA 将称呼您为：<span className="text-[#eab308] text-2xl mx-1 bg-white px-3 py-0.5 rounded-lg shadow-sm border border-indigo-50">{getReverseKinship(relationship === '其他' ? customRelationship : relationship, lineageSide as 'paternal'|'maternal', connectorNode as string, gender)}</span></p>
-                    <p className="text-xs text-indigo-400/80 font-mono font-bold uppercase">Logic_Tag: {logicTag || getLogicTag(lineageSide as 'paternal'|'maternal', connectorNode as string, selectedRank || '')}</p>
-                  </div>
-               </div>
+              <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl flex items-start gap-4">
+                <Users className="size-8 text-indigo-400 flex-shrink-0" />
+                <div>
+                  <h4 className="font-black text-indigo-800 text-sm tracking-widest mb-1">系统互称推演结果</h4>
+                  <p className="text-indigo-900 font-bold text-lg mb-2">录入成功后，TA 将称呼您为：<span className="text-[#eab308] text-2xl mx-1 bg-white px-3 py-0.5 rounded-lg shadow-sm border border-indigo-50">{getReverseKinship(relationship === '其他' ? customRelationship : relationship, lineageSide as 'paternal' | 'maternal', connectorNode as string, gender)}</span></p>
+                  <p className="text-xs text-indigo-400/80 font-mono font-bold uppercase">Logic_Tag: {logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '')}</p>
+                </div>
+              </div>
             </div>
 
-             <div className="flex gap-4">
+            <div className="flex gap-4">
               <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(3)}>上一步</Button>
               <Button disabled={isSubmitting} className="flex-1 h-14 bg-black text-[#eab308] hover:bg-slate-800 font-bold" onClick={handleAdd}>建立专属档案</Button>
             </div>

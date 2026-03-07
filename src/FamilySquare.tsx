@@ -12,6 +12,7 @@ import { supabase } from "./lib/supabase";
 import { DEFAULT_AVATAR, getSafeAvatar } from "./constants";
 import { AudioBar, WallMessages, InlineBlessingPanel } from "./components/FamilyEvents";
 import { updateAvatarCache } from "./lib/useAvatarCache";
+import { createKinshipSearchFilter } from "./lib/kinshipEngine";
 
 const getZodiac = (year: number) => {
   const zodiacs = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"];
@@ -85,6 +86,7 @@ export const FamilySquare: React.FC = () => {
   const [activeActivityIndex, setActiveActivityIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<"events" | "archive">("events");
   const [eventRange, setEventRange] = useState<"week" | "month" | "year">("month");
+  const [archiveSearchQuery, setArchiveSearchQuery] = useState("");
   // NOTE: 记录当前展开祝福面板的事件 ID，null 表示全部收起
   const [openBlessingEventId, setOpenBlessingEventId] = useState<number | null>(null);
   const [invitingMember, setInvitingMember] = useState<FamilyMember | null>(null);
@@ -602,12 +604,25 @@ export const FamilySquare: React.FC = () => {
                   <Plus size={22} strokeWidth={4} /> 添加家人
                 </button>
               </div>
+              <div className="pb-4 pt-2">
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+                  <input
+                    type="text"
+                    placeholder="智能搜索名字或名分称谓 (如: 堂三叔、舅公)..."
+                    className="w-full h-12 pl-12 pr-4 bg-white border border-slate-100 rounded-2xl font-bold placeholder:text-slate-300 shadow-sm focus:ring-2 focus:ring-[#eab308]/20 outline-none"
+                    value={archiveSearchQuery}
+                    onChange={(e) => setArchiveSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="space-y-10">
               {/* 第一组：家族宗亲 (血缘) */}
               {(() => {
-                const bloods = members.filter(member => {
+                const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
+                const bloods = members.filter(searchFilter).filter(member => {
                   const rel = getRigorousRelationship(currentUser, member, members);
                   return getRelationType(rel) === 'blood';
                 });
@@ -692,7 +707,8 @@ export const FamilySquare: React.FC = () => {
 
               {/* 第二组：家族姻亲 */}
               {(() => {
-                const affinals = members.filter(member => {
+                const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
+                const affinals = members.filter(searchFilter).filter(member => {
                   const rel = getRigorousRelationship(currentUser, member, members);
                   return getRelationType(rel) === 'affinal';
                 });
@@ -767,7 +783,8 @@ export const FamilySquare: React.FC = () => {
 
               {/* 第三组：社会关系 */}
               {(() => {
-                const socials = members.filter(member => {
+                const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
+                const socials = members.filter(searchFilter).filter(member => {
                   const rel = getRigorousRelationship(currentUser, member, members);
                   return getRelationType(rel) === 'social';
                 });
