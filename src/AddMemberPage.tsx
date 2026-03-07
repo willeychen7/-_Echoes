@@ -686,14 +686,13 @@ export const AddMemberPage: React.FC = () => {
             <div className="flex gap-4">
               <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(1)}>上一步</Button>
               <Button className="flex-1 h-14 bg-[#eab308] text-black hover:bg-[#d9a306] font-bold" onClick={() => {
-                if (!lineageSide || !connectorNode) { alert("请选择方位和分支"); return; }
-                if (connectorNode === 'sibling') {
-                  setWizardStep(4);
-                } else {
+                if (lineageSide && connectorNode) {
                   setWizardStep(3);
+                } else {
+                  alert("请选择方位和分支");
                 }
               }}>
-                {connectorNode === 'sibling' ? '下一步：确认排行' : '下一步：确认称谓明细'}
+                下一步：确认称谓明细
               </Button>
             </div>
           </motion.div>

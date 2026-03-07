@@ -129,38 +129,36 @@ export function validateKinshipLogic(
     return { isValid: true, type: 'success', tag };
 }
 
+import { computeReverseViaMumuy } from './kinshipBridge';
+import { STANDARD_ROLE_LABELS, getCleanRelationship } from './relationships';
+
 /**
  * 反向关系推演：TA 怎么叫你
- *
- * NOTE: 已集成 mumuy/relationship.js 作为第一优先级引擎
- * mumuy 通过 { text: '我称TA为...', reverse: true, sex: viewerSex } 计算反向称谓
  */
 export function getReverseKinship(relText: string, side: 'paternal' | 'maternal', connector: string, myGender: any): string {
-    const rel = (relText || '').trim();
+    let rel = (relText || '').trim();
+
+    // 🚀 核心纠偏：处理内部标识符 (如 older_brother -> 哥哥)
+    if (rel.includes('_') || /^[a-z]+$/.test(rel)) {
+        const standardLabel = STANDARD_ROLE_LABELS[rel];
+        if (standardLabel) rel = standardLabel;
+    }
+
+    // 清理排行前缀 (如 大哥哥 -> 哥哥) 以提升 mumuy 匹配率
+    const coreRel = getCleanRelationship(rel);
+
     const isMale = String(myGender).toLowerCase() === 'male' || String(myGender) === '男';
-    const mySex: 0 | 1 = isMale ? 1 : 0;
+    const mySexStr: 'male' | 'female' = isMale ? 'male' : 'female';
 
     // =====================================================================
     // --- 🌟 mumuy 引擎优先区 ---
-    // 直接将“我称 TA 为 xxx”输入 mumuy，开启 reverse:true 得到“TA 称我为 xxx”
     // =====================================================================
-    if (rel && !['其他', '宠物', '家人', '本人', ''].includes(rel)) {
+    if (coreRel && !['其他', '宠物', '家人', '本人', ''].includes(coreRel)) {
         try {
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const lib = typeof require !== 'undefined' ? require('relationship.js') : null;
-            if (lib) {
-                const result = lib({
-                    text: rel,
-                    sex: mySex,      // 我的性别
-                    reverse: true,   // TA 叫我什么
-                    optimal: true,   // 最短关系模式，减少辈分紊乱
-                });
-                if (Array.isArray(result) && result.length > 0) {
-                    return result[0] as string;
-                }
-            }
+            const result = computeReverseViaMumuy(coreRel, mySexStr);
+            if (result) return result;
         } catch (_e) {
-            // mumuy 不可用，降级到内置规则
+            // 降级到内置规则
         }
     }
 
@@ -203,6 +201,11 @@ export function getReverseKinship(relText: string, side: 'paternal' | 'maternal'
     if (/儿子|女儿/.test(rel)) return isMale ? '父亲' : '母亲';
     if (/侄|甥/.test(rel)) return isMale ? '叔辈/舅辈' : '姑妈/姨妈';
     if (rel === '父亲' || rel === '母亲' || /爸|妈/.test(rel)) return isMale ? '儿子' : '女儿';
+
+    // 6. 极致兜底：根据 connector 猜测
+    if (connector === 'sibling') return isMale ? '兄弟/姐弟' : '姐妹/兄妹';
+    if (connector === 'child_p' || connector === 'child_m') return isMale ? '父/母辈' : '父/母辈';
+    if (connector === 'self_p' || connector === 'self_m') return '同辈亲戚';
 
     return '亲属';
 }
