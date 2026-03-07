@@ -549,9 +549,12 @@ function computeRigorousRelationship(
         const eq = (a: any, b: any) => a && b && Number(a) === Number(b);
 
         // --- 闽系核心：昭穆（代数）判定逻辑 ---
-        const vGen = vNode.generationNum ?? vNode.generation_num ?? 30;
-        const tGen = tNode.generationNum ?? tNode.generation_num ?? 30;
-        const rawTag = tNode.logicTag || tNode.logic_tag || "";
+        const vNodeMap = ctx.membersMap.get(vId) || vNode; // 优先使用 Map 中的完整节点，兜底使用传入节点
+        const tNodeMap = ctx.membersMap.get(tId) || tNode;
+
+        const vGen = vNodeMap.generationNum ?? vNodeMap.generation_num ?? 30;
+        const tGen = tNodeMap.generationNum ?? tNodeMap.generation_num ?? 30;
+        const rawTag = tNodeMap.logicTag || tNodeMap.logic_tag || target.logicTag || target.logic_tag || "";
         const tTag = rawTag.toString().toUpperCase();
 
         if (true) {
@@ -559,7 +562,7 @@ function computeRigorousRelationship(
 
             // 🚀 核心重构：Tag-First 代际纠偏
             if (tTag) {
-                if (tTag.includes('-SIB') || tTag.includes('-X') || tTag.includes('SELF')) genDiff = 0;
+                if (tTag.includes('-SIB') || tTag.includes('SIB') || tTag.includes('-X') || tTag.includes('SELF')) genDiff = 0;
                 else if (tTag.includes('-F') || tTag.includes('-M')) genDiff = 1;
                 else if (tTag.includes('F,F') || tTag.includes('M,M') || tTag.includes('M,F') || tTag.includes('F,M')) genDiff = 2;
                 else if (tTag.includes('-S') || tTag.includes('CHILD')) genDiff = -1;
@@ -569,19 +572,20 @@ function computeRigorousRelationship(
             if (genDiff === 0 && !eq(vId, tId)) {
 
                 // 🚀 核心重构：Tag-First 逻辑 (名分高于算法)
-                // 1. 亲兄弟判定：如果 tag 包含 -SIB，或者父/母 ID 匹配
-                const isTagSibling = tTag.includes("-SIB") || tTag.includes("SIB");
-                const isRealSibling = isTagSibling || (vNode.fatherId && eq(vNode.fatherId, tNode.fatherId)) ||
-                    (vNode.motherId && eq(vNode.motherId, tNode.motherId));
+                // 1. 亲兄弟判定：如果 tag 包含 -SIB，或者父/母 ID 匹配，或者原始备注就是亲手足
+                const rawRel = (tNodeMap.relationship || target.relationship || "").trim();
+                const isTagSibling = tTag.includes("-SIB") || tTag.includes("SIB") || (rawRel === "哥哥" || rawRel === "弟弟" || rawRel === "姐姐" || rawRel === "妹妹");
+                const isRealSibling = isTagSibling || (vNodeMap.fatherId && eq(vNodeMap.fatherId, tNodeMap.fatherId)) ||
+                    (vNodeMap.motherId && eq(vNodeMap.motherId, tNodeMap.motherId));
 
                 // 2. 宗亲判定：如果 tag 包含 [F]，或者 isClan 返回 true
                 const getFId = (id: any) => ctx.membersMap.get(Number(id))?.fatherId;
-                const vGFId = getFId(vNode.fatherId);
-                const tGFId = getFId(tNode.fatherId);
+                const vGFId = getFId(vNodeMap.fatherId);
+                const tGFId = getFId(tNodeMap.fatherId);
                 const isPaternalCousin = vGFId && tGFId && eq(vGFId, tGFId);
 
                 const isTagClan = tTag.startsWith("[F]") && !tTag.includes("F,M"); // [F] 开头且不是奶奶分支
-                const isClanResult = tTag.includes('[M]') ? false : isClan(vNode, tNode);
+                const isClanResult = tTag.includes('[M]') ? false : isClan(vNodeMap, tNodeMap);
                 const clan = isTagClan || isClanResult || isPaternalCousin;
 
                 const prefix = getRankPrefix(tNode, members);
