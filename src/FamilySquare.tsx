@@ -12,7 +12,8 @@ import { supabase } from "./lib/supabase";
 import { DEFAULT_AVATAR, getSafeAvatar } from "./constants";
 import { AudioBar, WallMessages, InlineBlessingPanel } from "./components/FamilyEvents";
 import { updateAvatarCache } from "./lib/useAvatarCache";
-import { createKinshipSearchFilter } from "./lib/kinshipEngine";
+import { createKinshipSearchFilter, generateLayoutFromTags } from "./lib/kinshipEngine";
+import { FamilyMapView } from "./FamilyMapView";
 
 const getZodiac = (year: number) => {
   const zodiacs = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"];
@@ -85,6 +86,7 @@ export const FamilySquare: React.FC = () => {
   ]);
   const [activeActivityIndex, setActiveActivityIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<"events" | "archive">("events");
+  const [archiveView, setArchiveView] = useState<"list" | "map">("list");
   const [eventRange, setEventRange] = useState<"week" | "month" | "year">("month");
   const [archiveSearchQuery, setArchiveSearchQuery] = useState("");
   // NOTE: 记录当前展开祝福面板的事件 ID，null 表示全部收起
@@ -121,7 +123,8 @@ export const FamilySquare: React.FC = () => {
       const modeParsed = currentParsed || parsed;
       if (isDemoMode(modeParsed)) {
         const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
-        setMembers([...DEMO_MEMBERS, ...customMembers]);
+        const allDemoMembers = [...DEMO_MEMBERS, ...customMembers];
+        setMembers(generateLayoutFromTags(allDemoMembers));
         const customEvents = JSON.parse(localStorage.getItem("demoCustomEvents") || "[]");
         setEvents([...DEMO_EVENTS, ...customEvents]);
       } else if (modeParsed && modeParsed.familyId) {
@@ -135,10 +138,10 @@ export const FamilySquare: React.FC = () => {
               if (type === 'virtual') return false;
               // 增强过滤：拦截所有系统自动生成的“XX的XX”占位符档案
               const virtualKeywords = ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"];
-              if (virtualKeywords.some(k => name.includes(k))) return false;
               return true;
             });
-            setMembers(filteredMembers);
+            const uiMembers = generateLayoutFromTags(filteredMembers);
+            setMembers(uiMembers);
             data.forEach((m: any) => {
               if (m.id && (m.avatar_url || m.avatarUrl)) {
                 updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
@@ -598,10 +601,31 @@ export const FamilySquare: React.FC = () => {
             <div className="sticky top-[132px] z-30 bg-[#fdfbf7]/90 backdrop-blur-md -mx-6 px-6 mb-6 shadow-sm border-b border-slate-100 flex flex-col">
               <div className="py-2 flex items-center justify-between">
                 <h2 className="text-xl font-bold flex items-center gap-2">
-                  <FolderOpen className="text-[#eab308]" size={20} /> 家族亲人
+                  <FolderOpen className="text-[#eab308]" size={20} /> <span className="mr-2">家族亲人</span>
+
+                  <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner gap-1">
+                    <button
+                      onClick={() => setArchiveView("list")}
+                      className={cn(
+                        "p-1.5 rounded-lg transition-all",
+                        archiveView === "list" ? "bg-white text-[#eab308] shadow-sm transform scale-105" : "text-slate-400 hover:text-slate-600"
+                      )}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                    </button>
+                    <button
+                      onClick={() => setArchiveView("map")}
+                      className={cn(
+                        "p-1.5 rounded-lg transition-all",
+                        archiveView === "map" ? "bg-white text-[#eab308] shadow-sm transform scale-105" : "text-slate-400 hover:text-slate-600"
+                      )}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>
+                    </button>
+                  </div>
                 </h2>
-                <button onClick={() => navigate("/add-member")} className="bg-[#eab308] text-white px-6 py-2 rounded-full text-lg font-black shadow-lg shadow-[#eab308]/20 flex items-center gap-2 transition-transform active:scale-95">
-                  <Plus size={22} strokeWidth={4} /> 添加家人
+                <button onClick={() => navigate("/add-member")} className="bg-[#eab308] text-white px-4 md:px-6 py-2 rounded-full text-base md:text-lg font-black shadow-lg shadow-[#eab308]/20 flex items-center gap-1.5 transition-transform active:scale-95">
+                  <Plus size={20} strokeWidth={4} /> 添加
                 </button>
               </div>
               <div className="pb-4 pt-2">
@@ -618,224 +642,230 @@ export const FamilySquare: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-10">
-              {/* 第一组：家族宗亲 (血缘) */}
-              {(() => {
-                const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
-                const bloods = members.filter(searchFilter).filter(member => {
-                  const rel = getRigorousRelationship(currentUser, member, members);
-                  return getRelationType(rel) === 'blood';
-                });
+            {archiveView === "map" ? (
+              <div className="w-full animate-in fade-in slide-in-from-bottom-2 duration-500 pb-10">
+                <FamilyMapView members={members.filter(createKinshipSearchFilter(archiveSearchQuery))} />
+              </div>
+            ) : (
+              <div className="space-y-10">
+                {/* 第一组：家族宗亲 (血缘) */}
+                {(() => {
+                  const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
+                  const bloods = members.filter(searchFilter).filter(member => {
+                    const rel = getRigorousRelationship(currentUser, member, members);
+                    return getRelationType(rel) === 'blood';
+                  });
 
-                if (bloods.length === 0) return null;
+                  if (bloods.length === 0) return null;
 
-                return (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
-                      <div className="size-1.5 bg-[#eab308] rounded-full" /> 家族宗亲
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      {bloods.map(member => {
-                        const rel = getRigorousRelationship(currentUser, member, members);
-                        const label = getKinshipLabel(currentUser, member, members);
-                        const isMe = currentUser && (
-                          (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
-                          (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
-                        );
-                        return (
-                          <Card
-                            key={member.id}
-                            className="p-4 border-none shadow-xl shadow-slate-200/40 bg-white rounded-[2.5rem] cursor-pointer hover:shadow-2xl transition-all group overflow-hidden relative"
-                            onClick={() => navigate(`/archive/${member.id}`)}
-                          >
-                            <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><FolderOpen size={80} /></div>
-                            {label && (
-                              <div className={cn(
-                                "absolute top-4 left-4 text-[10px] font-black px-2 py-0.5 rounded-full border z-10",
-                                label.includes("母系") || label.includes("外")
-                                  ? "bg-purple-50 text-purple-400 border-purple-100"
-                                  : "bg-slate-900/5 text-slate-400 border-slate-100"
-                              )}>
-                                {label}
-                              </div>
-                            )}
-                            <div className="relative z-10 flex flex-col items-center">
-                              <div className="size-24 rounded-full border-4 border-white shadow-lg overflow-hidden mb-4 group-hover:scale-105 transition-transform relative">
-                                <img
-                                  src={isMe ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(member.avatarUrl)}
-                                  alt={member.name}
-                                  className="w-full h-full object-cover"
-                                  referrerPolicy="no-referrer"
-                                />
-                                {isMe && (
-                                  <div className="absolute bottom-0 right-0 bg-[#eab308] text-black text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-white shadow-sm z-20">
-                                    我
-                                  </div>
-                                )}
-                                {member.isRegistered && !isMe && (
-                                  <div className="absolute bottom-0 right-0 bg-emerald-500 text-white p-1 rounded-full border-2 border-white shadow-sm">
-                                    <CheckCircle size={14} fill="currentColor" className="text-white" />
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex flex-col items-center gap-1.5 mb-2 px-1 text-center">
-                                <h3 className="text-2xl font-black text-black leading-tight flex items-center justify-center gap-2">
-                                  {isMe ? currentUser.name : member.name}
-                                  {member.ancestralHall && (
-                                    <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-bold">
-                                      {member.ancestralHall}
-                                    </span>
+                  return (
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                        <div className="size-1.5 bg-[#eab308] rounded-full" /> 家族宗亲
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        {bloods.map(member => {
+                          const rel = getRigorousRelationship(currentUser, member, members);
+                          const label = getKinshipLabel(currentUser, member, members);
+                          const isMe = currentUser && (
+                            (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
+                            (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
+                          );
+                          return (
+                            <Card
+                              key={member.id}
+                              className="p-4 border-none shadow-xl shadow-slate-200/40 bg-white rounded-[2.5rem] cursor-pointer hover:shadow-2xl transition-all group overflow-hidden relative"
+                              onClick={() => navigate(`/archive/${member.id}`)}
+                            >
+                              <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><FolderOpen size={80} /></div>
+                              {label && (
+                                <div className={cn(
+                                  "absolute top-4 left-4 text-[10px] font-black px-2 py-0.5 rounded-full border z-10",
+                                  label.includes("母系") || label.includes("外")
+                                    ? "bg-purple-50 text-purple-400 border-purple-100"
+                                    : "bg-slate-900/5 text-slate-400 border-slate-100"
+                                )}>
+                                  {label}
+                                </div>
+                              )}
+                              <div className="relative z-10 flex flex-col items-center">
+                                <div className="size-24 rounded-full border-4 border-white shadow-lg overflow-hidden mb-4 group-hover:scale-105 transition-transform relative">
+                                  <img
+                                    src={isMe ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(member.avatarUrl)}
+                                    alt={member.name}
+                                    className="w-full h-full object-cover"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                  {isMe && (
+                                    <div className="absolute bottom-0 right-0 bg-[#eab308] text-black text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-white shadow-sm z-20">
+                                      我
+                                    </div>
                                   )}
-                                </h3>
-                              </div>
-                              <p className={cn(
-                                "text-base font-bold uppercase tracking-widest leading-none mt-1",
-                                (rel.includes("母") || (rel.includes("外") && !rel.includes("曾")) || rel.includes("姨") || rel.includes("舅"))
-                                  ? "text-purple-600"
-                                  : "text-slate-900"
-                              )}>
-                                {rel}
-                              </p>
-                            </div>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* 第二组：家族姻亲 */}
-              {(() => {
-                const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
-                const affinals = members.filter(searchFilter).filter(member => {
-                  const rel = getRigorousRelationship(currentUser, member, members);
-                  return getRelationType(rel) === 'affinal';
-                });
-
-                if (affinals.length === 0) return null;
-
-                return (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
-                      <div className="size-1.5 bg-[#8b5e34] rounded-full opacity-50" /> 家族姻亲
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      {affinals.map(member => {
-                        const rel = getRigorousRelationship(currentUser, member, members);
-                        const label = getKinshipLabel(currentUser, member, members);
-                        return (
-                          <Card
-                            key={member.id}
-                            className="p-4 border-none shadow-md shadow-slate-100/50 bg-white rounded-[2.5rem] cursor-pointer hover:shadow-xl transition-all group overflow-hidden relative"
-                            onClick={() => navigate(`/archive/${member.id}`)}
-                          >
-                            {label && (
-                              <div className={cn(
-                                "absolute top-4 left-4 text-[10px] font-black px-2 py-0.5 rounded-full border z-10",
-                                label.includes("母系") || label.includes("外")
-                                  ? "bg-purple-50 text-purple-400 border-purple-100"
-                                  : "bg-[#8b5e34]/5 text-[#8b5e34]/60 border-[#8b5e34]/10"
-                              )}>
-                                {label}
-                              </div>
-                            )}
-                            <div className="relative z-10 flex flex-col items-center">
-                              <div className="size-22 rounded-full border-4 border-white shadow-sm overflow-hidden mb-4 group-hover:scale-105 transition-transform">
-                                <img
-                                  src={getSafeAvatar(member.avatarUrl)}
-                                  alt={member.name}
-                                  className="w-full h-full object-cover"
-                                  referrerPolicy="no-referrer"
-                                />
-                                {member.isRegistered && (
-                                  <div className="absolute bottom-0 right-0 bg-emerald-500/80 text-white p-1 rounded-full border-2 border-white shadow-sm">
-                                    <CheckCircle size={12} fill="currentColor" className="text-white" />
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex flex-col items-center gap-1 px-1 text-center">
-                                <h4 className="text-xl font-black text-[#8b5e34] flex items-center justify-center gap-2">
-                                  {member.name}
-                                  {member.ancestralHall && (
-                                    <span className="text-[10px] bg-[#8b5e34]/5 text-[#8b5e34]/60 px-1.5 py-0.5 rounded-md font-bold">
-                                      {member.ancestralHall}
-                                    </span>
+                                  {member.isRegistered && !isMe && (
+                                    <div className="absolute bottom-0 right-0 bg-emerald-500 text-white p-1 rounded-full border-2 border-white shadow-sm">
+                                      <CheckCircle size={14} fill="currentColor" className="text-white" />
+                                    </div>
                                   )}
-                                </h4>
+                                </div>
+                                <div className="flex flex-col items-center gap-1.5 mb-2 px-1 text-center">
+                                  <h3 className="text-2xl font-black text-black leading-tight flex items-center justify-center gap-2">
+                                    {isMe ? currentUser.name : member.name}
+                                    {member.ancestralHall && (
+                                      <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-bold">
+                                        {member.ancestralHall}
+                                      </span>
+                                    )}
+                                  </h3>
+                                </div>
                                 <p className={cn(
-                                  "text-xs font-bold uppercase tracking-widest",
+                                  "text-base font-bold uppercase tracking-widest leading-none mt-1",
                                   (rel.includes("母") || (rel.includes("外") && !rel.includes("曾")) || rel.includes("姨") || rel.includes("舅"))
-                                    ? "text-purple-500"
+                                    ? "text-purple-600"
                                     : "text-slate-900"
                                 )}>
                                   {rel}
                                 </p>
                               </div>
-                            </div>
-                          </Card>
-                        );
-                      })}
+                            </Card>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
 
-              {/* 第三组：社会关系 */}
-              {(() => {
-                const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
-                const socials = members.filter(searchFilter).filter(member => {
-                  const rel = getRigorousRelationship(currentUser, member, members);
-                  return getRelationType(rel) === 'social';
-                });
+                {/* 第二组：家族姻亲 */}
+                {(() => {
+                  const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
+                  const affinals = members.filter(searchFilter).filter(member => {
+                    const rel = getRigorousRelationship(currentUser, member, members);
+                    return getRelationType(rel) === 'affinal';
+                  });
 
-                if (socials.length === 0) return null;
+                  if (affinals.length === 0) return null;
 
-                return (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
-                      <div className="size-1.5 bg-slate-300 rounded-full" /> 社会关系 / 友好
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      {socials.map(member => {
-                        const rel = getRigorousRelationship(currentUser, member, members);
-                        return (
-                          <Card
-                            key={member.id}
-                            className="p-4 border-none shadow-sm shadow-slate-50/50 bg-slate-50/30 rounded-[2.5rem] cursor-pointer hover:shadow-md transition-all group overflow-hidden relative opacity-80"
-                            onClick={() => navigate(`/archive/${member.id}`)}
-                          >
-                            <div className="relative z-10 flex flex-col items-center">
-                              <div className="size-18 rounded-full border-2 border-white shadow-sm overflow-hidden mb-3 group-hover:scale-105 transition-transform grayscale">
-                                <img
-                                  src={getSafeAvatar(member.avatarUrl)}
-                                  alt={member.name}
-                                  className="w-full h-full object-cover"
-                                  referrerPolicy="no-referrer"
-                                />
+                  return (
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                        <div className="size-1.5 bg-[#8b5e34] rounded-full opacity-50" /> 家族姻亲
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        {affinals.map(member => {
+                          const rel = getRigorousRelationship(currentUser, member, members);
+                          const label = getKinshipLabel(currentUser, member, members);
+                          return (
+                            <Card
+                              key={member.id}
+                              className="p-4 border-none shadow-md shadow-slate-100/50 bg-white rounded-[2.5rem] cursor-pointer hover:shadow-xl transition-all group overflow-hidden relative"
+                              onClick={() => navigate(`/archive/${member.id}`)}
+                            >
+                              {label && (
+                                <div className={cn(
+                                  "absolute top-4 left-4 text-[10px] font-black px-2 py-0.5 rounded-full border z-10",
+                                  label.includes("母系") || label.includes("外")
+                                    ? "bg-purple-50 text-purple-400 border-purple-100"
+                                    : "bg-[#8b5e34]/5 text-[#8b5e34]/60 border-[#8b5e34]/10"
+                                )}>
+                                  {label}
+                                </div>
+                              )}
+                              <div className="relative z-10 flex flex-col items-center">
+                                <div className="size-22 rounded-full border-4 border-white shadow-sm overflow-hidden mb-4 group-hover:scale-105 transition-transform">
+                                  <img
+                                    src={getSafeAvatar(member.avatarUrl)}
+                                    alt={member.name}
+                                    className="w-full h-full object-cover"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                  {member.isRegistered && (
+                                    <div className="absolute bottom-0 right-0 bg-emerald-500/80 text-white p-1 rounded-full border-2 border-white shadow-sm">
+                                      <CheckCircle size={12} fill="currentColor" className="text-white" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex flex-col items-center gap-1 px-1 text-center">
+                                  <h4 className="text-xl font-black text-[#8b5e34] flex items-center justify-center gap-2">
+                                    {member.name}
+                                    {member.ancestralHall && (
+                                      <span className="text-[10px] bg-[#8b5e34]/5 text-[#8b5e34]/60 px-1.5 py-0.5 rounded-md font-bold">
+                                        {member.ancestralHall}
+                                      </span>
+                                    )}
+                                  </h4>
+                                  <p className={cn(
+                                    "text-xs font-bold uppercase tracking-widest",
+                                    (rel.includes("母") || (rel.includes("外") && !rel.includes("曾")) || rel.includes("姨") || rel.includes("舅"))
+                                      ? "text-purple-500"
+                                      : "text-slate-900"
+                                  )}>
+                                    {rel}
+                                  </p>
+                                </div>
                               </div>
-                              <div className="flex flex-col items-center gap-0.5 px-0.5 text-center">
-                                <h4 className="text-lg font-bold text-slate-400">
-                                  {member.name}
-                                </h4>
-                                <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">
-                                  {rel}
-                                </p>
-                              </div>
-                            </div>
-                          </Card>
-                        );
-                      })}
+                            </Card>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
 
-              <Card className="p-6 border-4 border-dashed border-slate-100 bg-slate-50/30 rounded-[2.5rem] flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-white hover:border-[#eab308]/30 hover:shadow-xl transition-all group min-h-[100px]" onClick={() => navigate("/add-member")}>
-                <div className="size-10 rounded-full bg-white shadow-md flex items-center justify-center text-[#eab308] group-hover:scale-110 transition-transform"><Plus size={20} strokeWidth={4} /></div>
-                <span className="text-base font-black text-slate-300 group-hover:text-[#eab308] transition-colors">添加家人</span>
-              </Card>
-            </div>
+                {/* 第三组：社会关系 */}
+                {(() => {
+                  const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
+                  const socials = members.filter(searchFilter).filter(member => {
+                    const rel = getRigorousRelationship(currentUser, member, members);
+                    return getRelationType(rel) === 'social';
+                  });
+
+                  if (socials.length === 0) return null;
+
+                  return (
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                        <div className="size-1.5 bg-slate-300 rounded-full" /> 社会关系 / 友好
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        {socials.map(member => {
+                          const rel = getRigorousRelationship(currentUser, member, members);
+                          return (
+                            <Card
+                              key={member.id}
+                              className="p-4 border-none shadow-sm shadow-slate-50/50 bg-slate-50/30 rounded-[2.5rem] cursor-pointer hover:shadow-md transition-all group overflow-hidden relative opacity-80"
+                              onClick={() => navigate(`/archive/${member.id}`)}
+                            >
+                              <div className="relative z-10 flex flex-col items-center">
+                                <div className="size-18 rounded-full border-2 border-white shadow-sm overflow-hidden mb-3 group-hover:scale-105 transition-transform grayscale">
+                                  <img
+                                    src={getSafeAvatar(member.avatarUrl)}
+                                    alt={member.name}
+                                    className="w-full h-full object-cover"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                </div>
+                                <div className="flex flex-col items-center gap-0.5 px-0.5 text-center">
+                                  <h4 className="text-lg font-bold text-slate-400">
+                                    {member.name}
+                                  </h4>
+                                  <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">
+                                    {rel}
+                                  </p>
+                                </div>
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <Card className="p-6 border-4 border-dashed border-slate-100 bg-slate-50/30 rounded-[2.5rem] flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-white hover:border-[#eab308]/30 hover:shadow-xl transition-all group min-h-[100px]" onClick={() => navigate("/add-member")}>
+                  <div className="size-10 rounded-full bg-white shadow-md flex items-center justify-center text-[#eab308] group-hover:scale-110 transition-transform"><Plus size={20} strokeWidth={4} /></div>
+                  <span className="text-base font-black text-slate-300 group-hover:text-[#eab308] transition-colors">添加家人</span>
+                </Card>
+              </div>
+            )}
 
 
           </section>
