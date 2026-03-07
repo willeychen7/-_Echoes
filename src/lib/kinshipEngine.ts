@@ -1,5 +1,6 @@
 /**
- * 💡 家族逻辑大脑 V3.0 - 深度集成路人甲路径思想
+ * 💡 家族逻辑大脑 V4.0 - 集成 mumuy/relationship.js 权威称谓库
+ * GitHub: https://github.com/mumuy/relationship
  */
 
 // 基于衔接点的快捷建议表
@@ -130,41 +131,64 @@ export function validateKinshipLogic(
 
 /**
  * 反向关系推演：TA 怎么叫你
+ *
+ * NOTE: 已集成 mumuy/relationship.js 作为第一优先级引擎
+ * mumuy 通过 { text: '我称TA为...', reverse: true, sex: viewerSex } 计算反向称谓
  */
 export function getReverseKinship(relText: string, side: 'paternal' | 'maternal', connector: string, myGender: any): string {
-    const rel = relText || "";
+    const rel = (relText || '').trim();
     const isMale = String(myGender).toLowerCase() === 'male' || String(myGender) === '男';
+    const mySex: 0 | 1 = isMale ? 1 : 0;
 
+    // =====================================================================
+    // --- 🌟 mumuy 引擎优先区 ---
+    // 直接将“我称 TA 为 xxx”输入 mumuy，开启 reverse:true 得到“TA 称我为 xxx”
+    // =====================================================================
+    if (rel && !['其他', '宠物', '家人', '本人', ''].includes(rel)) {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const lib = typeof require !== 'undefined' ? require('relationship.js') : null;
+            if (lib) {
+                const result = lib({
+                    text: rel,
+                    sex: mySex,      // 我的性别
+                    reverse: true,   // TA 叫我什么
+                    optimal: true,   // 最短关系模式，减少辈分紊乱
+                });
+                if (Array.isArray(result) && result.length > 0) {
+                    return result[0] as string;
+                }
+            }
+        } catch (_e) {
+            // mumuy 不可用，降级到内置规则
+        }
+    }
+
+    // --- 降级底扁：内置规则 ---
     // 1. 祖辈分支 (含堂系祖辈及堂辈长辈)
     if (connector === 'grandfather' || connector === 'grandmother' || connector === 'm_grandfather' || connector === 'm_grandmother') {
-        // 🚀 核心优化：如果是亲爷爷/奶奶/外公/外婆本尊
         if (/^(爷爷|奶奶|外公|外婆|阿公|阿嬷|姥姥|姥爷)$/.test(rel)) {
             if (side === 'paternal') return isMale ? '孙子' : '孙女';
             return isMale ? '外孙' : '外孙女';
         }
-
         const isGrandParentLevel = /公|婆|爷|奶|老祖|太/.test(rel);
         if (isGrandParentLevel) {
-            // 旁系祖辈 (伯公/叔公/姑婆/等)
             if (side === 'paternal') return isMale ? '侄孙' : '侄孙女';
             return isMale ? '外孙' : '外孙女';
         }
-        // 堂系长辈 (如：从爷爷分支下来的堂叔、堂伯、堂姑)
         if (/叔|伯|姑/.test(rel)) return isMale ? '堂侄' : '堂侄女';
         if (/舅|姨/.test(rel)) return isMale ? '表外甥' : '表外甥女';
-
-        // 兜底：如果是祖辈分支下的其他，默认走侄孙
         if (side === 'paternal') return isMale ? '侄孙' : '侄孙女';
         return isMale ? '外孙' : '外孙女';
     }
 
-    // 2. 堂亲平辈分支 (同房堂兄弟等)
+    // 2. 堂亲平辈分支
     if ((connector === 'self_p' || connector === 'self_m') && /叔|伯|姑|舅|姨/.test(rel)) {
         if (side === 'paternal') return isMale ? '堂侄' : '堂侄女';
         return isMale ? '外甥' : '外甥女';
     }
 
-    // 3. 基本长辈 (亲叔伯姑舅姨)
+    // 3. 基本长辈
     if (/叔|伯/.test(rel)) return isMale ? '侄子' : '侄女';
     if (/舅/.test(rel)) return isMale ? '外甥' : '外甥女';
     if (/姨/.test(rel)) return isMale ? '姨甥' : '姨甥女';

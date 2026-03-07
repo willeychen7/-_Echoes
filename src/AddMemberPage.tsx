@@ -24,6 +24,7 @@ export const AddMemberPage: React.FC = () => {
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [newMemberId, setNewMemberId] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [meGender, setMeGender] = useState<'male' | 'female'>('male');
   const [members, setMembers] = useState<any[]>([]);
   const [parentId, setParentId] = useState<number | null>(null);
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4>(1); // 1-4步阶梯式引导
@@ -131,6 +132,9 @@ export const AddMemberPage: React.FC = () => {
       const tag = String(me.logicTag || me.logic_tag);
       const match = tag.match(/-o(大|二|三|四|五|六|七|八|九|十|小)/);
       if (match) setMyRank(match[1]);
+    }
+    if (me?.gender) {
+      setMeGender(me.gender === 'female' || me.gender === '女' ? 'female' : 'male');
     }
   }, [members, myRank]);
 
@@ -858,7 +862,7 @@ export const AddMemberPage: React.FC = () => {
                         lineageSide === 'maternal' ? "text-purple-600 border-purple-100" : "text-[#eab308] border-amber-100"
                       )}
                     >
-                      {getReverseKinship(relationship === '其他' ? customRelationship : relationship, lineageSide as 'paternal' | 'maternal', connectorNode as string, gender)}
+                      {getReverseKinship(relationship === '其他' ? customRelationship : relationship, lineageSide as 'paternal' | 'maternal', connectorNode as string, meGender)}
                     </motion.span>
                   </p>
                   <p className="text-xs text-indigo-400/80 font-mono font-bold uppercase border-t border-indigo-100/50 pt-2 mt-2 flex items-center gap-2">
