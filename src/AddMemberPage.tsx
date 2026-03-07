@@ -50,6 +50,7 @@ export const AddMemberPage: React.FC = () => {
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
   const [correctionNotice, setCorrectionNotice] = useState<string | null>(null);
   const [correctionType, setCorrectionType] = useState<'error' | 'warning' | 'success'>('error');
+  const [myRank, setMyRank] = useState<string | null>(null);
 
 
   // 全面涵盖：孙辈、旁系、长辈、以及平辈的潜在歧义词
@@ -118,6 +119,20 @@ export const AddMemberPage: React.FC = () => {
         .catch(console.error);
     }
   }, []);
+
+  React.useEffect(() => {
+    const savedUser = localStorage.getItem("currentUser");
+    const currentUser = savedUser ? JSON.parse(savedUser) : null;
+    const me = members.find(m =>
+      (m.id && currentUser?.memberId && String(m.id) === String(currentUser.memberId)) ||
+      (m.userId && currentUser?.id && String(m.userId) === String(currentUser.id))
+    );
+    if (me && (me.logicTag || me.logic_tag) && !myRank) {
+      const tag = String(me.logicTag || me.logic_tag);
+      const match = tag.match(/-o(大|一|二|三|四|五|六|七|八|九|十|小)/);
+      if (match) setMyRank(match[1]);
+    }
+  }, [members, myRank]);
 
   const candidateParents = React.useMemo(() => {
     const rel = relationship === "其他" ? customRelationship : relationship;
@@ -270,6 +285,17 @@ export const AddMemberPage: React.FC = () => {
     const currentUser = savedUser ? JSON.parse(savedUser) : null;
     const familyId = currentUser?.familyId || null;
     const createdByMemberId = currentUser?.memberId;
+
+    // 🚀 核心：排重检查
+    const relationshipToStoreRaw = (relationship === "其他" ? customRelationship : relationship) || "";
+    const isDuplicate = members.some(m =>
+      m.name === name.trim() &&
+      (m.relationship === relationshipToStoreRaw || (m.logic_tag || m.logicTag || "").includes(connectorNode || ""))
+    );
+    if (isDuplicate) {
+      alert("⚠️ 该人物关系或姓名在家族中已存在，请勿重复添加。");
+      return;
+    }
 
     // 💡 核心：全量名分修正引擎 (Logic-First Correction) V9.0 兼容版
     const baseRel = (relationship === "其他" ? customRelationship : relationship) || "";
@@ -732,11 +758,59 @@ export const AddMemberPage: React.FC = () => {
             </div>
 
             <div className="space-y-6">
+              {connectorNode === 'sibling' && (
+                <div className="space-y-3 animate-in fade-in zoom-in duration-300">
+                  <label className="text-xl font-black px-1 block text-[#eab308]">您自己在亲兄弟姐妹中排行？</label>
+                  <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
+                    {['大', '一', '二', '三', '四', '五', '小', '无'].map(rk => (
+                      <button
+                        key={rk}
+                        onClick={() => {
+                          setMyRank(rk);
+                          // 自动基于排行差异进行关系预判
+                          if (selectedRank && selectedRank !== '无' && rk !== '无') {
+                            const myN = ['大', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(rk);
+                            const taN = ['大', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(selectedRank);
+                            if (myN !== -1 && taN !== -1) {
+                              if (taN < myN) setRelationship(gender === 'female' ? "姐姐" : "哥哥");
+                              else if (taN > myN) setRelationship(gender === 'female' ? "妹妹" : "弟弟");
+                            }
+                          }
+                        }}
+                        className={`h-12 border-2 rounded-xl font-bold text-sm ${myRank === rk ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100 hover:border-slate-300'}`}
+                      >
+                        {rk}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] font-medium text-slate-400 px-1 mt-1">系统将根据您与TA的排行差异，自动为您锁定身份。</p>
+                </div>
+              )}
+
               <div className="space-y-3">
-                <label className="text-xl font-black px-1 block">TA在自家兄弟姐妹中排行极老？</label>
+                <label className="text-xl font-black px-1 block">
+                  {connectorNode === 'sibling' ? `那么，${name}本人排行第几？` : 'TA在自家兄弟姐妹中排行老几？'}
+                </label>
                 <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
                   {['大', '一', '二', '三', '四', '五', '小', '无'].map(rk => (
-                    <button key={rk} onClick={() => setSelectedRank(rk)} className={`h-12 border-2 rounded-xl font-bold text-sm ${selectedRank === rk ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100'}`}>{rk}</button>
+                    <button
+                      key={rk}
+                      onClick={() => {
+                        setSelectedRank(rk);
+                        // 亲手足自动判定逻辑
+                        if (connectorNode === 'sibling' && myRank && myRank !== '无' && rk !== '无') {
+                          const myN = ['大', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(myRank);
+                          const taN = ['大', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(rk);
+                          if (myN !== -1 && taN !== -1) {
+                            if (taN < myN) setRelationship(gender === 'female' ? "姐姐" : "哥哥");
+                            else if (taN > myN) setRelationship(gender === 'female' ? "妹妹" : "弟弟");
+                          }
+                        }
+                      }}
+                      className={`h-12 border-2 rounded-xl font-bold text-sm ${selectedRank === rk ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100 hover:border-slate-300'}`}
+                    >
+                      {rk}
+                    </button>
                   ))}
                 </div>
                 <p className="text-xs font-medium text-slate-400 px-1 mt-2">选填项，录入后系统会自动生成对应的‘房分’ (如：大房、二房)。注：“大”通常指嫡长，“一”指通用排行。</p>
