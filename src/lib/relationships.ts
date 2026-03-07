@@ -544,27 +544,40 @@ function computeRigorousRelationship(
         const eq = (a: any, b: any) => a && b && Number(a) === Number(b);
 
         // --- 闽系核心：昭穆（代数）判定逻辑 ---
-        const vGen = vNode.generationNum ?? vNode.generation_num ?? 0;
-        const tGen = tNode.generationNum ?? tNode.generation_num ?? 0;
+        const vGen = vNode.generationNum ?? vNode.generation_num ?? 30;
+        const tGen = tNode.generationNum ?? tNode.generation_num ?? 30;
+        const tTag = tNode.logicTag || tNode.logic_tag || "";
 
         if (true) {
-            const genDiff = vGen - tGen; // V相对于T的代差
+            let genDiff = vGen - tGen; // V相对于T的代差
+
+            // 🚀 核心重构：Tag-First 代际纠偏
+            if (tTag) {
+                if (tTag.includes('-sib') || tTag.includes('-x') || tTag.includes('self')) genDiff = 0;
+                else if (tTag.includes('-f') || tTag.includes('-m')) genDiff = 1;
+                else if (tTag.includes('f,f') || tTag.includes('m,m') || tTag.includes('m,f') || tTag.includes('f,m')) genDiff = 2;
+                else if (tTag.includes('-s') || tTag.includes('child')) genDiff = -1;
+            }
 
             // 如果是同代 (0: 同辈)
             if (genDiff === 0 && !eq(vId, tId)) {
-                const isRealSibling = (vNode.fatherId && eq(vNode.fatherId, tNode.fatherId)) ||
+
+                // 🚀 核心重构：Tag-First 逻辑 (名分高于算法)
+                // 1. 亲兄弟判定：如果 tag 包含 -sib，或者父/母 ID 匹配
+                const isTagSibling = tTag.includes("-sib");
+                const isRealSibling = isTagSibling || (vNode.fatherId && eq(vNode.fatherId, tNode.fatherId)) ||
                     (vNode.motherId && eq(vNode.motherId, tNode.motherId));
 
-                // 物理支脉判定：如果没有姓氏房头，但能溯源到共同爷爷，强行定性为“堂”
+                // 2. 宗亲判定：如果 tag 包含 [F]，或者 isClan 返回 true
                 const getFId = (id: any) => ctx.membersMap.get(Number(id))?.fatherId;
                 const vGFId = getFId(vNode.fatherId);
                 const tGFId = getFId(tNode.fatherId);
                 const isPaternalCousin = vGFId && tGFId && eq(vGFId, tGFId);
 
-                const tTag = tNode.logicTag || tNode.logic_tag || "";
-                // 只要标记了 [M]，强制判定为非宗亲，从而触发“舅/姨/表”系的称谓生成
+                const isTagClan = tTag.startsWith("[F]") && !tTag.includes("f,m"); // [F] 开头且不是奶奶分支
                 const isClanResult = tTag.includes('[M]') ? false : isClan(vNode, tNode);
-                const clan = isClanResult || isPaternalCousin;
+                const clan = isTagClan || isClanResult || isPaternalCousin;
+
                 const prefix = getRankPrefix(tNode, members);
 
                 if (isRealSibling) {
