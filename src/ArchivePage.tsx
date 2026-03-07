@@ -7,7 +7,7 @@ import { Button } from "./components/Button";
 import { Card } from "./components/Card";
 import { getRelativeTime, cn } from "./lib/utils";
 import { useAvatarCache, resolveAvatar, updateAvatarCache } from "./lib/useAvatarCache";
-import { getRelativeRelationship, getRigorousRelationship, getRelationType, getKinshipLabel } from "./lib/relationships";
+import { getRelativeRelationship, getRigorousRelationship, getRelationType, getKinshipLabel, getRelationshipChain } from "./lib/relationships";
 import confetti from "canvas-confetti";
 import { DEMO_MEMBERS, DEMO_EVENTS, isDemoMode } from "./demo-data";
 import { supabase } from "./lib/supabase";
@@ -807,40 +807,51 @@ export const ArchivePage: React.FC = () => {
                   )}
                 </h1>
                 {!isMeMember && (
-                  <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
-                    <span className={cn(
-                      "text-sm font-bold px-3 py-1 rounded-full border tracking-widest flex items-center gap-1.5 transition-colors",
-                      type === 'blood' ? "text-[#eab308] bg-[#eab308]/5 border-[#eab308]/10" :
-                        type === 'affinal' ? "text-[#8b5e34] bg-[#8b5e34]/5 border-[#8b5e34]/10" :
-                          "text-slate-300 bg-slate-50 border-slate-100"
-                    )}>
-                      <Sparkles size={12} fill="currentColor" /> {rel}
-                      {getKinshipLabel(meNode, member, members) && (
-                        <span className="opacity-50 text-[10px] ml-1">· {getKinshipLabel(meNode, member, members)?.replace(/【|】/g, '')}</span>
-                      )}
-                    </span>
-                    {(member.logicTag || member.logic_tag) && (
-                      <button
-                        onClick={() => navigate('/square#archive-map')}
-                        className="text-[10px] font-mono font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-400 hover:bg-[#eab308]/10 hover:text-[#eab308] cursor-pointer transition-colors active:scale-95 flex items-center gap-1"
-                      >
-                        <span className="opacity-60 text-[8px]">🧭</span> {member.logicTag || member.logic_tag}
-                      </button>
-                    )}
-
-                    {member.isRegistered ? (
-                      <span className="px-3 py-1 bg-emerald-50 text-emerald-500 rounded-full text-[10px] font-black inline-flex items-center gap-1">
-                        <CheckCircle size={12} fill="currentColor" /> 已注册
+                  <>
+                    <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
+                      <span className={cn(
+                        "text-sm font-bold px-3 py-1 rounded-full border tracking-widest flex items-center gap-1.5 transition-colors",
+                        type === 'blood' ? "text-[#eab308] bg-[#eab308]/5 border-[#eab308]/10" :
+                          type === 'affinal' ? "text-[#8b5e34] bg-[#8b5e34]/5 border-[#8b5e34]/10" :
+                            "text-slate-300 bg-slate-50 border-slate-100"
+                      )}>
+                        <Sparkles size={12} fill="currentColor" /> {rel}
+                        {getKinshipLabel(meNode, member, members) && (
+                          <span className="opacity-50 text-[10px] ml-1">· {getKinshipLabel(meNode, member, members)?.replace(/【|】/g, '')}</span>
+                        )}
                       </span>
-                    ) : (
-                      <button
-                        onClick={() => setShowShareModal(true)}
-                        className="px-3 py-1 bg-[#eab308] text-black rounded-full text-[10px] font-black inline-flex items-center gap-1.5 hover:bg-[#d9a306] transition-all shadow-sm active:scale-95"
-                      >
-                        邀请注册 <Share2 size={12} />
-                      </button>
-                    )}
-                  </div>
+                      {(member.logicTag || member.logic_tag) && (
+                        <button
+                          onClick={() => navigate('/square#archive-map')}
+                          className="text-[10px] font-mono font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-400 hover:bg-[#eab308]/10 hover:text-[#eab308] cursor-pointer transition-colors active:scale-95 flex items-center gap-1"
+                        >
+                          <span className="opacity-60 text-[8px]">🧭</span> {member.logicTag || member.logic_tag}
+                        </button>
+                      )}
+
+                      {member.isRegistered ? (
+                        <span className="px-3 py-1 bg-emerald-50 text-emerald-500 rounded-full text-[10px] font-black inline-flex items-center gap-1">
+                          <CheckCircle size={12} fill="currentColor" /> 已注册
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setShowShareModal(true)}
+                          className="px-3 py-1 bg-[#eab308] text-black rounded-full text-[10px] font-black inline-flex items-center gap-1.5 hover:bg-[#d9a306] transition-all shadow-sm active:scale-95"
+                        >
+                          邀请注册 <Share2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                    {/* 关系链路说明：仅间接关系时显示，帮助用户理解该成员与自己的关联路径 */}
+                    {(() => {
+                      const chain = getRelationshipChain(meNode, member, members);
+                      return chain ? (
+                        <p className="text-[11px] text-slate-400/70 italic mt-1.5 text-center tracking-wide">
+                          TA是{chain}
+                        </p>
+                      ) : null;
+                    })()}
+                  </>
                 )}
               </>
             );

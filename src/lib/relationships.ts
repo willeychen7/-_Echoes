@@ -350,3 +350,92 @@ export function getRelativeRelationship(
     };
     return relMap[viewerRole]?.[targetRole] || STANDARD_ROLE_LABELS[targetRole] || fallback;
 }
+
+/**
+ * 生成关系路径说明文字
+ * 
+ * 用于解释间接关系，例如：「（堂弟 陈小明 的阿姨）」
+ * 
+ * 核心思路：
+ * 1. 找出 viewer 和 target 之间所有可能的"中间人"节点
+ * 2. 找到最近的一位中间人，他/她同时与 viewer 和 target 有直接关系
+ * 3. 生成 "（[viewer称呼中间人的称谓] [中间人名字] 的 [目标对中间人的关系]）" 这样的文本
+ * 
+ * @param viewer 当前用户节点
+ * @param target 目标成员节点
+ * @param members 全部家族成员列表
+ * @returns 说明文字，如果是直接关系则返回 null
+ */
+export function getRelationshipChain(viewer: any, target: any, members: any[]): string | null {
+    if (!viewer || !target || !members || members.length === 0) return null;
+
+    const ctx = getKinshipContext(members);
+    const vId = viewer?.memberId ? Number(viewer.memberId) : (viewer?.id ? Number(viewer.id) : null);
+    const tId = target?.id ? Number(target.id) : null;
+
+    if (!vId || !tId || vId === tId) return null;
+
+    const vNode = ctx.membersMap.get(vId);
+    const tNode = ctx.membersMap.get(tId);
+    if (!vNode || !tNode) return null;
+
+    // NOTE: 直接关系不需要说明（父母、子女、配偶、手足）
+    const directRel = getRigorousRelationship(viewer, target, members);
+    const isDirect = /^(本人|爸爸|妈妈|父亲|母亲|哥哥|弟弟|姐姐|妹妹|儿子|女儿|爷爷|奶奶|外公|外婆|孙子|孙女|曾祖父|曾祖母|老公|老婆|丈夫|妻子)$/.test(directRel);
+    if (isDirect) return null;
+
+    // 找出 target 的"直接关联者"（目标的父母 + 其配偶等）
+    const targetRelatives: number[] = [];
+    if (tNode.fatherId) targetRelatives.push(Number(tNode.fatherId));
+    if (tNode.motherId) targetRelatives.push(Number(tNode.motherId));
+    if (tNode.spouseId || tNode.spouse_id) targetRelatives.push(Number(tNode.spouseId || tNode.spouse_id));
+
+    // 检查 viewer 是否与这些直接关联者有2跳以内的关系
+    for (const relativeId of targetRelatives) {
+        const relativeNode = ctx.membersMap.get(relativeId);
+        if (!relativeNode) continue;
+        if (relativeId === vId) continue; // viewer 就是这个亲属，不需要说明
+
+        // 看 viewer 如何称呼这个中间人
+        const viewerCallsRelative = getRigorousRelationship(viewer, relativeNode, members);
+        if (!viewerCallsRelative || viewerCallsRelative === '家人' || viewerCallsRelative === '亲戚') continue;
+
+        // 看这个中间人与 target 的关系
+        const relativeCallsTarget = getRigorousRelationship(relativeNode, target, members);
+        if (!relativeCallsTarget || relativeCallsTarget === '家人' || relativeCallsTarget === '亲戚') continue;
+
+        // NOTE: 避免同义反复，例如 target 本身就是直接关系时跳过
+        const isViewerDirect = /^(本人|爸爸|妈妈|父亲|母亲|哥哥|弟弟|姐姐|妹妹|儿子|女儿|爷爷|奶奶|外公|外婆)$/.test(viewerCallsRelative);
+        if (isViewerDirect) continue;
+
+        const mName = relativeNode.name || '家人';
+        return `${mName}（我${viewerCallsRelative}）的${relativeCallsTarget}`;
+    }
+
+    // 第二层：找 target 的"两跳"关联者（祖父母级别）
+    for (const relativeId of targetRelatives) {
+        const relativeNode = ctx.membersMap.get(relativeId);
+        if (!relativeNode) continue;
+
+        const secondLevelIds: number[] = [];
+        if (relativeNode.fatherId) secondLevelIds.push(Number(relativeNode.fatherId));
+        if (relativeNode.motherId) secondLevelIds.push(Number(relativeNode.motherId));
+
+        for (const sl of secondLevelIds) {
+            const slNode = ctx.membersMap.get(sl);
+            if (!slNode || sl === vId) continue;
+
+            const viewerCallsSl = getRigorousRelationship(viewer, slNode, members);
+            if (!viewerCallsSl || viewerCallsSl === '家人' || viewerCallsSl === '亲戚') continue;
+
+            // target 与这个二级节点的孩子的关系
+            const slCallsTarget = getRigorousRelationship(slNode, target, members);
+            if (!slCallsTarget || slCallsTarget === '家人' || slCallsTarget === '亲戚') continue;
+
+            const mName = relativeNode.name || slNode.name || '家人';
+            return `${mName}（我${viewerCallsSl}的孩子）的${slCallsTarget}`;
+        }
+    }
+
+    return null;
+}
