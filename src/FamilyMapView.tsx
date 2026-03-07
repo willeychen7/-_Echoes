@@ -66,7 +66,7 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
     return (
         <div 
             ref={containerRef}
-            className="w-full h-full min-h-[600px] relative bg-[#fdfbf7] overflow-hidden rounded-3xl border-4 border-white shadow-xl"
+            className="w-full h-full min-h-[600px] relative bg-[#fdfbf7] overflow-hidden rounded-[2.5rem] border-4 border-white shadow-xl touch-none"
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -76,29 +76,29 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
             onTouchEnd={handleMouseUp}
         >
             {/* Control Panel */}
-            <div className="absolute bottom-6 right-6 z-20 flex flex-col gap-2 glass-morphism p-2 rounded-2xl shadow-lg border border-slate-100/50">
-                <button onClick={zoomIn} className="p-3 bg-white hover:bg-slate-50 rounded-xl text-slate-600 hover:text-[#eab308] transition-colors"><ZoomIn size={24} /></button>
-                <button onClick={resetZoom} className="p-3 bg-white hover:bg-slate-50 rounded-xl text-slate-600 hover:text-[#eab308] transition-colors"><Maximize2 size={24} /></button>
-                <button onClick={zoomOut} className="p-3 bg-white hover:bg-slate-50 rounded-xl text-slate-600 hover:text-[#eab308] transition-colors"><ZoomOut size={24} /></button>
+            <div className="absolute bottom-6 right-6 z-20 flex flex-col gap-2 glass-morphism p-2 rounded-2xl shadow-lg border border-slate-100/50 bg-white/50 backdrop-blur-md">
+                <button onClick={zoomIn} className="p-3 bg-white hover:bg-slate-50 rounded-xl text-slate-600 hover:text-[#eab308] transition-colors shadow-sm"><ZoomIn size={24} /></button>
+                <button onClick={resetZoom} className="p-3 bg-white hover:bg-slate-50 rounded-xl text-slate-600 hover:text-[#eab308] transition-colors shadow-sm"><Maximize2 size={24} /></button>
+                <button onClick={zoomOut} className="p-3 bg-white hover:bg-slate-50 rounded-xl text-slate-600 hover:text-[#eab308] transition-colors shadow-sm"><ZoomOut size={24} /></button>
             </div>
 
             {/* Instruction Banner */}
-            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20 glass-morphism px-6 py-2.5 rounded-full shadow-sm border border-slate-100/50 flex items-center gap-2 pointer-events-none">
-                <span className="w-2 h-2 rounded-full bg-[#eab308] animate-pulse" />
-                <span className="text-sm font-bold text-slate-500 tracking-widest">拖动以探索家族树，点击头像查看档案</span>
+            <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20 glass-morphism px-6 py-2.5 rounded-full shadow-md border border-slate-100/50 bg-white/80 backdrop-blur-md flex items-center gap-2 pointer-events-none">
+                <span className="w-2 h-2 rounded-full bg-[#eab308] animate-pulse shadow-[0_0_8px_rgba(234,179,8,0.6)]" />
+                <span className="text-sm font-bold text-slate-600 tracking-widest whitespace-nowrap">探索家族树，点击头像查看档案</span>
             </div>
 
             {/* Sub-Legend */}
-            <div className="absolute top-6 left-6 z-20 glass-morphism p-4 rounded-2xl shadow-sm border border-slate-100/50">
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">家族分野</h3>
-                <div className="flex flex-col gap-2">
+            <div className="absolute top-6 left-6 z-20 glass-morphism p-4 rounded-2xl shadow-md border border-slate-100/50 bg-white/80 backdrop-blur-md">
+                <h3 className="text-xs font-black text-[#eab308] uppercase tracking-widest mb-3">家族分野坐标</h3>
+                <div className="flex flex-col gap-3">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-1 bg-[#eab308] rounded-full" />
-                        <span className="text-xs font-bold text-slate-600">父系宗亲 (左)</span>
+                        <div className="w-8 h-1.5 bg-[#eab308] rounded-full shadow-sm" />
+                        <span className="text-xs font-black text-slate-600">父系宗亲 <span className="text-slate-400 font-mono">(左)</span></span>
                     </div>
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-1 bg-purple-400 rounded-full" />
-                        <span className="text-xs font-bold text-slate-600">母系外家 (右)</span>
+                        <div className="w-8 h-1.5 bg-purple-400 rounded-full shadow-sm" />
+                        <span className="text-xs font-black text-slate-600">母系外家 <span className="text-slate-400 font-mono">(右)</span></span>
                     </div>
                 </div>
             </div>
@@ -122,11 +122,11 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
                     <defs>
                         <linearGradient id="centerLine" x1="0%" y1="0%" x2="0%" y2="100%">
                             <stop offset="0%" stopColor="rgba(234, 179, 8, 0)" />
-                            <stop offset="50%" stopColor="rgba(234, 179, 8, 0.2)" />
+                            <stop offset="50%" stopColor="rgba(234, 179, 8, 0.3)" />
                             <stop offset="100%" stopColor="rgba(234, 179, 8, 0)" />
                         </linearGradient>
                     </defs>
-                    <line x1="500" y1="50" x2="500" y2={maxHeight - 50} stroke="url(#centerLine)" strokeWidth="4" strokeDasharray="10,10" />
+                    <line x1="500" y1="50" x2="500" y2={maxHeight - 50} stroke="url(#centerLine)" strokeWidth="6" strokeDasharray="12,12" strokeLinecap="round" />
                 </svg>
 
                 {/* Plotting Members */}
@@ -138,10 +138,10 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
                     return (
                         <motion.div
                             key={member.id}
-                            initial={{ opacity: 0, scale: 0 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ type: "spring", stiffness: 200, damping: 20, delay: Math.random() * 0.5 }}
-                            className="absolute flex flex-col items-center"
+                            initial={{ opacity: 0, scale: 0, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            transition={{ type: "spring", stiffness: 200, damping: 20, delay: Math.random() * 0.3 }}
+                            className="absolute flex flex-col items-center group"
                             style={{
                                 left: member.mapX,
                                 top: member.mapY,
@@ -150,9 +150,9 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
                             }}
                         >
                             <div 
-                                className={`w-20 h-20 rounded-full border-4 shadow-xl overflow-hidden cursor-pointer hover:scale-110 active:scale-95 transition-all
-                                    ${isMaternal ? 'border-purple-200 shadow-purple-200/50' : 'border-amber-200 shadow-amber-200/50'}
-                                    bg-white
+                                className={`w-24 h-24 rounded-full border-4 shadow-xl overflow-hidden cursor-pointer hover:scale-110 active:scale-95 transition-all
+                                    ${isMaternal ? 'border-purple-200 shadow-purple-200/50 hover:shadow-purple-300' : 'border-amber-200 shadow-amber-200/50 hover:shadow-amber-300'}
+                                    bg-slate-50 relative z-10
                                 `}
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -160,23 +160,31 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
                                 }}
                             >
                                 <img 
-                                    src={member.avatarUrl || member.avatar_url || `https://picsum.photos/seed/${member.name}/200`} 
+                                    src={member.avatarUrl || member.avatar_url || `https://picsum.photos/seed/${member.name}/200/200`} 
                                     alt={member.name}
                                     className="w-full h-full object-cover"
                                 />
+                                {member.isRegistered && (
+                                   <div className={`absolute bottom-0 inset-x-0 h-4 ${isMaternal ? 'bg-purple-500' : 'bg-emerald-500'} flex justify-center items-center`}>
+                                     <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                                   </div>
+                                )}
                             </div>
                             
-                            <div className="mt-3 flex flex-col items-center bg-white/80 backdrop-blur-sm px-4 py-2 rounded-2xl shadow-sm border border-slate-100">
-                                <span className="font-black text-slate-800 text-lg whitespace-nowrap">{member.name}</span>
+                            <div className={`mt-3 flex flex-col items-center bg-white/95 backdrop-blur-md px-5 py-2.5 rounded-[1.5rem] shadow-lg border relative z-20 transition-transform group-hover:-translate-y-1
+                                ${isMaternal ? 'border-purple-100 shadow-purple-100/50' : 'border-amber-100 shadow-amber-100/50'}`}
+                            >
+                                <span className={`font-black text-xl whitespace-nowrap ${isMaternal ? 'text-purple-900' : 'text-slate-800'}`}>{member.name}</span>
                                 {member.relationship && (
-                                    <span className={`text-[10px] font-bold uppercase tracking-widest mt-0.5
+                                    <span className={`text-[10px] font-black uppercase tracking-widest mt-0.5
                                         ${isMaternal ? 'text-purple-500' : 'text-[#eab308]'}
                                     `}>
                                         {member.relationship}
                                     </span>
                                 )}
                                 {member.logicTag && (
-                                    <span className="text-[8px] font-mono text-slate-300 mt-1 px-2 py-0.5 bg-slate-50 rounded mt-1">
+                                    <span className="text-[10px] font-mono font-bold text-slate-400 mt-2 px-2.5 py-1 bg-slate-100 rounded-lg inset-shadow-sm flex items-center gap-1">
+                                        <span className={`w-1.5 h-1.5 rounded-full ${isMaternal ? 'bg-purple-400' : 'bg-[#eab308]'}`}></span>
                                         {member.logicTag}
                                     </span>
                                 )}
