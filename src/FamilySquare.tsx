@@ -124,15 +124,14 @@ export const FamilySquare: React.FC = () => {
       if (isDemoMode(modeParsed)) {
         const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
         const allDemoMembers = [...DEMO_MEMBERS, ...customMembers];
-        setMembers(generateSmartLayout(allDemoMembers));
+        setMembers(allDemoMembers);
         const customEvents = JSON.parse(localStorage.getItem("demoCustomEvents") || "[]");
         setEvents([...DEMO_EVENTS, ...customEvents]);
       } else if (modeParsed && modeParsed.familyId) {
         const familyId = parseInt(String(modeParsed.familyId));
         fetch(`/api/family-members?familyId=${familyId}`).then(res => res.json()).then(data => {
           if (Array.isArray(data)) {
-            const uiMembers = generateSmartLayout(data);
-            setMembers(uiMembers);
+            setMembers(data);
             data.forEach((m: any) => {
               if (m.id && (m.avatar_url || m.avatarUrl)) {
                 updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);

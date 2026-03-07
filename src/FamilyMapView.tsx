@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { ZoomIn, ZoomOut, Maximize2, Share2, Info } from "lucide-react";
+import { generateSmartLayout } from "./lib/kinshipEngine";
 
 export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
     const navigate = useNavigate();
@@ -13,6 +14,15 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [selectedId, setSelectedId] = useState<string | number | null>(null);
 
+    // 💡 核心：全家福自适应布局计算 (包括房头背景块)
+    const { processedMembers, pods } = useMemo(() => {
+        const layout = generateSmartLayout(members);
+        return {
+            processedMembers: layout.members,
+            pods: layout.pods
+        };
+    }, [members]);
+
     useEffect(() => {
         // Center the map initially
         if (containerRef.current) {
@@ -23,11 +33,11 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
         }
     }, [scale]);
 
-    if (!members || members.length === 0) {
+    if (!processedMembers || processedMembers.length === 0) {
         return <div className="p-8 text-center text-slate-400">目前还没有家庭成员可以显示在地图上。</div>;
     }
 
-    const maxMapY = Math.max(...members.map(m => m.mapY || 0));
+    const maxMapY = Math.max(...processedMembers.map(m => m.mapY || 0));
     const maxHeight = Math.max(800, maxMapY + 300);
 
     const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
@@ -67,7 +77,7 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
     // 💡 核心精进：血脉航线追踪算法
     const activePath = useMemo(() => {
         if (!selectedId) return [];
-        const target = members.find(m => m.id === selectedId);
+        const target = processedMembers.find(m => m.id === selectedId);
         if (!target || !target.logicTag) return [];
 
         const tag = target.logicTag;
@@ -79,25 +89,24 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
 
         const pathNodes = [];
         // 1. 寻找本人 (self)
-        const selfNode = members.find(m => (m.logicTag || "").includes('self'));
+        const selfNode = processedMembers.find(m => (m.logicTag || "").includes('self'));
         if (selfNode) pathNodes.push(selfNode);
 
-        // 2. 补全中间节点 (沿着父集/爷爷集往上走)
+        // 2. 补全中间节点
         let currentSegments: string[] = [];
         for (const segment of route) {
             currentSegments.push(segment);
             const midTag = `${side}-${currentSegments.join(',')}`;
-            const midNode = members.find(m => (m.logicTag || "").startsWith(midTag));
+            const midNode = processedMembers.find(m => (m.logicTag || "").startsWith(midTag));
             if (midNode) pathNodes.push(midNode);
         }
 
-        // 3. 终点
         if (!pathNodes.find(n => n.id === target.id)) {
             pathNodes.push(target);
         }
 
         return pathNodes;
-    }, [selectedId, members]);
+    }, [selectedId, processedMembers]);
 
     return (
         <div
@@ -170,10 +179,36 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
                         </filter>
                     </defs>
 
+                    {/* 💡 核心精进：房头背景块渲染 */}
+                    {pods?.map((pod: any) => (
+                        <g key={pod.id}>
+                            <rect
+                                x={pod.x}
+                                y={pod.y}
+                                width={pod.width}
+                                height={pod.height}
+                                rx="40"
+                                fill={pod.color}
+                                stroke={pod.side === 'paternal' ? 'rgba(234,179,8,0.1)' : 'rgba(168,85,247,0.1)'}
+                                strokeWidth="2"
+                                className="transition-all duration-700"
+                            />
+                            {/* 房头标签 */}
+                            <text
+                                x={pod.x + pod.width / 2}
+                                y={pod.y + 25}
+                                textAnchor="middle"
+                                className="text-[10px] font-black fill-slate-400 uppercase tracking-[0.2em]"
+                            >
+                                {pod.label}
+                            </text>
+                        </g>
+                    ))}
+
                     {/* 分界线 */}
                     <line x1="500" y1="50" x2="500" y2={maxHeight - 50} stroke="url(#centerLine)" strokeWidth="6" strokeDasharray="12,12" strokeLinecap="round" />
 
-                    {/* 💡 核心精进：SVG 航线渲染 */}
+                    {/* SVG 航线渲染 */}
                     <AnimatePresence>
                         {activePath.length > 1 && (
                             <motion.g
@@ -205,7 +240,7 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
                 </svg>
 
                 {/* Plotting Members */}
-                {members.map(member => {
+                {processedMembers.map(member => {
                     if (member.mapX == null || member.mapY == null) return null;
 
                     const isMaternal = (member.logicTag || "").includes('[M]');

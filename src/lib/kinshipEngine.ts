@@ -17,6 +17,16 @@ export const CONNECTOR_SUGGESTIONS: Record<string, string[]> = {
     'child_m': ['外甥', '外甥女', '外孙', '外孙女'],
 };
 
+// 房头配色方案：采用低饱和度、高明度的中国传统色，确保不干扰头像显示
+const HALL_COLORS = [
+    'rgba(240, 249, 255, 0.6)', // 远天蓝
+    'rgba(240, 253, 244, 0.6)', // 若竹翠
+    'rgba(255, 251, 235, 0.6)', // 琥珀黄
+    'rgba(254, 242, 242, 0.6)', // 胭脂红
+    'rgba(250, 245, 255, 0.6)', // 薰衣草紫
+    'rgba(255, 247, 237, 0.6)', // 杏花橙
+];
+
 /**
  * 智能解析：从自然语言中提取“房分/排行”
  */
@@ -276,6 +286,10 @@ export function generateSmartLayout(members: any[]) {
     });
 
     const finalMembers: any[] = [];
+    const pods: any[] = []; // 新增：房头背景块容器
+
+    // 记录每个房头在每一代、每一侧的坐标范围
+    const hallBounds: Record<string, { minX: number, maxX: number, minY: number, maxY: number, side: string, label: string }> = {};
 
     // 为每个分组分别计算居中对齐的防碰撞X轴坐标
     Object.keys(grouped).forEach(key => {
@@ -325,6 +339,22 @@ export function generateSmartLayout(members: any[]) {
                 }
             }
 
+            // 记录房头边界
+            if (m.ancestralHall && m.ancestralHall !== '无' && !m.isGhost) {
+                const hallKey = `${key}_${m.ancestralHall}`;
+                if (!hallBounds[hallKey]) {
+                    hallBounds[hallKey] = {
+                        minX: x, maxX: x, minY: y, maxY: y,
+                        side: m._side, label: m.ancestralHall
+                    };
+                } else {
+                    hallBounds[hallKey].minX = Math.min(hallBounds[hallKey].minX, x);
+                    hallBounds[hallKey].maxX = Math.max(hallBounds[hallKey].maxX, x);
+                    hallBounds[hallKey].minY = Math.min(hallBounds[hallKey].minY, y);
+                    hallBounds[hallKey].maxY = Math.max(hallBounds[hallKey].maxY, y);
+                }
+            }
+
             const { _gen, _side, _rank, _rawTag, ...cleanMember } = m;
             finalMembers.push({
                 ...cleanMember,
@@ -334,5 +364,21 @@ export function generateSmartLayout(members: any[]) {
         });
     });
 
-    return finalMembers;
+    // 生成房头背景 Pods
+    Object.keys(hallBounds).forEach((hallKey, i) => {
+        const b = hallBounds[hallKey];
+        const padding = 60; // 留出头像外圈空间
+        pods.push({
+            id: hallKey,
+            x: b.minX - padding,
+            y: b.minY - padding - 20,
+            width: (b.maxX - b.minX) + padding * 2,
+            height: (b.maxY - b.minY) + padding * 2 + 30,
+            color: HALL_COLORS[i % HALL_COLORS.length],
+            label: b.label,
+            side: b.side
+        });
+    });
+
+    return { members: finalMembers, pods };
 }
