@@ -561,9 +561,43 @@ function computeRigorousRelationship(
         const eq = (a: any, b: any) => a && b && Number(a) === Number(b);
 
         // --- 闽系核心：昭穆（代数）判定逻辑 ---
-        const vNodeMap = ctx.membersMap.get(vId) || vNode; // 优先使用 Map 中的完整节点，兜底使用传入节点
+        const vNodeMap = ctx.membersMap.get(vId) || vNode;
         const tNodeMap = ctx.membersMap.get(tId) || tNode;
 
+        // 🚀 核心重构：名分锁定与直系判定 (Identity & Direct Bloodline First)
+        // 在所有算法推导之前，物理 ID 的连接是最高真理
+        const rawRel = (tNodeMap.relationship || target.relationship || "").trim();
+        const sRole = (tNodeMap.standardRole || tNodeMap.standard_role || "").toString().toLowerCase();
+
+        // 1. 本人判定
+        if (eq(vId, tId)) return "本人";
+
+        // 2. 直系向上 (父母)
+        if (eq(tId, vNodeMap.fatherId)) return "爸爸";
+        if (eq(tId, vNodeMap.motherId)) return "妈妈";
+
+        // 3. 直系向下 (子女)
+        if (eq(vId, tNodeMap.fatherId) || eq(vId, tNodeMap.motherId)) {
+            return isFemale(tNodeMap) ? "女儿" : "儿子";
+        }
+
+        // 4. 直系向上 (祖辈) - 极其重要：防止爷爷变堂弟
+        const vfId = vNodeMap.fatherId;
+        const vmId = vNodeMap.motherId;
+        if (vfId) {
+            const vffId = ctx.membersMap.get(Number(vfId))?.fatherId;
+            const vfmId = ctx.membersMap.get(Number(vfId))?.motherId;
+            if (eq(tId, vffId)) return "爷爷";
+            if (eq(tId, vfmId)) return "奶奶";
+        }
+        if (vmId) {
+            const vmfId = ctx.membersMap.get(Number(vmId))?.fatherId;
+            const vmmId = ctx.membersMap.get(Number(vmId))?.motherId;
+            if (eq(tId, vmfId)) return "外公";
+            if (eq(tId, vmmId)) return "外婆";
+        }
+
+        // --- 闽系核心：昭穆（代数）判定逻辑 ---
         const vGen = vNodeMap.generationNum ?? vNodeMap.generation_num ?? 30;
         const tGen = tNodeMap.generationNum ?? tNodeMap.generation_num ?? 30;
         const rawTag = tNodeMap.logicTag || tNodeMap.logic_tag || target.logicTag || target.logic_tag || "";
@@ -572,27 +606,30 @@ function computeRigorousRelationship(
         if (true) {
             let genDiff = vGen - tGen; // V相对于T的代差
 
-            // 🚀 核心重构：Tag-First 代际纠偏
+            // 🚀 核心纠偏：逻辑标签精度匹配 (Preventing Partial Match Collision)
             if (tTag) {
-                if (tTag.includes('-SIB') || tTag.includes('SIB') || tTag.includes('-X') || tTag.includes('SELF')) genDiff = 0;
-                else if (tTag.includes('-F') || tTag.includes('-M')) genDiff = 1;
-                else if (tTag.includes('F,F') || tTag.includes('M,M') || tTag.includes('M,F') || tTag.includes('F,M')) genDiff = 2;
-                else if (tTag.includes('-S') || tTag.includes('CHILD')) genDiff = -1;
+                // 优先匹配远代 (Depth first)
+                if (tTag.includes('F,F') || tTag.includes('M,M') || tTag.includes('M,F') || tTag.includes('F,M')) {
+                    genDiff = 2;
+                } else if (tTag.match(/-[A-Z]$/) || tTag.includes('-F') || tTag.includes('-M')) {
+                    // 仅当是单层路径时判定为 1 代差 (如 -F, -M, 而非 -F,F)
+                    if (!tTag.includes(',')) genDiff = 1;
+                    else if (tTag.split('-')[1]?.split(',').length === 2) genDiff = 2;
+                }
+
+                // 平辈强制重置
+                if (tTag.includes('SIB') || tTag.includes('SELF') || tTag.includes('-X')) {
+                    genDiff = 0;
+                } else if (tTag.includes('-S') || tTag.includes('CHILD')) {
+                    genDiff = -1;
+                }
             }
 
             // 如果是同代 (0: 同辈)
             if (genDiff === 0 && (vId !== tId)) {
-
-                // 🚀 核心重构：名分锁定逻辑 (Identity Locking)
-                const rawRel = (tNodeMap.relationship || target.relationship || "").trim();
-                const sRole = (tNodeMap.standardRole || tNodeMap.standard_role || "").toString().toLowerCase();
-
                 // 1. 亲兄弟判定：多重证据链
-                // - 证据 A: 逻辑标签有 SIB
-                const hasSibTag = tTag.includes("-SIB") || tTag.includes("SIB");
-                // - 证据 B: 原始备注包含 哥/姐/弟/妹 且不含 表/堂 (模糊匹配增强)
+                const hasSibTag = tTag.includes("SIB");
                 const hasSibText = /(哥|姐|弟|妹)/.test(rawRel) && !rawRel.includes('表') && !rawRel.includes('堂');
-                // - 证据 C: 标准角色是 brother/sister
                 const hasSibRole = (sRole === 'brother' || sRole === 'sister');
 
                 const isRealSibling = hasSibTag || hasSibRole || hasSibText ||
@@ -1220,15 +1257,17 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
     const rel = getRigorousRelationship(vNode, tNode, members);
     const type = getRelationType(rel);
     const tTag = (tNode.logicTag || tNode.logic_tag || "").toString().toUpperCase();
-    const sRole = tNode.standardRole || tNode.standard_role || "";
+    const sRole = (tNode.standardRole || tNode.standard_role || "").toLowerCase();
 
     // 🚀 核心纠偏：逻辑坐标或角色属性优先
     if (tTag.startsWith('[F]') || ['brother', 'sister', 'father', 'grandfather_paternal', 'grandmother_paternal', 'uncle_paternal', 'aunt_paternal'].includes(sRole)) {
         if (tTag.includes('SIB') || sRole === 'brother' || sRole === 'sister') return "【家门】";
+        if (sRole === 'grandfather_paternal' || tTag.includes('F,F')) return "【宗长】";
         return "【同宗】";
     }
 
     if (tTag.startsWith('[M]') || ['uncle_maternal', 'aunt_maternal', 'grandfather_maternal', 'grandmother_maternal'].includes(sRole)) {
+        if (sRole === 'grandfather_maternal' || tTag.includes('M,F')) return "【外大父】";
         return "【母系外戚】";
     }
 
