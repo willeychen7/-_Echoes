@@ -51,8 +51,21 @@ export function validateKinshipLogic(
     const rel = relText || "";
     if (!rel) return { isValid: true, type: 'success', tag };
 
+    const isMaternal = side === 'maternal';
+    const isSameSurname = mySurname && targetSurname && targetSurname === mySurname;
+
+    // 增加：同姓堂舅/姨的特殊识别
+    if (isMaternal && isSameSurname && (rel.includes('舅') || rel.includes('姨'))) {
+        return {
+            isValid: true,
+            warning: `✅ 特殊路径识别：虽然该亲属与您同姓(${targetSurname})，但通过母亲血脉衔接，系统已锁定其为【同姓外戚】。`,
+            type: 'success',
+            tag
+        };
+    }
+
     // 1. 母系红线：严禁叔伯姑
-    if (side === 'maternal' && /叔|伯|姑/.test(rel)) {
+    if (isMaternal && /叔|伯|姑/.test(rel)) {
         return {
             isValid: false,
             warning: '礼法冲突：母系(外家)支脉中不可能出现叔、伯、姑。请检查方位或改为“舅/姨”。',

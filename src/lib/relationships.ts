@@ -378,14 +378,22 @@ function getParentIds(nodeId: any, members: any[]) {
 /**
  * 核心：判断是否为宗亲（同姓且同宗）
  */
-export function isClan(vNode: any, tNode: any): boolean {
+/**
+ * 核心优化：判定是否为宗亲（父系同宗）
+ * 增加方位校验，防止同姓的母系外戚被误判为宗亲
+ */
+export function isClan(vNode: any, tNode: any, currentSide?: 'paternal' | 'maternal'): boolean {
     if (!vNode || !tNode) return false;
-    // 如果有房头定义，房头相同且姓氏相同则为宗亲
+
+    // 如果已经明确选择了母系方位，即便同姓，也不属于“宗亲”
+    if (currentSide === 'maternal') return false;
+
+    // 原有逻辑：同姓且同房头，或默认同姓同宗
     if (vNode.surname && tNode.surname && vNode.surname === tNode.surname) {
         if (vNode.ancestralHall && tNode.ancestralHall) {
             return vNode.ancestralHall === tNode.ancestralHall;
         }
-        return true; // 即使没写房头，同姓在闽系中也常默认同宗
+        return true;
     }
     return false;
 }
@@ -543,7 +551,10 @@ function computeRigorousRelationship(
                 const tGFId = getFId(tNode.fatherId);
                 const isPaternalCousin = vGFId && tGFId && eq(vGFId, tGFId);
 
-                const clan = isClan(vNode, tNode) || isPaternalCousin;
+                const tTag = tNode.logicTag || tNode.logic_tag || "";
+                // 只要标记了 [M]，强制判定为非宗亲，从而触发“舅/姨/表”系的称谓生成
+                const isClanResult = tTag.includes('[M]') ? false : isClan(vNode, tNode);
+                const clan = isClanResult || isPaternalCousin;
                 const prefix = getRankPrefix(tNode, members);
 
                 if (isRealSibling) {
@@ -580,7 +591,8 @@ function computeRigorousRelationship(
 
             // 如果长一辈 (1: 对象是我的长辈)
             if (genDiff === 1) {
-                const clan = isClan(vNode, tNode);
+                const tTag = tNode.logicTag || tNode.logic_tag || "";
+                const clan = tTag.includes('[M]') ? false : isClan(vNode, tNode);
                 const prefix = getRankPrefix(tNode, members);
                 const getFId = (id: any) => members.find(m => eq(m.id, id))?.fatherId;
                 const vfId = vNode.fatherId;

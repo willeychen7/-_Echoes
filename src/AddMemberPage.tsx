@@ -422,6 +422,13 @@ export const AddMemberPage: React.FC = () => {
       relationshipToStore = `${currentRank}${relationshipToStore}`;
     }
 
+    // 智能打标签：如果是母系但恰好同姓，加个逻辑补丁
+    if (side === 'maternal' && mySurname && targetSurname && mySurname === targetSurname) {
+      if (!relationshipToStore.includes('(母家同姓)')) {
+        relationshipToStore = `${relationshipToStore}(母家同姓)`;
+      }
+    }
+
     const deducedRole = deduceRole(finalRelationship);
 
     setIsSubmitting(true);
