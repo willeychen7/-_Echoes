@@ -385,18 +385,21 @@ function getParentIds(nodeId: any, members: any[]) {
 export function isClan(vNode: any, tNode: any, currentSide?: 'paternal' | 'maternal'): boolean {
     if (!vNode || !tNode) return false;
 
-    // 1. 逻辑标签优先 (LogicTag First) - 核心修复
-    const tTag = tNode.logicTag || tNode.logic_tag || "";
-    if (tTag.startsWith('[F]')) return true;  // [F] 开头绝对是父系宗亲
+    // 1. 逻辑标签优先 (LogicTag First) - 宗亲判定终极防线
+    const tTag = (tNode.logicTag || tNode.logic_tag || "").toString().toUpperCase();
+    if (tTag.startsWith('[F]')) return true;  // [F] 开头绝对是父系(宗亲/姑表)
     if (tTag.startsWith('[M]')) return false; // [M] 开头绝对是母系外戚
 
-    // 2. 档案打标 (存入数据库的标记)
+    // 2. 档案打标方位判定
     const tSide = tNode.origin_side || tNode.originSide;
     if (tSide === 'maternal') return false;
     if (tSide === 'paternal') return true;
 
-    // 3. 姓氏兜底
-    if (vNode.surname && tNode.surname) {
+    // 3. 衔接点判定：如果是亲兄弟姐妹路径，必定属于宗亲范畴
+    if (tTag.includes('SIB') || tTag.includes('LOGIC:SIB')) return true;
+
+    // 4. 姓氏兜底
+    if (vNode.surname && tNode.surname && vNode.surname.trim() !== "" && tNode.surname.trim() !== "") {
         return vNode.surname === tNode.surname;
     }
 
@@ -587,11 +590,13 @@ function computeRigorousRelationship(
                     }
 
                     if (tNode.gender === "female") {
-                        return isOlder ? "姐姐" : "妹妹";
+                        return isOlder ? `${prefix}姐姐` : `${prefix}妹妹`;
                     } else {
-                        return isOlder ? "哥哥" : "弟弟";
+                        return isOlder ? `${prefix}哥哥` : `${prefix}弟弟`;
                     }
                 }
+
+                // 🚀 核心纠偏：只要 logicTag 以 [F] 开头，或是 originSide 为 paternal，强制视为宗亲或父系表亲
                 if (clan) {
                     const vDate = vNode.birthDate || vNode.birth_date || "9999-99-99";
                     const tDate = tNode.birthDate || tNode.birth_date || "9999-99-99";
@@ -609,6 +614,7 @@ function computeRigorousRelationship(
                         return isOlder ? `${prefix}堂哥` : `${prefix}堂弟`;
                     }
                 } else {
+                    // 只有在 logicTag 缺失或明确 [M] 侧时才走表亲逻辑
                     const vDate = vNode.birthDate || vNode.birth_date || "9999-99-99";
                     const tDate = tNode.birthDate || tNode.birth_date || "9999-99-99";
                     let isOlder = tDate < vDate;
@@ -1179,6 +1185,13 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
 
     const rel = getRigorousRelationship(vNode, tNode, members);
     const type = getRelationType(rel);
+    const tTag = (tNode.logicTag || tNode.logic_tag || "").toString().toUpperCase();
+
+    // 🚀 核心纠偏：逻辑坐标优先
+    if (tTag.startsWith('[F]')) {
+        if (tTag.includes('SIB')) return "【家门】";
+        if (tTag.includes('-F') || tTag.includes('-X')) return "【同宗】";
+    }
 
     if (type === 'social') return "【友】";
     if (type === 'affinal') return "【姻】";
@@ -1191,8 +1204,9 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
     }
 
     if (!vFatherId || !tFatherId) {
+        // 如果逻辑坐标判定过了，这里作为兜底
         if (rel.includes("堂") || rel.includes("远")) return "【同宗】";
-        if (rel.includes("表")) return "【外戚】";
+        if (rel.includes("表") && !tTag.startsWith('[F]')) return "【外戚】";
         return "【家门】";
     }
 
