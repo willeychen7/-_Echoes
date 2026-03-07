@@ -551,6 +551,15 @@ function computeRigorousRelationship(
         const isFem = isFemale(tNode);
         const prefix = getRankPrefix(tNode, members);
 
+        // --- 物理血脉索引 (用于精准区分直系/旁系) ---
+        const getMB = (id: any) => id ? ctx.membersMap.get(Number(id)) : null;
+        const bF = vNode.fatherId;
+        const bM = vNode.motherId;
+        const bFF = bF ? getMB(bF)?.fatherId : null;
+        const bFM = bF ? getMB(bF)?.motherId : null;
+        const bMF = bM ? getMB(bM)?.fatherId : null;
+        const bMM = bM ? getMB(bM)?.motherId : null;
+
         // --- 2. 坐标解析 (Logic Tag First) ---
         const rawVTag = (vNode.logicTag || vNode.logic_tag || "").toString().toUpperCase();
         const rawTTag = (tNode.logicTag || tNode.logic_tag || "").toString().toUpperCase();
@@ -576,31 +585,36 @@ function computeRigorousRelationship(
                 const parts = cleanTTag.split('-O');
                 const pathOnly = parts[0].toLowerCase();
                 const rankStr = parts[1] || "";
+                const manualRel = (tNode.relationship || "").trim();
 
                 if (tagGenDiff === -1) {
                     if (pathOnly === 'f') {
-                        if (!rankStr && !tNode.is_ghost) return "爸爸";
+                        if (eq(tId, bF) && !rankStr) return "爸爸";
+                        if (/叔|伯|姑/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                         if (isFem) return `${prefix}姑姑`;
-                        const fNode = vNode.fatherId ? ctx.membersMap.get(Number(vNode.fatherId)) : null;
+                        const fNode = getMB(bF);
                         const fDate = fNode?.birthDate || fNode?.birth_date || "9999-99-99";
                         const tDate = tNode.birthDate || tNode.birth_date || "9999-99-99";
                         if (prefix === '大' || (tDate < fDate && fDate !== "9999-99-99")) return "大伯";
                         return `${prefix}叔叔`;
                     }
                     if (pathOnly === 'm') {
-                        if (!rankStr && !tNode.is_ghost) return "妈妈";
+                        if (eq(tId, bM) && !rankStr) return "妈妈";
+                        if (/舅|姨/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                         return isFem ? `${prefix}姨妈` : `${prefix}舅舅`;
                     }
                 }
                 if (tagGenDiff === -2) {
                     if (pathOnly === 'f,f' || pathOnly === 'f,m') {
-                        if (!rankStr && !tNode.is_ghost && pathOnly === 'f,f') return "爷爷";
-                        if (!rankStr && !tNode.is_ghost && pathOnly === 'f,m') return "奶奶";
+                        if (eq(tId, bFF) && pathOnly === 'f,f' && !rankStr) return "爷爷";
+                        if (eq(tId, bFM) && pathOnly === 'f,m' && !rankStr) return "奶奶";
+                        if (/叔公|伯公|姑婆|爷爷|奶奶/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                         return isFem ? `${prefix}姑婆` : `${prefix}叔公`;
                     }
                     if (pathOnly === 'm,f' || pathOnly === 'm,m') {
-                        if (!rankStr && !tNode.is_ghost && pathOnly === 'm,f') return "外公";
-                        if (!rankStr && !tNode.is_ghost && pathOnly === 'm,m') return "外婆";
+                        if (eq(tId, bMF) && pathOnly === 'm,f' && !rankStr) return "外公";
+                        if (eq(tId, bMM) && pathOnly === 'm,m' && !rankStr) return "外婆";
+                        if (/舅公|姨婆|外公|外婆/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                         return isFem ? `${prefix}姨婆` : `${prefix}舅公`;
                     }
                 }
@@ -626,16 +640,24 @@ function computeRigorousRelationship(
                     }
                 }
                 if (tagGenDiff === 1) {
+                    const isBioChild = eq(vId, tNode.fatherId) || eq(vId, tNode.motherId);
+                    if (isBioChild && pathOnly === 's' && !rankStr) return isFem ? "女儿" : "儿子";
                     if (pathOnly === 's') return isFem ? `${prefix}侄女` : `${prefix}侄子`;
                     if (pathOnly === 's,m') return isFem ? `${prefix}外甥女` : `${prefix}外甥`;
                 }
                 // 深层代际支持
                 if (tagGenDiff === -3) {
+                    if (eq(tId, getMB(bFF)?.fatherId) && !rankStr) return isFem ? "曾祖母" : "曾祖父";
                     if (pathOnly.startsWith('f,f,f')) return isFem ? `${prefix}曾祖母` : `${prefix}曾祖父`;
                     return isFem ? `${prefix}外曾祖母` : `${prefix}外曾祖父`;
                 }
                 if (tagGenDiff === -4) return isFem ? `${prefix}高祖母` : `${prefix}高祖父`;
-                if (tagGenDiff === 2) return isFem ? `${prefix}孙女` : `${prefix}孙子`;
+                if (tagGenDiff === 2) {
+                    const isBioGrand = (tNode.fatherId && (eq(getMB(tNode.fatherId)?.fatherId, vId) || eq(getMB(tNode.fatherId)?.motherId, vId))) ||
+                        (tNode.motherId && (eq(getMB(tNode.motherId)?.fatherId, vId) || eq(getMB(tNode.motherId)?.motherId, vId)));
+                    if (isBioGrand && !rankStr) return isFem ? "孙女" : "孙子";
+                    return isFem ? `${prefix}孙女` : `${prefix}孙子`;
+                }
             }
 
             // B. Target 是本人 (SELF)，查询反向称谓
