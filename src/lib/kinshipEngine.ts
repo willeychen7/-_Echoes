@@ -7,12 +7,13 @@ export const CONNECTOR_SUGGESTIONS: Record<string, string[]> = {
     'father': ['叔叔', '伯伯', '姑姑'],
     'grandfather': ['伯公', '叔公', '姑婆', '堂伯', '堂叔'],
     'grandmother': ['舅公', '姨婆', '堂舅', '堂姨'],
-    'self_p': ['哥哥', '弟弟', '姐姐', '妹妹', '堂哥', '堂弟', '堂姐', '堂妹'],
+    'sibling': ['哥哥', '弟弟', '姐姐', '妹妹'], // 亲兄弟姐妹
+    'self_p': ['堂哥', '堂弟', '堂姐', '堂妹'], // 父系堂亲
     'child_p': ['儿子', '女儿', '侄子', '侄女', '孙子', '孙女'],
     'mother': ['舅舅', '阿姨'],
     'm_grandfather': ['堂舅', '堂姨', '表舅', '外舅公'],
     'm_grandmother': ['姨姥', '表姨'],
-    'self_m': ['表哥', '表弟', '表姐', '表妹'],
+    'self_m': ['表哥', '表弟', '表姐', '表妹'], // 母系表亲
     'child_m': ['外甥', '外甥女', '外孙', '外孙女'],
 };
 
@@ -21,7 +22,8 @@ export const CONNECTOR_SUGGESTIONS: Record<string, string[]> = {
  */
 export function extractRankFromText(text: string): string | null {
     if (!text) return null;
-    const match = text.match(/(大|一|二|三|四|五|六|七|八|九|十|小|幺|老)/);
+    // 优先匹配多位数字，如 十一, 二十
+    const match = text.match(/(二十|十一|十二|十三|十四|十五|十六|十七|十八|十九|一|二|三|四|五|六|七|八|九|十|大|小|幺|老)/);
     return match ? match[0] : null;
 }
 
@@ -34,7 +36,8 @@ export function getLogicTag(side: 'paternal' | 'maternal', connector: string, ra
     const suffix = (side === 'maternal' && isSameSurname) ? '!S' : '';
     const paths: Record<string, string> = {
         father: 'f', grandfather: 'f,f', grandmother: 'f,m',
-        mother: 'm', m_grandfather: 'm,f', m_grandmother: 'm,m', sibling: 'b/p',
+        mother: 'm', m_grandfather: 'm,f', m_grandmother: 'm,m',
+        sibling: 'sib', // 亲兄弟姐妹独享路径码 (mumuy风格)
         self_p: 'x', child_p: 's', self_m: 'x,m', child_m: 's,m'
     };
     const path = paths[connector] || 'unknown';
@@ -190,7 +193,7 @@ export function generateSmartLayout(members: any[]) {
         if (!tag) return 99; // 未指定，放最后
         if (tag.includes('f,f') || tag.includes('m,m') || tag.includes('m,f') || tag.includes('f,m')) return -1; // 爷爷辈
         if (tag.includes('-f') || tag.includes('-m')) return 0; // 父母辈
-        if (tag.includes('-x') || tag.includes('b/p') || tag.includes('self')) return 1; // 同辈
+        if (tag.includes('-sib') || tag.includes('-x') || tag.includes('self')) return 1; // 同辈
         if (tag.includes('-s') || tag.includes('child')) return 2; // 晚辈
         return 99;
     };
@@ -201,7 +204,10 @@ export function generateSmartLayout(members: any[]) {
         if (!match) return 0;
         const rankMap: Record<string, number> = {
             '大': 1, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
-            '六': 6, '七': 7, '八': 8, '九': 9, '十': 10, '小': 11, '幺': 11, '老': 11
+            '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+            '十一': 11, '十二': 12, '十三': 13, '十四': 14, '十五': 15,
+            '十六': 16, '十七': 17, '十八': 18, '十九': 19, '二十': 20,
+            '小': 21, '幺': 21, '老': 21
         };
         return rankMap[match[1]] || 1;
     };
