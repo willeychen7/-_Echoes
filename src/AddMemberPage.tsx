@@ -150,21 +150,6 @@ export const AddMemberPage: React.FC = () => {
     return [];
   }, [relationship, customRelationship, members, kinshipType, lineageSide]);
 
-  React.useEffect(() => {
-    // 关键修正：不再自动跳转向导，等点击建立档案再判断
-    setSafetyStep('none');
-    setSafetyStage(1);
-    setKinshipType(null);
-    setLineageSide(null);
-    setSafetyChoice(null);
-
-    // 重置分流与排行状态
-    setSelectedBranch(null);
-    setSelectedRank(null);
-    setConnectingRank(null);
-    setBranchStage('type');
-    setCorrectionNotice(null);
-  }, [relationship, customRelationship]);
 
   // 实时的逻辑校准与“教学提示”并自动滚动
   React.useEffect(() => {
@@ -176,6 +161,7 @@ export const AddMemberPage: React.FC = () => {
         setCorrectionType(check.type);
       } else {
         setCorrectionNotice(null);
+        setCorrectionType(check.type); // ensure correctionType updates to 'success'
       }
       setLogicTag(check.tag || null);
     } else {
@@ -720,14 +706,18 @@ export const AddMemberPage: React.FC = () => {
                     {lineageSide === 'paternal' ? (
                       <>
                         <button onClick={() => setConnectorNode('father')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'father' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>父亲本人的手足分支 (叔伯/姑)</button>
-                        <button onClick={() => setConnectorNode('grandfather')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'grandfather' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>爷爷的分支 (伯公/叔公/姑婆及堂系)</button>
+                        <button onClick={() => setConnectorNode('grandfather')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'grandfather' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>爷爷的分支 (伯公/叔公/姑婆及远堂系)</button>
                         <button onClick={() => setConnectorNode('grandmother')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'grandmother' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>奶奶的分支 (父系里的母族：舅公/姨婆/堂舅)</button>
+                        <button onClick={() => setConnectorNode('self_p')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'self_p' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>同宗平辈 (亲/堂兄弟姐妹)</button>
+                        <button onClick={() => setConnectorNode('child_p')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'child_p' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>子孙晚辈 (儿女/亲侄/孙辈)</button>
                       </>
                     ) : (
                       <>
                         <button onClick={() => setConnectorNode('mother')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'mother' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>母亲本人的手足分支 (舅舅/姨妈)</button>
-                        <button onClick={() => setConnectorNode('m_grandfather')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'm_grandfather' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>外公的分支 (表系、外舅公)</button>
-                        <button onClick={() => setConnectorNode('m_grandmother')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'm_grandmother' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>外婆的分支 (姨姥等)</button>
+                        <button onClick={() => setConnectorNode('m_grandfather')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'm_grandfather' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>外公的分支 (老表系、外舅公)</button>
+                        <button onClick={() => setConnectorNode('m_grandmother')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'm_grandmother' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>外婆的分支 (老表系、姨姥等)</button>
+                        <button onClick={() => setConnectorNode('self_m')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'self_m' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>母系平辈 (姑/舅/姨表兄弟姐妹)</button>
+                        <button onClick={() => setConnectorNode('child_m')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'child_m' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>外戚晚辈 (外甥/外孙辈)</button>
                       </>
                     )}
                   </div>

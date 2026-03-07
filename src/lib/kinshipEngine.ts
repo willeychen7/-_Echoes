@@ -29,7 +29,8 @@ export function getLogicTag(side: 'paternal' | 'maternal', connector: string, ra
     const s = side === 'paternal' ? '[F]' : '[M]';
     const paths: Record<string, string> = {
         father: 'f', grandfather: 'f,f', grandmother: 'f,m',
-        mother: 'm', m_grandfather: 'm,f', m_grandmother: 'm,m', sibling: 'b/p'
+        mother: 'm', m_grandfather: 'm,f', m_grandmother: 'm,m', sibling: 'b/p',
+        self_p: 'x', child_p: 's', self_m: 'x,m', child_m: 's,m'
     };
     const path = paths[connector] || 'unknown';
     const r = rank && rank !== '无' ? `-o${rank}` : '';
@@ -52,9 +53,9 @@ export function validateKinshipLogic(
 
     // 1. 母系红线：严禁叔伯姑
     if (side === 'maternal' && /叔|伯|姑/.test(rel)) {
-        return { 
-            isValid: false, 
-            warning: '礼法冲突：母系(外家)支脉中不可能出现叔、伯、姑。请检查方位或改为“舅/姨”。', 
+        return {
+            isValid: false,
+            warning: '礼法冲突：母系(外家)支脉中不可能出现叔、伯、姑。请检查方位或改为“舅/姨”。',
             type: 'error',
             tag
         };
@@ -74,14 +75,14 @@ export function validateKinshipLogic(
     if (rel.includes('堂') && !/舅|姨/.test(rel) && side === 'maternal') {
         return { isValid: false, warning: '逻辑矛盾：母系通常不称“堂”。若是母亲的堂兄弟，请称呼“堂舅”。', type: 'error', tag };
     }
-    
+
     // 爷爷分支防错
     if (side === 'paternal' && connector === 'grandfather') {
         if (/舅|姨/.test(rel)) {
-             return { isValid: false, warning: '爷爷的分支（父系宗亲核心）不应出现舅/姨称谓，请确认方位。', type: 'error', tag };
+            return { isValid: false, warning: '爷爷的分支（父系宗亲核心）不应出现舅/姨称谓，请确认方位。', type: 'error', tag };
         }
         if (mySurname && targetSurname && targetSurname !== mySurname) {
-             return { isValid: true, warning: '⚠️ 录入爷爷的分支但姓氏不同，请确认是否为“表亲”(如姑母或姑婆的后代)。', type: 'warning', tag };
+            return { isValid: true, warning: '⚠️ 录入爷爷的分支但姓氏不同，请确认是否为“表亲”(如姑母或姑婆的后代)。', type: 'warning', tag };
         }
     }
 
@@ -115,7 +116,7 @@ export function getReverseKinship(relText: string, side: 'paternal' | 'maternal'
  */
 export function createKinshipSearchFilter(query: string) {
     if (!query || !query.trim()) return () => true;
-    
+
     // 提取可能存在的排行
     const rank = extractRankFromText(query);
     const q = query.toLowerCase();
@@ -125,31 +126,31 @@ export function createKinshipSearchFilter(query: string) {
         // 全匹配：姓名、称谓、标签
         if (member.name?.toLowerCase().includes(q)) return true;
         if (member.relationship?.toLowerCase().includes(q)) return true;
-        
+
         // 逻辑标记匹配 (Logic Tag)
         // 比如输入 "舅公" -> [M] 侧 或者 f,m (奶奶分支)
         const tag = member.logicTag || member.logic_tag || "";
         if (!tag) return false;
-        
+
         // 如果输入包含“排行”，检查 tag 是否包含该排行 (例如: -o三)
         if (rank && tag.includes(`-o${rank}`)) {
-             // 进一步确认称谓性质。例如 "三叔" 应该过滤父系
-             if (q.includes("叔") || q.includes("伯") || q.includes("姑")) {
-                 return tag.includes("[F]") && !tag.includes("f,m"); // 不能是奶奶的分支
-             }
-             if (q.includes("舅") || q.includes("姨")) {
-                 return tag.includes("[M]") || tag.includes("f,m"); 
-             }
-             return true;
+            // 进一步确认称谓性质。例如 "三叔" 应该过滤父系
+            if (q.includes("叔") || q.includes("伯") || q.includes("姑")) {
+                return tag.includes("[F]") && !tag.includes("f,m"); // 不能是奶奶的分支
+            }
+            if (q.includes("舅") || q.includes("姨")) {
+                return tag.includes("[M]") || tag.includes("f,m");
+            }
+            return true;
         }
 
         // 基础名讳映射
-        if (q.includes("堂") && tag.includes("[F]") && !tag.includes("f,m")) return true; 
-        if (q.includes("表") && (tag.includes("[M]") || tag.includes("f,m") || tag.includes("f,p"))) return true; 
-        
+        if (q.includes("堂") && tag.includes("[F]") && !tag.includes("f,m")) return true;
+        if (q.includes("表") && (tag.includes("[M]") || tag.includes("f,m") || tag.includes("f,p"))) return true;
+
         if ((q.includes("舅") || q.includes("姨")) && (tag.includes("[M]") || tag.includes("f,m"))) return true;
         if ((q.includes("叔") || q.includes("伯") || q.includes("姑")) && tag.includes("[F]") && !tag.includes("f,m")) return true;
-        
+
         return false;
     };
 }
@@ -165,54 +166,56 @@ export function generateLayoutFromTags(members: any[]) {
     const LEVEL_HEIGHT = 150;
     const SIBLING_GAP = 120;
     const SIDE_OFFSET = 300; // [F] goes left, [M] goes right
-    
+
     return members.map((member) => {
         let x = CENTER_X;
         let y = START_Y;
         let generationLevel = 1; // Default generation level
-        
+
         const tag = member.logicTag || member.logic_tag || "";
-        
+
         if (!tag) {
-             // 随机摆放在底部
-             return { ...member, mapX: Math.random() * 1000, mapY: START_Y + LEVEL_HEIGHT * 4 };
+            // 随机摆放在底部
+            return { ...member, mapX: Math.random() * 1000, mapY: START_Y + LEVEL_HEIGHT * 4 };
         }
 
         // 解析方位 [F] or [M]
         const isPaternal = tag.startsWith('[F]');
         const isMaternal = tag.startsWith('[M]');
-        
+
         // 中心线左侧或右侧
         if (isPaternal) {
             x -= SIDE_OFFSET;
         } else if (isMaternal) {
             x += SIDE_OFFSET;
         }
-        
+
         // 解析代际和高度 y
-        if (tag.includes('f,f') || tag.includes('m,m') || tag.includes('m,f')) {
-             generationLevel = -1; // 爷爷那辈
+        if (tag.includes('f,f') || tag.includes('m,m') || tag.includes('m,f') || tag.includes('f,m')) {
+            generationLevel = -1; // 爷爷那辈
         } else if (tag.includes('-f') || tag.includes('-m')) {
-             generationLevel = 0;  // 父母那辈
-        } else if (tag.includes('b/p')) {
-             generationLevel = 1;  // 同辈
+            generationLevel = 0;  // 父母那辈
+        } else if (tag.includes('-x') || tag.includes('b/p')) {
+            generationLevel = 1;  // 同辈
+        } else if (tag.includes('-s')) {
+            generationLevel = 2;  // 晚辈
         }
-        
+
         y = START_Y + (generationLevel + 1) * LEVEL_HEIGHT;
-        
+
         // 解析房分（同辈横向位移）
         const rankMatch = tag.match(/-o(大|一|二|三|四|五|六|七|八|九|十|小|幺|老)$/);
         let rankOffset = 0;
         if (rankMatch) {
-             const rankStr = rankMatch[1];
-             const rankMap: Record<string, number> = {
-                  '大': 1, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, 
-                  '六': 6, '七': 7, '八': 8, '九': 9, '十': 10, '小': 11, '幺': 11, '老': 11
-             };
-             const rIndex = rankMap[rankStr] || 1;
-             rankOffset = (rIndex - 2) * SIBLING_GAP; // -2 to center around middle ranks
+            const rankStr = rankMatch[1];
+            const rankMap: Record<string, number> = {
+                '大': 1, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+                '六': 6, '七': 7, '八': 8, '九': 9, '十': 10, '小': 11, '幺': 11, '老': 11
+            };
+            const rIndex = rankMap[rankStr] || 1;
+            rankOffset = (rIndex - 2) * SIBLING_GAP; // -2 to center around middle ranks
         }
-        
+
         // 最终 X 轴加入房分偏移
         x += rankOffset;
 
