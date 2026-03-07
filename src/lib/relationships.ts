@@ -544,25 +544,26 @@ function computeRigorousRelationship(
         // --- 闽系核心：昭穆（代数）判定逻辑 ---
         const vGen = vNode.generationNum ?? vNode.generation_num ?? 30;
         const tGen = tNode.generationNum ?? tNode.generation_num ?? 30;
-        const tTag = tNode.logicTag || tNode.logic_tag || "";
+        const rawTag = tNode.logicTag || tNode.logic_tag || "";
+        const tTag = rawTag.toString().toUpperCase();
 
         if (true) {
             let genDiff = vGen - tGen; // V相对于T的代差
 
             // 🚀 核心重构：Tag-First 代际纠偏
             if (tTag) {
-                if (tTag.includes('-sib') || tTag.includes('-x') || tTag.includes('self')) genDiff = 0;
-                else if (tTag.includes('-f') || tTag.includes('-m')) genDiff = 1;
-                else if (tTag.includes('f,f') || tTag.includes('m,m') || tTag.includes('m,f') || tTag.includes('f,m')) genDiff = 2;
-                else if (tTag.includes('-s') || tTag.includes('child')) genDiff = -1;
+                if (tTag.includes('-SIB') || tTag.includes('-X') || tTag.includes('SELF')) genDiff = 0;
+                else if (tTag.includes('-F') || tTag.includes('-M')) genDiff = 1;
+                else if (tTag.includes('F,F') || tTag.includes('M,M') || tTag.includes('M,F') || tTag.includes('F,M')) genDiff = 2;
+                else if (tTag.includes('-S') || tTag.includes('CHILD')) genDiff = -1;
             }
 
             // 如果是同代 (0: 同辈)
             if (genDiff === 0 && !eq(vId, tId)) {
 
                 // 🚀 核心重构：Tag-First 逻辑 (名分高于算法)
-                // 1. 亲兄弟判定：如果 tag 包含 -sib，或者父/母 ID 匹配
-                const isTagSibling = tTag.includes("-sib");
+                // 1. 亲兄弟判定：如果 tag 包含 -SIB，或者父/母 ID 匹配
+                const isTagSibling = tTag.includes("-SIB") || tTag.includes("SIB");
                 const isRealSibling = isTagSibling || (vNode.fatherId && eq(vNode.fatherId, tNode.fatherId)) ||
                     (vNode.motherId && eq(vNode.motherId, tNode.motherId));
 
@@ -572,7 +573,7 @@ function computeRigorousRelationship(
                 const tGFId = getFId(tNode.fatherId);
                 const isPaternalCousin = vGFId && tGFId && eq(vGFId, tGFId);
 
-                const isTagClan = tTag.startsWith("[F]") && !tTag.includes("f,m"); // [F] 开头且不是奶奶分支
+                const isTagClan = tTag.startsWith("[F]") && !tTag.includes("F,M"); // [F] 开头且不是奶奶分支
                 const isClanResult = tTag.includes('[M]') ? false : isClan(vNode, tNode);
                 const clan = isTagClan || isClanResult || isPaternalCousin;
 

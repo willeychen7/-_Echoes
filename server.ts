@@ -69,6 +69,7 @@ export async function createApp() {
               ALTER TABLE family_members ADD COLUMN IF NOT EXISTS member_type TEXT;
               ALTER TABLE family_members ADD COLUMN IF NOT EXISTS ancestral_hall TEXT;
               ALTER TABLE family_members ADD COLUMN IF NOT EXISTS generation_num INTEGER;
+              ALTER TABLE family_members ADD COLUMN IF NOT EXISTS logic_tag TEXT;
             ` });
           } catch (err: any) {
             console.log("Members Migration check failed:", err.message);
@@ -282,6 +283,7 @@ export async function createApp() {
           ancestralHall: m.ancestral_hall,
           generationNum: m.generation_num,
           memberType: m.member_type,
+          logicTag: m.logic_tag,
           createdByMemberId: createdByMemberId || null
         };
       });
@@ -317,7 +319,8 @@ export async function createApp() {
           spouseId: data.spouse_id,
           ancestralHall: data.ancestral_hall,
           generationNum: data.generation_num,
-          memberType: data.member_type
+          memberType: data.member_type,
+          logicTag: data.logic_tag
         };
 
         if (targetUserId) {
@@ -524,7 +527,7 @@ export async function createApp() {
     app.post("/api/family-members", async (req, res) => {
       if (!supabase) return res.status(500).json({ error: "服务器初始化失败：数据库未连接" });
       try {
-        const { name, relationship, avatarUrl, bio, birthDate, standardRole, familyId, createdByMemberId, fatherId, ancestralHall, gender, memberType, generationNum } = req.body;
+        const { name, relationship, avatarUrl, bio, birthDate, standardRole, familyId, createdByMemberId, fatherId, ancestralHall, gender, memberType, generationNum, logicTag } = req.body;
         // NOTE: 不再生成旧的 FA- 格式邀请码
         // 邀请码统一使用前端动态生成的 INV-{targetId}-{inviterId} 格式
 
@@ -556,7 +559,8 @@ export async function createApp() {
           ancestral_hall: ancestralHall || null,
           gender: gender || null,
           member_type: memberType || 'human',
-          generation_num: generationNum || null
+          generation_num: generationNum || null,
+          logic_tag: logicTag || null
         };
 
         console.log("[API:MEMBER] Attempting primary insert...");
@@ -573,6 +577,7 @@ export async function createApp() {
           delete fallbackPayload.member_type;
           delete fallbackPayload.ancestral_hall;
           delete fallbackPayload.generation_num;
+          delete fallbackPayload.logic_tag;
           const result = await supabase.from("family_members").insert(fallbackPayload).select().single();
           data = result.data;
           error = result.error;
