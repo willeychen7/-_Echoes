@@ -169,18 +169,13 @@ export const AddMemberPage: React.FC = () => {
   }, [relationship, customRelationship, members, kinshipType, lineageSide]);
 
 
-  // 实时的逻辑校准与“教学提示”并自动滚动
+  // 实时逻辑校准与“教学提示”
   React.useEffect(() => {
-    const relText = (relationship === "其他" ? customRelationship : (RELATIONSHIP_OPTIONS.find(o => o.value === relationship)?.label || relationship)) || "";
+    const relText = (relationship === "其他" ? customRelationship : relationship) || "";
     if (lineageSide && connectorNode) {
       const check = validateKinshipLogic(lineageSide, connectorNode, relText, targetSurname, mySurname);
-      if (!check.isValid || check.warning) {
-        setCorrectionNotice(check.warning || null);
-        setCorrectionType(check.type);
-      } else {
-        setCorrectionNotice(null);
-        setCorrectionType(check.type); // ensure correctionType updates to 'success'
-      }
+      setCorrectionNotice(check.warning || null);
+      setCorrectionType(check.type);
       setLogicTag(check.tag || null);
     } else {
       setCorrectionNotice(null);
@@ -276,32 +271,46 @@ export const AddMemberPage: React.FC = () => {
     const familyId = currentUser?.familyId || null;
     const createdByMemberId = currentUser?.memberId;
 
-    let finalRelationship = (relationship === "其他" ? customRelationship : relationship) || "";
+    // 1. 获取基础称谓
+    let baseRelationship = (relationship === "其他" ? customRelationship : relationship) || "";
 
-    // 把向导第四步的排行和第三步的称呼组合起来
-    let relationshipToStore = finalRelationship;
-    // 💡 修正：如果方位选了亲兄弟，强制剔除可能带入的“表/堂”字眼 (处理用户点击建议词的残留)
-    if (connectorNode === 'sibling') {
-      relationshipToStore = relationshipToStore.replace(/[表堂]/g, '');
+    // 2. 【逻辑纠偏核心】根据方位和路径强制修名称 (处理用户可能在 Step 3 选错的情况)
+    let relationshipToStore = baseRelationship;
+    if (lineageSide === 'paternal') {
+      if (connectorNode === 'sibling') {
+        relationshipToStore = baseRelationship.replace(/[表堂]/g, ''); // 亲兄弟不带表/堂
+      } else if (connectorNode === 'self_p' || connectorNode === 'father') {
+        if (!relationshipToStore.includes('堂') && !relationshipToStore.includes('亲')) {
+          // 自动补全“堂”字，并移除可能的“表”字
+          relationshipToStore = '堂' + relationshipToStore.replace('表', '');
+        }
+      }
+    } else if (lineageSide === 'maternal') {
+      if (connectorNode === 'self_m' || connectorNode === 'm_grandfather' || connectorNode === 'mother') {
+        if (!relationshipToStore.includes('表') && !/舅|姨/.test(relationshipToStore)) {
+          // 自动补全“表”字，并移除可能的“堂”字
+          relationshipToStore = '表' + relationshipToStore.replace('堂', '');
+        }
+      }
     }
 
-    if (selectedRank && selectedRank !== 'none' && selectedRank !== '无') {
-      if (!relationshipToStore.startsWith(selectedRank)) {
-        relationshipToStore = `${selectedRank}${relationshipToStore}`;
-      }
+    // 3. 注入排行前缀
+    if (selectedRank && selectedRank !== '无' && !relationshipToStore.startsWith(selectedRank)) {
+      relationshipToStore = `${selectedRank}${relationshipToStore}`;
     }
 
     const side = lineageSide || 'paternal';
     const computedTargetSurname = targetSurname || name.trim().charAt(0);
     const myGen = currentUser?.generationNum ?? 30;
+
+    // 4. 代际自动推导逻辑
     let targetGen = myGen;
     if (connectorNode === 'father' || connectorNode === 'mother') targetGen = myGen - 1;
-    else if (connectorNode === 'grandfather' || connectorNode === 'grandmother' || connectorNode === 'm_grandfather' || connectorNode === 'm_grandmother') targetGen = myGen - 2;
-    else if (connectorNode === 'child_p' || connectorNode === 'child_m') targetGen = myGen + 1;
+    else if (['grandfather', 'grandmother', 'm_grandfather', 'm_grandmother'].includes(connectorNode!)) targetGen = myGen - 2;
+    else if (['child_p', 'child_m'].includes(connectorNode!)) targetGen = myGen + 1;
     else targetGen = myGen; // sibling, self_p, self_m
 
-
-    // 智能打标签：如果是母系但恰好同姓，加个逻辑补丁
+    // 5. 母系同姓标记
     if (side === 'maternal' && mySurname && computedTargetSurname && mySurname === computedTargetSurname) {
       if (!relationshipToStore.includes('(母家同姓)')) {
         relationshipToStore = `${relationshipToStore}(母家同姓)`;
@@ -310,8 +319,7 @@ export const AddMemberPage: React.FC = () => {
 
     const currentLogicTag = logicTag || getLogicTag(side as any, connectorNode as string, selectedRank || '', mySurname !== "" && computedTargetSurname !== "" && mySurname === computedTargetSurname);
 
-    const deducedRole = deduceRole(finalRelationship);
-
+    const deducedRole = deduceRole(baseRelationship);
     setIsSubmitting(true);
     let currentParentId = parentId;
 
