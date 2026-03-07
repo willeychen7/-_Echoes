@@ -713,12 +713,12 @@ export const AddMemberPage: React.FC = () => {
             <div className="space-y-6">
               <div className="space-y-3">
                 <label className="text-xl font-black px-1 block">TA在自家兄弟姐妹中排行极老？</label>
-                <div className="grid grid-cols-5 gap-2">
-                  {['大', '二', '三', '四', '五', '小', '无'].map(rk => (
+                <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
+                  {['大', '一', '二', '三', '四', '五', '小', '无'].map(rk => (
                     <button key={rk} onClick={() => setSelectedRank(rk)} className={`h-12 border-2 rounded-xl font-bold text-sm ${selectedRank === rk ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100'}`}>{rk}</button>
                   ))}
                 </div>
-                <p className="text-xs font-medium text-slate-400 px-1 mt-2">选填项，录入后系统会自动生成对应的‘房分’（Ancestral Hall）。</p>
+                <p className="text-xs font-medium text-slate-400 px-1 mt-2">选填项，录入后系统会自动生成对应的‘房分’ (如：大房、二房)。注：“大”通常指嫡长，“一”指通用排行。</p>
               </div>
 
               <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl flex items-start gap-4">
@@ -746,8 +746,24 @@ export const AddMemberPage: React.FC = () => {
                       )}
                     </span>
                   </div>
-                  <p className="text-indigo-900 font-bold text-lg mb-2">TA 将称呼您为：<span className="text-[#eab308] text-2xl mx-1 bg-white px-3 py-0.5 rounded-lg shadow-sm border border-indigo-50">{getReverseKinship(relationship === '其他' ? customRelationship : relationship, lineageSide as 'paternal' | 'maternal', connectorNode as string, gender)}</span></p>
-                  <p className="text-xs text-indigo-400/80 font-mono font-bold uppercase border-t border-indigo-100/50 pt-2 mt-2">Logic_Coordinate: {logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '', mySurname !== "" && targetSurname !== "" && mySurname === targetSurname)}</p>
+                  <p className="text-indigo-900 font-bold text-base md:text-lg mb-2 flex items-center flex-wrap gap-2">
+                    TA 将称呼您为：
+                    <motion.span
+                      key={relationship + lineageSide}
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className={cn(
+                        "text-2xl mx-1 bg-white px-3 py-0.5 rounded-lg shadow-sm border font-black",
+                        lineageSide === 'maternal' ? "text-purple-600 border-purple-100" : "text-[#eab308] border-amber-100"
+                      )}
+                    >
+                      {getReverseKinship(relationship === '其他' ? customRelationship : relationship, lineageSide as 'paternal' | 'maternal', connectorNode as string, gender)}
+                    </motion.span>
+                  </p>
+                  <p className="text-xs text-indigo-400/80 font-mono font-bold uppercase border-t border-indigo-100/50 pt-2 mt-2 flex items-center gap-2">
+                    <span className="size-1.5 bg-indigo-400 rounded-full animate-pulse" />
+                    Logic_Coordinate: {logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '', mySurname !== "" && targetSurname !== "" && mySurname === targetSurname)}
+                  </p>
                 </div>
               </div>
             </div>
