@@ -271,46 +271,63 @@ export const AddMemberPage: React.FC = () => {
     const familyId = currentUser?.familyId || null;
     const createdByMemberId = currentUser?.memberId;
 
-    // 💡 核心闭环重构：逻辑前置 (Logic-First) V7.0
-    const rawRel = (relationship === "其他" ? customRelationship : relationship) || "";
-    let correctedRel = rawRel;
+    // 💡 核心：全量关系名分修正引擎 (Logic-First Correction) V8.0
+    const baseRel = (relationship === "其他" ? customRelationship : relationship) || "";
+    let finalRel = baseRel;
 
-    // A. 路径强制纠偏：优先于一切录入文字
+    // 1. 物理路径纠偏 (无论用户选了什么文字，根据 Step 2 的路径强制清洗)
     if (connectorNode === 'sibling') {
-      // 只要是 [F]-SIB 亲兄弟路径，暴力剥离一切 表/堂
-      correctedRel = rawRel.replace(/[表堂]/g, '');
-      if (!/[\u4e00-\u9fa5]/.test(correctedRel)) {
-        correctedRel = gender === 'female' ? '姐姐/妹妹' : '哥哥/弟弟'; // 💡 按照用户建议，补全更友好的组合
-      }
+      // 【亲兄弟姐妹】绝对禁止出现“表/堂”
+      finalRel = baseRel.replace(/[表堂]/g, '');
+      if (!/[\u4e00-\u9fa5]/.test(finalRel)) finalRel = gender === 'female' ? '姐姐/妹妹' : '哥哥/弟弟';
     } else if (lineageSide === 'paternal') {
-      // 父系宗亲分支：强制不带“表”字。如果没有“堂”且不是伯叔姑，补齐“堂”。
-      if (['self_p', 'father', 'grandfather'].includes(connectorNode!)) {
-        if (!correctedRel.includes('堂') && !/叔|伯|姑/.test(correctedRel)) {
-          correctedRel = '堂' + correctedRel.replace('表', '');
-        }
+      // 【父系宗亲分支】
+      if (['father', 'grandfather', 'self_p'].includes(connectorNode!)) {
+        // 宗亲主干严禁出现“表”字，如果是旁系则确保有“堂”字
+        finalRel = baseRel.replace('表', '堂');
+        // 如果是堂亲但没带堂字，且不是伯叔姑，补齐
+        if (connectorNode === 'self_p' && !finalRel.includes('堂')) finalRel = '堂' + finalRel;
+        if (connectorNode === 'father' && !/叔|伯|姑/.test(finalRel)) finalRel = '叔/伯';
+      } else if (connectorNode === 'grandmother') {
+        // 奶奶的分支属于父系里的“母族”，建议称谓含“舅/姨/公/婆”
+        if (/叔|伯|姑/.test(baseRel)) finalRel = gender === 'female' ? '姨婆' : '舅公';
       }
     } else if (lineageSide === 'maternal') {
-      // 母系外戚分支：强制带“表”字，除非是“舅/姨”
-      if (!correctedRel.includes('表') && !/舅|姨/.test(correctedRel)) {
-        correctedRel = '表' + correctedRel.replace('堂', '');
+      // 【母系外戚分支】
+      if (['mother', 'm_grandfather', 'm_grandmother', 'self_m'].includes(connectorNode!)) {
+        // 外戚分支严禁出现“堂”字，若是表亲则确保有“表”字
+        finalRel = baseRel.replace('堂', '表');
+        if (connectorNode === 'self_m' && !finalRel.includes('表')) finalRel = '表' + finalRel;
       }
     }
 
-    // B. 注入排行 (如：二 + 哥 = 二哥)
-    if (selectedRank && selectedRank !== '无' && !correctedRel.startsWith(selectedRank)) {
-      correctedRel = `${selectedRank}${correctedRel}`;
+    // 2. 注入排行补偿：解决了“最后才录入排行”的问题
+    if (selectedRank && selectedRank !== '无' && !finalRel.startsWith(selectedRank)) {
+      // 清除旧排行，注入新排行 (如：二 + 哥哥 = 二哥)
+      const rankCleaned = finalRel.replace(/^(大|一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|小|老)/, '');
+      finalRel = `${selectedRank}${rankCleaned}`;
     }
 
-    // C. 判定同姓逻辑
+    // 3. 判定同姓逻辑（用于同姓外戚）
     const computedTargetSurname = targetSurname || name.trim().charAt(0);
     const isSameSurname = mySurname !== "" && computedTargetSurname !== "" && mySurname === computedTargetSurname;
     if (lineageSide === 'maternal' && isSameSurname) {
-      if (!correctedRel.includes('(母家同姓)')) correctedRel += '(母家同姓)';
+      if (!finalRel.includes('(母家同姓)')) finalRel += '(母家同姓)';
     }
 
-    // D. 变量闭环：将纠偏后的结果锁定
-    const relationshipToStore = correctedRel;
+    const relationshipToStore = finalRel;
     const side = lineageSide || 'paternal';
+
+    // 4. 角色角色(Standard Role)强制锁定：防止 deduceRole 误判导致颜色错误
+    let finalRole = deduceRole(relationshipToStore);
+    if (connectorNode === 'sibling') {
+      finalRole = gender === 'female' ? 'sister' : 'brother';
+    } else if (connectorNode === 'father' && gender !== 'female') {
+      finalRole = 'uncle_paternal';
+    } else if (connectorNode === 'mother' && gender === 'female') {
+      finalRole = 'aunt_maternal';
+    }
+
     const currentLogicTag = getLogicTag(
       side as 'paternal' | 'maternal',
       connectorNode as string,
@@ -318,7 +335,6 @@ export const AddMemberPage: React.FC = () => {
       isSameSurname
     );
 
-    // E. 代际自动推导
     const myGen = currentUser?.generationNum ?? 30;
     let targetGen = myGen;
     if (connectorNode === 'father' || connectorNode === 'mother') targetGen = myGen - 1;
@@ -326,31 +342,17 @@ export const AddMemberPage: React.FC = () => {
     else if (['child_p', 'child_m'].includes(connectorNode!)) targetGen = myGen + 1;
     else targetGen = myGen;
 
-    // 💡 核心修复：强制重采样标准角色 (Standard Role)
-    let deducedRole = deduceRole(relationshipToStore);
-    if (connectorNode === 'sibling') {
-      // 如果路径是亲兄弟姐妹，强制设定角色，不信任字符串匹配
-      deducedRole = gender === 'female' ? 'sister' : 'brother';
-    } else if (connectorNode === 'father' || connectorNode === 'grandfather') {
-      // 增加父系长辈角色判定兜底
-      if (deducedRole === 'family' || deducedRole === 'cousin') {
-        deducedRole = gender === 'female' ? 'aunt_paternal' : 'uncle_paternal';
-      }
-    }
     setIsSubmitting(true);
     let currentParentId = parentId;
 
-    // 严谨：如果启用了虚拟父辈创建 (即没有在现有列表中选到父辈)
+    // 虚拟父辈创建逻辑 (保持完整)
     if ((isCreatingVirtualParent || (safetyStep === 'ask' && !parentId)) && !currentParentId) {
       try {
         const isMaternalSide = lineageSide === 'maternal';
         let baseRel = isMaternalSide ? "姨/舅" : "伯/叔";
         if (kinshipType === 'affinal') baseRel = isMaternalSide ? "表外祖/姻亲长辈" : "族亲长辈";
-
-        // 组合具体的虚拟父辈名称
         let finalVirtualName = virtualParentName.trim() || `${name}的父辈`;
         if (kinshipType === 'blood' && connectingRank && connectingRank !== '无') {
-          // 如果是血亲且指明了排行，自动修正名字为温情的称谓
           if (isMaternalSide) {
             finalVirtualName = relationship.includes("舅") ? `${connectingRank}舅` : `${connectingRank}姨`;
           } else {
@@ -359,7 +361,6 @@ export const AddMemberPage: React.FC = () => {
         } else if (kinshipType === 'blood') {
           finalVirtualName = isMaternalSide ? (relationship.includes("舅") ? "舅舅" : "阿姨") : "叔伯";
         }
-
         const genNum = (currentUser.generationNum || 30) - 1;
         const vResponse = await fetch("/api/family-members", {
           method: "POST",
@@ -373,7 +374,6 @@ export const AddMemberPage: React.FC = () => {
             memberType: 'virtual',
             is_placeholder: true,
             generationNum: genNum,
-            // 房头锚定：如果指明了排行，则直接确定房头
             ancestralHall: connectingRank && connectingRank !== '无'
               ? `${connectingRank}房`
               : (finalVirtualName.includes("二") ? "二房" : finalVirtualName.includes("大") ? "大房" : null)
@@ -400,7 +400,7 @@ export const AddMemberPage: React.FC = () => {
           birthDate,
           familyId,
           createdByMemberId,
-          standardRole: deducedRole,
+          standardRole: finalRole,
           gender,
           memberType,
           fatherId: currentParentId,
@@ -409,7 +409,7 @@ export const AddMemberPage: React.FC = () => {
           surname: computedTargetSurname,
           generationNum: targetGen,
           generation_num: targetGen,
-          ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null)),
+          ancestralHall: (selectedRank && selectedRank !== '无' ? `${selectedRank}房` : (parent?.ancestralHall || null)),
           logicTag: currentLogicTag
         })
       });
@@ -427,7 +427,7 @@ export const AddMemberPage: React.FC = () => {
           bio: "",
           birthDate,
           isRegistered: false,
-          standardRole: deducedRole,
+          standardRole: finalRole,
           createdByMemberId: currentUser?.memberId,
           gender,
           memberType,
