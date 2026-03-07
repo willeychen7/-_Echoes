@@ -6,7 +6,7 @@
 // 基于衔接点的快捷建议表
 export const CONNECTOR_SUGGESTIONS: Record<string, string[]> = {
     'father': ['叔叔', '伯伯', '姑姑'],
-    'grandfather': ['伯公', '叔公', '姑婆', '堂伯', '堂叔'],
+    'grandfather': ['伯公', '叔公', '姑婆', '婶婆', '伯婆', '堂伯', '堂叔'],
     'grandmother': ['舅公', '姨婆', '堂舅公', '堂姨婆'],
     'sibling': ['哥哥', '弟弟', '姐姐', '妹妹'], // 亲兄弟姐妹
     'self_p': ['堂哥', '堂弟', '堂姐', '堂妹'], // 父系堂亲
