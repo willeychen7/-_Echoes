@@ -200,20 +200,60 @@ export function generateSmartLayout(members: any[]) {
 
     // 内部帮助函数：提取数字化的房分权重排序
     const getRankIndex = (tag: string) => {
-        const match = tag.match(/-o(大|一|二|三|四|五|六|七|八|九|十|小|幺|老)$/);
+        const match = tag.match(/-o(二十|十一|十二|十三|十四|十五|十六|十七|十八|十九|一|二|三|四|五|六|七|八|九|十|大|小|幺|老)$/);
         if (!match) return 0;
         const rankMap: Record<string, number> = {
             '大': 1, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
             '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
             '十一': 11, '十二': 12, '十三': 13, '十四': 14, '十五': 15,
             '十六': 16, '十七': 17, '十八': 18, '十九': 19, '二十': 20,
-            '小': 21, '幺': 21, '老': 21
+            '小': 98, '幺': 98, '老': 99
         };
         return rankMap[match[1]] || 1;
     };
 
-    // 注入排序预处理辅助字段
-    const parsedMembers = members.map(m => {
+    /**
+     * 核心提升：虚拟节点补全 (Ghost Nodes)
+     */
+    function injectGhostNodes(rawMembers: any[]) {
+        const existingTags = new Set(rawMembers.map(m => m.logicTag || m.logic_tag || ""));
+        const ghosts: any[] = [];
+
+        rawMembers.forEach(m => {
+            const tag = m.logicTag || m.logic_tag || "";
+            if (!tag) return;
+
+            const parts = tag.split('-');
+            if (parts.length > 1) {
+                const side = parts[0];
+                const pathSegments = parts[1].split(',');
+                if (pathSegments.length > 1) {
+                    const parentPath = pathSegments.slice(0, -1).join(',');
+                    const ghostTag = `${side}-${parentPath}`;
+
+                    if (!existingTags.has(ghostTag)) {
+                        const ghostName = parentPath.endsWith('f') ? "（父辈占位）" : "（母辈占位）";
+                        ghosts.push({
+                            id: `ghost-${ghostTag}`,
+                            name: ghostName,
+                            logicTag: ghostTag,
+                            memberType: 'virtual',
+                            isGhost: true,
+                            gender: parentPath.endsWith('f') ? 'male' : 'female'
+                        });
+                        existingTags.add(ghostTag);
+                    }
+                }
+            }
+        });
+        return [...rawMembers, ...ghosts];
+    }
+
+    // 1. 注入虚位
+    const enrichedMembers = injectGhostNodes(members);
+
+    // 2. 注入排序预处理辅助字段
+    const parsedMembers = enrichedMembers.map(m => {
         const tag = m.logicTag || m.logic_tag || "";
         const fallbackSide = m.originSide === 'maternal' || m.origin_side === 'maternal' ? 'maternal' :
             (m.originSide === 'paternal' || m.origin_side === 'paternal' ? 'paternal' : 'unknown');
@@ -227,7 +267,7 @@ export function generateSmartLayout(members: any[]) {
         };
     });
 
-    // 按代际和方位分组，实现“地皮”动态延展
+    // 按代际和方位分组
     const grouped: Record<string, any[]> = {};
     parsedMembers.forEach(m => {
         const key = `${m._side}_${m._gen}`;
@@ -240,46 +280,51 @@ export function generateSmartLayout(members: any[]) {
     // 为每个分组分别计算居中对齐的防碰撞X轴坐标
     Object.keys(grouped).forEach(key => {
         const group = grouped[key];
-
-        // 分组内排序规则：先看长幼排位(大中小)，再看具体分支(堂系vs亲系)
         group.sort((a, b) => {
             if (a._rank !== b._rank) return a._rank - b._rank;
-            return a._rawTag.localeCompare(b._rawTag); // 将带有相同tag分支的人紧贴排在一起
+            return a._rawTag.localeCompare(b._rawTag);
         });
 
         const isPaternal = key.startsWith('paternal');
         const isMaternal = key.startsWith('maternal');
         const gen = parseInt(key.split('_')[1]);
 
-        // 计算该层级/阵营需要的总横向长度
-        const count = group.length;
-        const totalWidth = (count - 1) * MIN_NODE_GAP;
+        let currentXOffset = 0;
+        const gaps: number[] = [0];
+
+        for (let i = 1; i < group.length; i++) {
+            const prev = group[i - 1];
+            const curr = group[i];
+            let gap = MIN_NODE_GAP;
+            if (prev.fatherId && curr.fatherId && prev.fatherId === curr.fatherId) gap = 85;
+            else if (prev.ancestralHall && curr.ancestralHall && prev.ancestralHall === curr.ancestralHall) gap = 140;
+            else gap = 200;
+            currentXOffset += gap;
+            gaps.push(currentXOffset);
+        }
+
+        const totalWidth = currentXOffset;
 
         group.forEach((m, index) => {
             let x = CENTER_X;
             let y = START_Y + (gen + 1) * LEVEL_HEIGHT;
-
-            // 特殊排斥标记 (!S) -> 追加向外侧的额外推移距离
             const extraRepulsion = m._rawTag.includes('!S') ? 160 : 0;
 
             if (gen === 99) {
-                // 没有Tag的随意发配到底部或周边
                 x = CENTER_X + (Math.random() * 800 - 400);
                 y = START_Y + 4 * LEVEL_HEIGHT + Math.random() * 100;
             } else {
-                // 弹性分布：基于中心偏移，向两端蔓延
                 if (isPaternal) {
                     const centerX = CENTER_X - SIDE_OFFSET;
-                    x = centerX - (totalWidth / 2) + index * MIN_NODE_GAP - extraRepulsion;
+                    x = centerX - (totalWidth / 2) + gaps[index] - extraRepulsion;
                 } else if (isMaternal) {
                     const centerX = CENTER_X + SIDE_OFFSET;
-                    x = centerX - (totalWidth / 2) + index * MIN_NODE_GAP + extraRepulsion;
+                    x = centerX - (totalWidth / 2) + gaps[index] + extraRepulsion;
                 } else {
-                    x = CENTER_X - (totalWidth / 2) + index * MIN_NODE_GAP;
+                    x = CENTER_X - (totalWidth / 2) + gaps[index];
                 }
             }
 
-            // 清理辅助字段，推入结果
             const { _gen, _side, _rank, _rawTag, ...cleanMember } = m;
             finalMembers.push({
                 ...cleanMember,
