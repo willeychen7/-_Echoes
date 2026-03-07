@@ -326,7 +326,17 @@ export const AddMemberPage: React.FC = () => {
     else if (['child_p', 'child_m'].includes(connectorNode!)) targetGen = myGen + 1;
     else targetGen = myGen;
 
-    const deducedRole = deduceRole(relationshipToStore);
+    // 💡 核心修复：强制重采样标准角色 (Standard Role)
+    let deducedRole = deduceRole(relationshipToStore);
+    if (connectorNode === 'sibling') {
+      // 如果路径是亲兄弟姐妹，强制设定角色，不信任字符串匹配
+      deducedRole = gender === 'female' ? 'sister' : 'brother';
+    } else if (connectorNode === 'father' || connectorNode === 'grandfather') {
+      // 增加父系长辈角色判定兜底
+      if (deducedRole === 'family' || deducedRole === 'cousin') {
+        deducedRole = gender === 'female' ? 'aunt_paternal' : 'uncle_paternal';
+      }
+    }
     setIsSubmitting(true);
     let currentParentId = parentId;
 
