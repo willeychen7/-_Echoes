@@ -290,11 +290,28 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
     if (!vNode || !tNode) return null;
     const rel = getRigorousRelationship(vNode, tNode, members);
     const type = getRelationType(rel);
+
+    // 获取房头信息 (如：大房)
+    const hall = tNode.ancestralHall || tNode.ancestral_hall || "";
+    const hallSuffix = hall ? ` · ${hall}` : "";
+
     if (type === 'social') return "【友】";
-    if (type === 'affinal') return "【姻】";
+    if (type === 'affinal') return `【姻】${hallSuffix}`;
+
     const tTag = (tNode.logicTag || tNode.logic_tag || "").toString().toUpperCase();
-    if (tTag.startsWith('[F]')) return "【宗亲】";
-    if (tTag.startsWith('[M]')) return "【外戚】";
+
+    // 🚀 核心判定：判定是否为“至亲”
+    // 直系定义：父母(f,m)、亲手足(sib)、儿女(s,d)、以及两代以内的直系祖辈(f,f / f,m / m,f / m,m)
+    const corePath = tTag.replace(/^\[[FM]\](!S)?-/, '').split('-O')[0].toLowerCase();
+    const directPaths = ['f', 'm', 'sib', 's', 'd', 'f,f', 'f,m', 'm,f', 'm,m'];
+
+    if (directPaths.includes(corePath) || corePath === 'self' || rel === '父亲' || rel === '母亲') {
+        return "【至亲】";
+    }
+
+    if (tTag.startsWith('[F]')) return `【宗亲】${hallSuffix}`;
+    if (tTag.startsWith('[M]')) return `【外戚】${hallSuffix}`;
+
     return "【血亲】";
 }
 
