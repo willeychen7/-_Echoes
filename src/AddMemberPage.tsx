@@ -279,6 +279,12 @@ export const AddMemberPage: React.FC = () => {
 
     const side = lineageSide || 'paternal';
     const computedTargetSurname = targetSurname || name.trim().charAt(0);
+    const myGen = currentUser?.generationNum ?? 30;
+    let targetGen = myGen;
+    if (connectorNode === 'father' || connectorNode === 'mother') targetGen = myGen - 1;
+    else if (connectorNode === 'grandfather' || connectorNode === 'grandmother' || connectorNode === 'm_grandfather' || connectorNode === 'm_grandmother') targetGen = myGen - 2;
+    else if (connectorNode === 'child_p' || connectorNode === 'child_m') targetGen = myGen + 1;
+
 
     // 智能打标签：如果是母系但恰好同姓，加个逻辑补丁
     if (side === 'maternal' && mySurname && computedTargetSurname && mySurname === computedTargetSurname) {
@@ -361,6 +367,8 @@ export const AddMemberPage: React.FC = () => {
           originSide: side,
           origin_side: side,
           surname: computedTargetSurname,
+          generationNum: targetGen,
+          generation_num: targetGen,
           ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null)),
           logicTag: currentLogicTag
         })
@@ -387,6 +395,8 @@ export const AddMemberPage: React.FC = () => {
           originSide: side,
           origin_side: side,
           surname: computedTargetSurname,
+          generationNum: targetGen,
+          generation_num: targetGen,
           ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null)),
           logicTag: currentLogicTag
         });
