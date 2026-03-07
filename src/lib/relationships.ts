@@ -401,12 +401,15 @@ export function isClan(vNode: any, tNode: any, currentSide?: 'paternal' | 'mater
     if (tSide === 'paternal') return true;
 
     // 4. 衔接点判定：如果是亲兄弟姐妹路径，必定属于宗亲范畴
-    if (tTag.includes('SIB') || tTag.includes('LOGIC:SIB')) return true;
+    if (tTag.includes('SIB') || tTag.includes('LOGIC:SIB') || tTag.includes('-X')) return true;
 
     // 5. 姓氏兜底
     if (vNode.surname && tNode.surname && vNode.surname.trim() !== "" && tNode.surname.trim() !== "") {
         return vNode.surname === tNode.surname;
     }
+
+    // 6. 最后的兜底：如果关系词本身包含“堂”，且没有明确的母系标记
+    if (tNode.relationship && tNode.relationship.includes('堂') && !tTag.includes('[M]')) return true;
 
     return false;
 }
@@ -521,721 +524,207 @@ function computeRigorousRelationship(
 ): string {
     try {
         if (depth > 2) return target?.relationship || "家人";
-        if (vId === tId) return "我";
+        if (vId === tId) return "本人";
 
         const vNode = ctx.membersMap.get(vId);
         const tNode = ctx.membersMap.get(tId);
         if (!vNode || !tNode) return target?.relationship || "家人";
 
-        // --- 【关键修正点】物种隔离拦截器 ---
-        const isPet = tNode.memberType === 'pet' ||
-            tNode.type === 'pet' ||
-            tNode.standardRole === 'pet' ||
-            tNode.relationship === '宠物';
-
+        // --- 1. 物种隔离拦截器 ---
+        const isPet = tNode.memberType === 'pet' || tNode.type === 'pet' || tNode.standardRole === 'pet' || tNode.relationship === '宠物';
         if (isPet) {
-            // 找到主人的逻辑：优先找 fatherId（挂载在谁名下），没有则找创建者
             const ownerId = tNode.fatherId || tNode.createdByMemberId;
             const owner = members.find(m => Number(m.id) === Number(ownerId));
-
-            // 场景 A：我是主人
             if (vId && owner && Number(owner.id) === vId) {
                 const petSuffix = tNode.gender === 'female' ? "毛女儿" : "毛儿子";
-                // 显示：旺财 (毛儿子)
                 return tNode.name ? `${tNode.name} (${petSuffix})` : petSuffix;
             }
-
-            // 场景 B：别人是主人（二爸家的旺财）
             if (owner) {
-                // 递归计算我叫主人什么
                 const ownerTitle = getRigorousRelationship(vNode, owner, members, depth + 1);
                 const cleanOwnerTitle = getCleanRelationship(ownerTitle);
-                // 显示：二爸家的旺财 或 堂姐家的宝贝
                 return `${cleanOwnerTitle}家的${tNode.name || '宝贝'}`;
             }
-
             return tNode.name || "家族萌宠";
         }
 
-        // --- 严谨比对辅助函数 ---
         const eq = (a: any, b: any) => a && b && Number(a) === Number(b);
+        const isFem = isFemale(tNode);
+        const prefix = getRankPrefix(tNode, members);
 
-        // --- 闽系核心：昭穆（代数）判定逻辑 ---
-        const vNodeMap = ctx.membersMap.get(vId) || vNode;
-        const tNodeMap = ctx.membersMap.get(tId) || tNode;
+        // --- 2. 坐标解析 (Logic Tag First) ---
+        const rawVTag = (vNode.logicTag || vNode.logic_tag || "").toString().toUpperCase();
+        const rawTTag = (tNode.logicTag || tNode.logic_tag || "").toString().toUpperCase();
+        const cleanTTag = rawTTag.replace(/^\[[FM]\](\!S)?-/, '');
+        const cleanVTag = rawVTag.replace(/^\[[FM]\](\!S)?-/, '');
 
-        // 🚀 核心重构：名分锁定与直系判定 (Identity & Direct Bloodline First)
-        // 在所有算法推导之前，物理 ID 的连接是最高真理
-        const rawRel = (tNodeMap.relationship || target.relationship || "").trim();
-        const sRole = (tNodeMap.standardRole || tNodeMap.standard_role || "").toString().toLowerCase();
+        const getTagLevel = (tag: string) => {
+            const path = tag.replace(/^\[[FM]\](\!S)?-/, '').split('-O')[0].toLowerCase();
+            if (path.includes('self')) return 0;
+            if (path === 'sib' || path === 'x' || path === 'x,m') return 0;
+            if (path.startsWith('s')) return -(path.split(',').length);
+            if (!path) return 0;
+            return path.split(',').length;
+        };
 
-        // 1. 本人判定
-        if (eq(vId, tId)) return "本人";
+        const vLevel = getTagLevel(rawVTag);
+        const tLevel = getTagLevel(rawTTag);
+        let tagGenDiff = vLevel - tLevel;
 
-        // 2. 直系向上 (父母)
-        if (eq(tId, vNodeMap.fatherId)) return "爸爸";
-        if (eq(tId, vNodeMap.motherId)) return "妈妈";
+        // --- 3. 逻辑坐标绝对优先 (Tag-to-Tag Algebra) ---
+        if (rawVTag && rawTTag) {
+            if (rawVTag.includes('SELF') || !rawTTag.includes('SELF')) {
+                const parts = cleanTTag.split('-O');
+                const pathOnly = parts[0].toLowerCase();
+                const rankStr = parts[1] || "";
 
-        // 3. 直系向下 (子女)
-        if (eq(vId, tNode.fatherId) || eq(vId, tNode.motherId)) {
-            return isFemale(tNode) ? "女儿" : "儿子";
-        }
-
-        // 4. 直系向上 (祖辈)
-        const vfId = vNode.fatherId;
-        const vmId = vNode.motherId;
-        if (vfId) {
-            const vffId = ctx.membersMap.get(Number(vfId))?.fatherId;
-            const vfmId = ctx.membersMap.get(Number(vfId))?.motherId;
-            if (eq(tId, vffId)) return "爷爷";
-            if (eq(tId, vfmId)) return "奶奶";
-        }
-        if (vmId) {
-            const vmfId = ctx.membersMap.get(Number(vmId))?.fatherId;
-            const vmmId = ctx.membersMap.get(Number(vmId))?.motherId;
-            if (eq(tId, vmfId)) return "外公";
-            if (eq(tId, vmmId)) return "外婆";
-        }
-
-        // --- 🚀 坐标 Hub: 逻辑路径绝对优先 (Logic Path Hub) ---
-        // 如果数据库 ID 链接缺失，物理路径标识符是最强证据
-        const rawTag = tNode.logicTag || tNode.logic_tag || target.logicTag || target.logic_tag || "";
-        const tTag = rawTag.toString().toUpperCase();
-        const cleanTag = tTag.replace(/^\[[FM]\](\!S)?-/, ''); // 提取核心路径，如 f,f 或 sib
-
-        if (cleanTag === 'F') return isFemale(tNode) ? "妈妈" : "爸爸";
-        if (cleanTag === 'M') return isFemale(tNode) ? "妈妈" : "爸爸";
-        if (cleanTag.startsWith('F,F')) return isFemale(tNode) ? "奶奶" : "爷爷";
-        if (cleanTag.startsWith('M,F')) return isFemale(tNode) ? "外婆" : "外公";
-        if (cleanTag.startsWith('M,M')) return isFemale(tNode) ? "外婆" : "外公";
-        if (cleanTag.startsWith('F,M')) return isFemale(tNode) ? "奶奶" : "爷爷";
-
-        // --- 闽系核心：昭穆（代数）判定逻辑 ---
-        const vGen = vNode.generationNum ?? vNode.generation_num ?? 30;
-        const tGen = tNode.generationNum ?? tNode.generation_num ?? 30;
-
-        if (true) {
-            let genDiff = vGen - tGen; // V相对于T的代差
-
-            // 🚀 代际纠偏强制对冲 (Generation Correction)
-            if (tTag) {
-                if (tTag.includes('F,F') || tTag.includes('M,M') || tTag.includes('M,F') || tTag.includes('F,M')) {
-                    genDiff = 2;
-                } else if (tTag.includes('SIB') || tTag.includes('SELF') || tTag.includes('-X')) {
-                    genDiff = 0;
-                } else if (tTag.includes('-F') || tTag.includes('-M')) {
-                    if (!tTag.includes(',')) genDiff = 1;
-                    else if (tTag.split('-')[1]?.split(',').length === 2) genDiff = 2;
-                } else if (tTag.includes('-S') || tTag.includes('CHILD')) {
-                    genDiff = -1;
+                if (tagGenDiff === -1) {
+                    if (pathOnly === 'f') {
+                        if (!rankStr && !tNode.is_ghost) return "爸爸";
+                        if (isFem) return `${prefix}姑姑`;
+                        const fNode = vNode.fatherId ? ctx.membersMap.get(Number(vNode.fatherId)) : null;
+                        const fDate = fNode?.birthDate || fNode?.birth_date || "9999-99-99";
+                        const tDate = tNode.birthDate || tNode.birth_date || "9999-99-99";
+                        if (prefix === '大' || (tDate < fDate && fDate !== "9999-99-99")) return "大伯";
+                        return `${prefix}叔叔`;
+                    }
+                    if (pathOnly === 'm') {
+                        if (!rankStr && !tNode.is_ghost) return "妈妈";
+                        return isFem ? `${prefix}姨妈` : `${prefix}舅舅`;
+                    }
                 }
-            }
-
-            // 如果是同代 (0: 同辈)
-            if (genDiff === 0 && (vId !== tId)) {
-                // 1. 亲兄弟判定：多重证据链
-                const hasSibTag = tTag.includes("SIB");
-                const hasSibText = /(哥|姐|弟|妹)/.test(rawRel) && !rawRel.includes('表') && !rawRel.includes('堂');
-                const hasSibRole = (sRole === 'brother' || sRole === 'sister');
-
-                const isRealSibling = hasSibTag || hasSibRole || hasSibText ||
-                    (vNodeMap.fatherId && eq(vNodeMap.fatherId, tNodeMap.fatherId)) ||
-                    (vNodeMap.motherId && eq(vNodeMap.motherId, tNodeMap.motherId));
-
-                // 2. 宗亲判定：如果 tag 包含 [F]，或者 sRole 属于父系，或者 isClan 返回 true
-                const getFId = (id: any) => ctx.membersMap.get(Number(id))?.fatherId;
-                const vGFId = getFId(vNodeMap.fatherId);
-                const tGFId = getFId(tNodeMap.fatherId);
-                const isPaternalCousin = vGFId && tGFId && eq(vGFId, tGFId);
-
-                const isTagClan = tTag.startsWith("[F]") && !tTag.includes("F,M");
-                const isRoleClan = ['brother', 'sister', 'father', 'grandfather_paternal', 'grandmother_paternal', 'uncle_paternal', 'aunt_paternal'].includes(sRole);
-                const isClanResult = tTag.includes('[M]') ? false : isClan(vNodeMap, tNodeMap);
-                const clan = isTagClan || isRoleClan || isClanResult || isPaternalCousin;
-
-                const prefix = getRankPrefix(tNode, members);
-
-                if (isRealSibling) {
+                if (tagGenDiff === -2) {
+                    if (pathOnly === 'f,f' || pathOnly === 'f,m') {
+                        if (!rankStr && !tNode.is_ghost && pathOnly === 'f,f') return "爷爷";
+                        if (!rankStr && !tNode.is_ghost && pathOnly === 'f,m') return "奶奶";
+                        return isFem ? `${prefix}姑婆` : `${prefix}叔公`;
+                    }
+                    if (pathOnly === 'm,f' || pathOnly === 'm,m') {
+                        if (!rankStr && !tNode.is_ghost && pathOnly === 'm,f') return "外公";
+                        if (!rankStr && !tNode.is_ghost && pathOnly === 'm,m') return "外婆";
+                        return isFem ? `${prefix}姨婆` : `${prefix}舅公`;
+                    }
+                }
+                if (tagGenDiff === 0) {
                     const vDate = vNode.birthDate || vNode.birth_date || "9999-99-99";
                     const tDate = tNode.birthDate || tNode.birth_date || "9999-99-99";
                     let isOlder = tDate < vDate;
-
                     if (vDate === tDate) {
-                        const rel = tNode.relationship || "";
-                        if (rel.includes("哥") || rel.includes("姐") || rel.includes("兄")) isOlder = true;
-                        if (rel.includes("弟") || rel.includes("妹")) isOlder = false;
+                        const rel = (tNode.relationship || "").trim();
+                        if (rel.includes("哥") || rel.includes("兄") || rel.includes("姐")) isOlder = true;
                     }
-
-                    if (tNode.gender === "female") {
-                        return isOlder ? `${prefix}姐姐` : `${prefix}妹妹`;
-                    } else {
+                    if (pathOnly === 'sib') {
+                        if (isFem) return isOlder ? `${prefix}姐姐` : `${prefix}妹妹`;
                         return isOlder ? `${prefix}哥哥` : `${prefix}弟弟`;
                     }
-                }
-
-                // 🚀 核心纠偏：只要 logicTag 以 [F] 开头，或是 originSide 为 paternal，强制视为宗亲或父系表亲
-                if (clan) {
-                    const vDate = vNode.birthDate || vNode.birth_date || "9999-99-99";
-                    const tDate = tNode.birthDate || tNode.birth_date || "9999-99-99";
-                    let isOlder = tDate < vDate;
-
-                    if (vDate === tDate) {
-                        const rel = tNode.relationship || "";
-                        if (rel.includes("哥") || rel.includes("姐") || rel.includes("兄")) isOlder = true;
-                        if (rel.includes("弟") || rel.includes("妹")) isOlder = false;
-                    }
-
-                    if (tNode.gender === "female") {
-                        return isOlder ? `${prefix}堂姐` : `${prefix}堂妹`;
-                    } else {
+                    if (pathOnly === 'x') {
+                        if (isFem) return isOlder ? `${prefix}堂姐` : `${prefix}堂妹`;
                         return isOlder ? `${prefix}堂哥` : `${prefix}堂弟`;
                     }
-                } else {
-                    // 只有在 logicTag 缺失或明确 [M] 侧时才走表亲逻辑
-                    const vDate = vNode.birthDate || vNode.birth_date || "9999-99-99";
-                    const tDate = tNode.birthDate || tNode.birth_date || "9999-99-99";
-                    let isOlder = tDate < vDate;
-
-                    if (vDate === tDate) {
-                        const rel = tNode.relationship || "";
-                        if (rel.includes("哥") || rel.includes("姐") || rel.includes("兄")) isOlder = true;
-                        if (rel.includes("弟") || rel.includes("妹")) isOlder = false;
-                    }
-
-                    if (tNode.gender === "female") {
-                        return isOlder ? `${prefix}表姐` : `${prefix}表妹`;
-                    } else {
+                    if (pathOnly === 'x,m') {
+                        if (isFem) return isOlder ? `${prefix}表姐` : `${prefix}表妹`;
                         return isOlder ? `${prefix}表哥` : `${prefix}表弟`;
                     }
                 }
+                if (tagGenDiff === 1) {
+                    if (pathOnly === 's') return isFem ? `${prefix}侄女` : `${prefix}侄子`;
+                    if (pathOnly === 's,m') return isFem ? `${prefix}外甥女` : `${prefix}外甥`;
+                }
+                // 深层代际支持
+                if (tagGenDiff === -3) {
+                    if (pathOnly.startsWith('f,f,f')) return isFem ? `${prefix}曾祖母` : `${prefix}曾祖父`;
+                    return isFem ? `${prefix}外曾祖母` : `${prefix}外曾祖父`;
+                }
+                if (tagGenDiff === -4) return isFem ? `${prefix}高祖母` : `${prefix}高祖父`;
+                if (tagGenDiff === 2) return isFem ? `${prefix}孙女` : `${prefix}孙子`;
             }
 
-            // 如果长一辈 (1: 对象是我的长辈)
-            if (genDiff === 1) {
-                const tTag = tNode.logicTag || tNode.logic_tag || "";
-                const clan = tTag.includes('[M]') ? false : isClan(vNode, tNode);
-                const prefix = getRankPrefix(tNode, members);
-                const getFId = (id: any) => members.find(m => eq(m.id, id))?.fatherId;
-                const vfId = vNode.fatherId;
-                const isRealFatherSibling = vfId && tNode.fatherId && eq(getFId(vfId), tNode.fatherId);
-
-                // DEBUG LOG
-                if (vNode.name.includes("K") || tNode.name.includes("阿妹")) {
-                    console.log(`[DEBUG:REL] ${vNode.name} -> ${tNode.name}: isFemale=${isFemale(tNode)}, genDiff=${genDiff}`);
-                }
-
-                if (clan) {
-                    if (isRealFatherSibling) {
-                        if (isFemale(tNode)) return `${prefix}姑姑`;
-                        const fNode = ctx.membersMap.get(Number(vfId));
-                        const fDate = fNode?.birthDate || fNode?.birth_date || "9999-99-99";
-                        const tDate = tNode?.birth_date || tNode?.birthDate || "9999-99-99";
-                        return tDate < fDate ? `${prefix}伯伯` : `${prefix}叔叔`;
-                    } else {
-                        // 堂系：也需要比对父亲生日
-                        const fNode = ctx.membersMap.get(Number(vfId));
-                        const fDate = fNode?.birthDate || fNode?.birth_date || "9999-99-99";
-                        const tDate = tNode?.birth_date || tNode?.birthDate || "9999-99-99";
-                        if (isFemale(tNode)) return `${prefix}堂姑`;
-                        return tDate < fDate ? `${prefix}堂伯` : `${prefix}堂叔`;
-                    }
-                } else {
-                    return isFemale(tNode) ? `${prefix}姨妈` : `${prefix}舅舅`;
-                }
-            }
-
-            if (genDiff === 2) {
-                const clan = isClan(vNode, tNode);
-                const prefix = getRankPrefix(tNode, members);
-
-                // 🚀 核心补强：即使 ID 链接断了，如果标签是 f,f 且没有排行，也该是爷爷
-                if (cleanTag === 'F,F') return isFemale(tNode) ? "奶奶" : "爷爷";
-                if (cleanTag === 'M,F' || cleanTag === 'M,M' || cleanTag === 'F,M') {
-                    if (isFemale(tNode)) return cleanTag.includes('M,M') ? "外婆" : "奶奶";
-                    return cleanTag.includes('M,F') ? "外公" : "爷爷";
-                }
-
-                if (clan) {
-                    if (isFemale(tNode)) return `${prefix}姑婆`;
-                    // 对比亲爷爷的生日
-                    const vfId = vNode.fatherId;
-                    const vffId = ctx.membersMap.get(Number(vfId))?.fatherId;
-                    const vffNode = ctx.membersMap.get(Number(vffId));
-                    const vffDate = vffNode?.birthDate || vffNode?.birth_date || "9999-99-99";
-                    const tDate = tNode?.birth_date || tNode?.birthDate || "9999-99-99";
-                    return tDate < vffDate ? `${prefix}伯公` : `${prefix}叔公`;
-                }
-                return isFemale(tNode) ? `${prefix}姨婆` : `${prefix}舅公`;
-            }
-
-            if (genDiff === -1) {
-                const clan = isClan(vNode, tNode);
-                const prefix = getRankPrefix(tNode, members);
-                if (clan) {
-                    // 检查是否是我的亲兄弟姐妹的孩子
-                    const isRealSiblingChild = (tNode.fatherId && Array.from(ctx.membersMap.values()).some(m => eq(m.id, tNode.fatherId) && eq(m.fatherId, vNode.fatherId) && !eq(m.id, vId)));
-                    if (isRealSiblingChild) return isFemale(tNode) ? `${prefix}侄女` : `${prefix}侄子`;
-                    return isFemale(tNode) ? `${prefix}堂侄女` : `${prefix}堂侄子`;
-                }
-                return isFemale(tNode) ? `${prefix}表外甥女` : `${prefix}表外甥`;
-            }
-
-            if (genDiff === -2) {
-                const clan = isClan(vNode, tNode);
-                const prefix = getRankPrefix(tNode, members);
-                if (clan) {
-                    // 检查是否是我的亲兄弟姐妹的孙辈 (我的侄子/侄女的孩子)
-                    const tfId = tNode.fatherId;
-                    const tffId = ctx.membersMap.get(Number(tfId))?.fatherId;
-                    const isRealSiblingGrandChild = tffId && Array.from(ctx.membersMap.values()).some(m => eq(m.id, tffId) && eq(m.fatherId, vNode.fatherId) && !eq(m.id, vId));
-                    if (isRealSiblingGrandChild) return isFemale(tNode) ? `${prefix}侄孙女` : `${prefix}侄孙`;
-                    return isFemale(tNode) ? `${prefix}堂侄孙女` : `${prefix}堂侄孙`;
-                }
-                return isFemale(tNode) ? `${prefix}表外甥孙女` : `${prefix}表外甥孙`;
+            // B. Target 是本人 (SELF)，查询反向称谓
+            if (rawTTag.includes('SELF') && !rawVTag.includes('SELF')) {
+                const vPath = cleanVTag.split('-O')[0].toLowerCase();
+                if (vPath === 'f' || vPath === 'm') return isFem ? "女儿" : "儿子";
+                if (vPath === 'f,f' || vPath === 'f,m') return isFem ? "孙女" : "孙子";
+                if (vPath === 'm,f' || vPath === 'm,m') return isFem ? "外孙女" : "外孙";
+                if (vPath === 'sib' || vPath === 'x' || vPath === 'x,m') return isFem ? "姐妹/妹妹" : "兄弟/弟弟";
             }
         }
 
-        // 1. 直系父子
+        // --- 4. 传统 ID 链接逻辑 (ID-based Fallback) ---
         if (eq(tId, vNode.fatherId)) return "爸爸";
         if (eq(tId, vNode.motherId)) return "妈妈";
+        if (eq(vId, tNode.fatherId) || eq(vId, tNode.motherId)) return isFem ? "女儿" : "儿子";
 
-        // 2. 直系子女
-        if (eq(vId, tNode.fatherId) || eq(vId, tNode.motherId)) {
-            return isFemale(tNode) ? "女儿" : "儿子";
+        const vGen = vNode.generationNum ?? vNode.generation_num ?? 30;
+        const tGen = tNode.generationNum ?? tNode.generation_num ?? 30;
+        let genDiff = rawVTag && rawTTag ? tagGenDiff : (vGen - tGen);
+
+        if (genDiff === 0 && !eq(vId, tId)) {
+            const isSib = (vNode.fatherId && eq(vNode.fatherId, tNode.fatherId)) || (vNode.motherId && eq(vNode.motherId, tNode.motherId));
+            const vDate = vNode.birthDate || vNode.birth_date || "9999-99-99";
+            const tDate = tNode.birthDate || tNode.birth_date || "9999-99-99";
+            const isOlder = tDate < vDate;
+            if (isSib) {
+                if (isFem) return isOlder ? `${prefix}姐姐` : `${prefix}妹妹`;
+                return isOlder ? `${prefix}哥哥` : `${prefix}弟弟`;
+            }
+            if (isClan(vNode, tNode)) {
+                if (isFem) return isOlder ? `${prefix}堂姐` : `${prefix}堂妹`;
+                return isOlder ? `${prefix}堂哥` : `${prefix}堂弟`;
+            }
+            if (isFem) return isOlder ? `${prefix}表姐` : `${prefix}表妹`;
+            return isOlder ? `${prefix}表哥` : `${prefix}表弟`;
         }
 
-        // 3. 兄弟姐妹 (备用，如果代数缺失)
-        if ((vNode.fatherId && eq(vNode.fatherId, tNode.fatherId)) ||
-            (vNode.motherId && eq(vNode.motherId, tNode.motherId))) {
-            return isFemale(tNode) ? "姐/妹" : "哥/弟";
-        }
-
-        // 4. 祖孙 (向上两代)
-        const { fId: vf, mId: vm } = getParentIds(vId, members);
-        if (vf) {
-            const { fId: vff, mId: vfm } = getParentIds(vf, members);
-            if (eq(tId, vff)) return "爷爷";
-            if (eq(tId, vfm)) return "奶奶";
-        }
-        if (vm) {
-            const { fId: vmf, mId: vmm } = getParentIds(vm, members);
-            if (eq(tId, vmf)) return "外公";
-            if (eq(tId, vmm)) return "外婆";
-        }
-
-        // 5. 孙辈 (向下两代)
-        const { fId: tf, mId: tm } = getParentIds(tId, members);
-        if (tf) {
-            const { fId: tff, mId: tfm } = getParentIds(tf, members);
-            if (eq(tff, vId) || eq(tfm, vId)) return isFemale(tNode) ? "孙女" : "孙子";
-        }
-        if (tm) {
-            const { fId: tmf, mId: tmm } = getParentIds(tm, members);
-            if (eq(tmf, vId) || eq(tmm, vId)) return isFemale(tNode) ? "外孙女" : "外孙子";
-        }
-
-        // 6. 配偶 (基于共同子女推断)
-        const vIsSpouse = members.some(child =>
-            (eq(child.fatherId, vId) && eq(child.motherId, tId)) ||
-            (eq(child.motherId, vId) && eq(child.fatherId, tId))
-        );
-        if (vIsSpouse) return isFemale(tNode) ? "妻子" : "丈夫";
-
-        // 7. 舅舅/阿姨/叔叔/姑姑 (父母的兄弟姐妹 - 带排行)
-        if (vf) {
-            const { fId: vff, mId: vfm } = getParentIds(vf, members);
-            const fSiblings = members.filter(m => (vff && eq(m.fatherId, vff)) || (vfm && eq(m.motherId, vfm)));
-            if (fSiblings.some(s => eq(s.id, tId))) {
-                if (isFemale(tNode)) return "姑姑";
-                const fNode = members.find(m => eq(m.id, vf));
+        if (genDiff === -1) {
+            const vfId = vNode.fatherId;
+            const isPaternal = vfId && tNode.fatherId && eq(ctx.membersMap.get(Number(vfId))?.fatherId, tNode.fatherId);
+            if (isPaternal) {
+                if (isFem) return `${prefix}姑姑`;
+                const fNode = ctx.membersMap.get(Number(vfId));
                 const fDate = fNode?.birthDate || fNode?.birth_date || "9999-99-99";
-                const tDate = tNode?.birthDate || tNode?.birth_date || "9999-99-99";
-                if (fDate && tDate) {
-                    return tDate < fDate ? "伯伯" : "叔叔";
-                }
-                return "叔伯";
+                const tDate = tNode.birthDate || tNode.birth_date || "9999-99-99";
+                return (tDate < fDate) ? `${prefix}伯伯` : `${prefix}叔叔`;
             }
-        }
-        if (vm) {
-            const { fId: vmf, mId: vmm } = getParentIds(vm, members);
-            const mSiblings = members.filter(m => (vmf && eq(m.fatherId, vmf)) || (vmm && eq(m.motherId, vmm)));
-            if (mSiblings.some(s => eq(s.id, tId))) {
-                return isFemale(tNode) ? "阿姨" : "舅舅";
+            if (isClan(vNode, tNode)) {
+                return isFem ? `${prefix}堂姑` : `${prefix}堂叔`;
             }
+            return isFem ? `${prefix}姨妈` : `${prefix}舅舅`;
         }
 
-        // 8. 侄子/外甥 (兄弟姐妹的孩子)
-        const mySiblings = members.filter(m =>
-            !eq(m.id, vId) &&
-            ((vNode.fatherId && eq(m.fatherId, vNode.fatherId)) || (vNode.motherId && eq(m.motherId, vNode.motherId)))
-        );
-        if (mySiblings.some(s => eq(tNode.fatherId, s.id) || eq(tNode.motherId, s.id))) {
-            const clan = isClan(vNode, tNode);
-            return clan ? (isFemale(tNode) ? "亲侄女" : "亲侄子") : (isFemale(tNode) ? "外甥女" : "外甥");
+        if (genDiff === -2) {
+            if (isClan(vNode, tNode)) {
+                if (cleanTTag === 'F,F' || rawTTag.includes('爷爷')) return isFem ? "奶奶" : "爷爷";
+                return isFem ? `${prefix}姑婆` : `${prefix}叔公`;
+            }
+            if (cleanTTag === 'M,F' || cleanTTag === 'M,M') return isFem ? "外婆" : "外公";
+            return isFem ? `${prefix}姨婆` : `${prefix}舅公`;
         }
 
-        // --- 映射常量 ---
-        const inverseMap: Record<string, { male: string; female: string }> = {
-            "儿子": { male: "爸爸", female: "妈妈" },
-            "女儿": { male: "爸爸", female: "妈妈" },
-            "爸爸": { male: "儿子", female: "女儿" },
-            "妈妈": { male: "儿子", female: "女儿" },
-            "亲侄": { male: "亲伯/叔", female: "亲姑/婶" },
-            "亲外甥": { male: "舅舅", female: "阿姨" },
-            "侄子": { male: "伯伯/叔叔", female: "姑姑" },
-            "外甥": { male: "舅舅/姨丈", female: "阿姨/舅妈" },
-            "侄女": { male: "伯伯/叔叔", female: "姑姑" },
-            "外甥女": { male: "舅舅/姨丈", female: "阿姨/舅妈" },
-            "内侄": { male: "姑丈", female: "姑姑" },
-            "内侄女": { male: "姑丈", female: "姑姑" },
-            "孙子": { male: "爷爷/外公", female: "奶奶/外婆" },
-            "孙女": { male: "爷爷/外公", female: "奶奶/外婆" },
-            "曾孙": { male: "曾祖/外曾祖", female: "曾祖/外曾祖" },
-            "爷爷": { male: "孙子", female: "孙女" },
-            "奶奶": { male: "孙子", female: "孙女" },
-            "外公": { male: "外孙", female: "外孙女" },
-            "外婆": { male: "外孙", female: "外孙女" },
-            "公公": { male: "儿媳", female: "儿媳" },
-            "婆婆": { male: "儿媳", female: "儿媳" },
-            "岳父": { male: "女婿", female: "女婿" },
-            "岳母": { male: "女婿", female: "女婿" },
-            "丈夫": { male: "丈夫", female: "妻子" },
-            "妻子": { male: "丈夫", female: "妻子" },
-            "哥哥": { male: "弟弟", female: "妹妹" },
-            "弟弟": { male: "哥哥", female: "姐姐" },
-            "姐姐": { male: "弟弟", female: "妹妹" },
-            "妹妹": { male: "哥哥", female: "姐姐" },
-            "哥": { male: "弟弟", female: "妹妹" },
-            "弟": { male: "哥哥", female: "姐姐" },
-            "姐": { male: "弟弟", female: "妹妹" },
-            "妹": { male: "哥哥", female: "姐姐" },
-            "表哥": { male: "表弟", female: "表妹" },
-            "表弟": { male: "表哥", female: "表姐" },
-            "表姐": { male: "表弟", female: "表妹" },
-            "表妹": { male: "表哥", female: "表姐" },
-            "堂哥": { male: "堂弟", female: "堂妹" },
-            "堂弟": { male: "堂哥", female: "堂姐" },
-            "堂姐": { male: "堂弟", female: "堂妹" },
-            "堂妹": { male: "堂哥", female: "堂姐" },
-            "大伯": { male: "侄子", female: "侄女" },
-            "叔叔": { male: "侄子", female: "侄女" },
-            "伯伯": { male: "侄子", female: "侄女" },
-            "姑姑": { male: "内侄", female: "内侄女" },
-            "舅舅": { male: "外甥", female: "外甥女" },
-            "阿姨": { male: "外甥", female: "外甥女" },
-            "姨妈": { male: "外甥", female: "外甥女" },
-            "表伯": { male: "表侄子", female: "表侄女" },
-            "表叔": { male: "表侄子", female: "表侄女" },
-            "表姑": { male: "表侄子", female: "表侄女" },
-            "表阿姨": { male: "表外甥", female: "表外甥女" },
-            "表姨": { male: "表外甥", female: "表外甥女" },
-            "表舅": { male: "表外甥", female: "表外甥女" },
-            "堂阿姨": { male: "堂外甥", female: "堂外甥女" },
-            "堂舅": { male: "堂外甥", female: "堂外甥女" },
-            "表外甥": { male: "表舅", female: "表姨" },
-            "表外甥女": { male: "表舅", female: "表姨" },
-            "堂外甥": { male: "堂舅", female: "堂姨" },
-            "堂外甥女": { male: "堂舅", female: "堂姨" },
-            "表侄": { male: "表伯/表叔", female: "表姑" },
-            "表侄女": { male: "表伯/表叔", female: "表姑" },
-            "堂侄": { male: "堂伯/堂叔", female: "堂姑" },
-            "堂侄女": { male: "堂伯/堂叔", female: "堂姑" },
-        };
-
-        const spouseToViewerMap: Record<string, Record<string, string>> = {
-            "female": {
-                "爸爸": "公公", "妈妈": "婆婆", "哥哥": "大伯", "弟弟": "小叔", "姐姐": "大姑", "妹妹": "小姑",
-                "兄弟": "大伯/小叔", "姐妹": "大姑/小姑", "亲兄弟": "大伯/小叔", "亲姐妹": "大姑/小姑"
-            },
-            "male": {
-                "爸爸": "岳父", "妈妈": "岳母", "哥哥": "大舅子", "弟弟": "小舅子", "姐姐": "大姨子", "妹妹": "小姨子",
-                "兄弟": "大舅子/小舅子", "姐妹": "大姨子/小姨子", "亲兄弟": "大舅子/小舅子", "亲姐妹": "大舅子/小舅子"
-            }
-        };
-
-        const bridgeMap: Record<string, Record<string, string>> = {
-            "妈妈": { "儿子": "哥/弟", "女儿": "姐/妹", "孙子": "外甥/外甥女", "孙女": "外甥/外甥女" },
-            "爸爸": { "儿子": "哥/弟", "女儿": "姐/妹", "孙子": "侄子/侄女", "孙女": "侄子/侄女" },
-            "爷爷": { "兄弟": "伯公/叔公", "姐妹": "姑婆" },
-            "奶奶": { "兄弟": "舅公", "姐妹": "姨婆" },
-            "外公": { "兄弟": "舅公", "姐妹": "姨婆" },
-            "外婆": { "兄弟": "舅公", "姐妹": "姨婆" },
-            "曾祖父": { "儿子": "爷爷/外公" },
-            "伯公": { "儿子": "叔伯", "女儿": "姑姑" },
-            "叔公": { "儿子": "叔伯", "女儿": "姑姑" },
-            "舅公": { "儿子": "表叔/表伯", "女儿": "表姑" },
-            "姑婆": { "儿子": "表叔", "女儿": "表姑", "孙子": "表哥/弟/姐/妹", "孙女": "表哥/弟/姐/妹" },
-            "姨婆": { "儿子": "表叔", "女儿": "表姑" },
-            "亲伯": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
-            "亲叔": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
-            "亲姑": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姑父" },
-            "大伯": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "妻子": "伯母" },
-            "伯母": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
-            "伯伯": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "妻子": "伯母" },
-            "叔叔": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "妻子": "婶婶" },
-            "小叔": { "儿子": "堂哥/弟", "女儿": "堂姐/妹", "妻子": "婶婶" },
-            "婶婶": { "儿子": "堂哥/弟", "女儿": "堂姐/妹" },
-            "姑姑": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姑父" },
-            "堂哥": { "儿子": "堂侄", "女儿": "堂侄女", "妻子": "堂嫂" },
-            "堂弟": { "儿子": "堂侄", "女儿": "堂侄女", "妻子": "堂弟媳" },
-            "堂姐": { "儿子": "堂外甥", "女儿": "堂外甥女", "丈夫": "堂姐夫" },
-            "堂妹": { "儿子": "堂外甥", "女儿": "堂外甥女", "丈夫": "堂妹夫" },
-            "堂叔": { "儿子": "堂兄弟", "女儿": "堂姐妹", "妻子": "堂婶" },
-            "堂伯": { "儿子": "堂兄弟", "女儿": "堂姐妹", "妻子": "堂伯母" },
-            "亲兄弟": { "儿子": "亲侄", "女儿": "亲侄女", "孙子": "侄孙", "孙女": "侄孙女" },
-            "亲姐妹": { "儿子": "亲外甥", "女儿": "亲外甥女", "孙子": "外甥孙", "孙女": "外甥孙女" },
-            "亲兄弟姐妹": { "儿子": "亲侄/亲外甥", "女儿": "亲侄/亲外甥" },
-            "表哥": { "儿子": "表侄", "女儿": "表侄女", "妻子": "表嫂" },
-            "表弟": { "儿子": "表侄", "女儿": "表侄女", "妻子": "表弟媳" },
-            "表姐": { "儿子": "表外甥", "女儿": "表外甥女", "丈夫": "表姐夫" },
-            "表妹": { "儿子": "表外甥", "女儿": "表外甥女", "丈夫": "表妹夫" },
-            "表兄弟": { "儿子": "表侄", "女儿": "表侄女" },
-            "表姐妹": { "儿子": "表外甥", "女儿": "表外甥女" },
-            "表兄弟姐妹": { "儿子": "表侄/表外甥", "女儿": "表侄/表外甥" },
-            "表伯": { "儿子": "表哥/弟", "女儿": "表姐/妹", "妻子": "表伯母" },
-            "表叔": { "儿子": "表哥/弟", "女儿": "表姐/妹", "妻子": "表婶" },
-            "表姑": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "表姑父" },
-            "舅舅": { "儿子": "表哥/弟", "女儿": "表姐/妹", "妻子": "舅妈" },
-            "舅妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "舅舅" },
-            "阿姨": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姨父", "孙子": "表外甥", "孙女": "表外甥女" },
-            "姨妈": { "儿子": "表哥/弟", "女儿": "表姐/妹", "丈夫": "姨父", "孙子": "表外甥", "孙女": "表外甥女" },
-            "兄弟": { "儿子": "亲侄子", "女儿": "亲侄女" },
-            "姐妹": { "儿子": "亲外甥", "女儿": "亲外甥女" },
-            "哥哥": { "儿子": "亲侄子", "女儿": "亲侄女", "妻子": "嫂子" },
-            "弟弟": { "儿子": "亲侄子", "女儿": "亲侄女", "妻子": "弟媳" },
-            "姐姐": { "儿子": "亲外甥", "女儿": "亲外甥女", "丈夫": "姐夫" },
-            "妹妹": { "儿子": "亲外甥", "女儿": "亲外甥女", "丈夫": "妹夫" },
-            "哥": { "儿子": "亲侄子", "女儿": "亲侄女", "妻子": "嫂子" },
-            "弟": { "儿子": "亲侄子", "女儿": "亲侄女", "妻子": "弟媳" },
-            "姐": { "儿子": "亲外甥", "女儿": "亲外甥女", "丈夫": "姐夫" },
-            "妹": { "儿子": "亲外甥", "女儿": "亲外甥女", "丈夫": "妹夫" },
-            "姐/妹": { "儿子": "亲外甥", "女儿": "亲外甥女" },
-            "哥/弟": { "儿子": "亲侄子", "女儿": "亲侄女" },
-            "儿子": { "妻子": "儿媳", "儿子": "孙子", "女儿": "孙女", "孙辈": "曾孙" },
-            "女儿": { "丈夫": "女婿", "儿子": "外孙", "女儿": "外孙女", "孙辈": "外曾孙" },
-            "孙子": { "儿子": "曾孙", "女儿": "曾孙女" },
-            "外孙": { "儿子": "外曾孙", "女儿": "外曾孙女" },
-            "亲侄子": { "妻子": "侄媳妇" },
-            "亲外甥": { "妻子": "外甥媳妇" },
-            "二爸": { "妻子": "二妈/婶婶", "儿子": "堂哥/弟" },
-            "大爸": { "妻子": "大妈/伯母", "儿子": "堂哥/弟" },
-            "丈夫": { "爸爸": "公公", "妈妈": "婆婆", "兄弟": "夫家大伯/夫家小叔", "姐妹": "大姑/小姑" },
-            "妻子": { "爸爸": "岳父", "妈妈": "岳母", "兄弟": "大舅子/小舅子", "姐妹": "大姨子/小姨子" },
-            "夫家大伯": { "儿子": "内侄", "女儿": "内侄女" },
-            "夫家小叔": { "儿子": "内侄", "女儿": "内侄女" },
-            "大姑": { "儿子": "姑外甥", "女儿": "姑外甥女" },
-            "小姑": { "儿子": "姑外甥", "女儿": "姑外甥女" },
-            "大舅子": { "儿子": "内侄", "女儿": "内侄女" },
-            "小舅子": { "儿子": "内侄", "女儿": "内侄女" },
-            "大姨子": { "儿子": "姨外甥", "女儿": "姨外甥女" },
-            "小姨子": { "儿子": "姨外甥", "女儿": "姨外甥女" },
-            "内侄": { "儿子": "内侄孙", "女儿": "内侄孙女" }
-        };
-
-        // 情况 A: target 创建了 viewer
-        if (eq(vNode.createdByMemberId, tId)) {
-            const manualRel = tNode.relationship || "";
-            if (manualRel && !["本人", "家人", "创建者", ""].includes(manualRel)) {
-                return manualRel;
-            }
-            const myRoleToCreator = vNode.relationship || "";
-            for (const [key, value] of Object.entries(inverseMap)) {
-                if (myRoleToCreator.includes(key)) {
-                    const titleRaw = isFemale(tNode) ? value.female : value.male;
-                    const finalTitle = titleRaw.split("/")[0];
-                    return injectRankingAndRemark(finalTitle, tNode, vNode, members);
-                }
-            }
-        }
-
-        // 情况 B: viewer 创建了 target
-        if (eq(tNode.createdByMemberId, vId)) {
-            const raw = tNode.relationship || "创建者";
-            if (raw && !["本人", "家人", "创建者", "其他", "创建人"].includes(raw)) {
-                const labels: Record<string, { male: string; female: string }> = {
-                    "外甥": { male: "外甥", female: "外甥女" },
-                    "外甥女": { male: "外甥", female: "外甥女" },
-                    "侄子": { male: "侄子", female: "侄女" },
-                    "侄女": { male: "侄子", female: "侄女" },
-                    "儿子": { male: "儿子", female: "女儿" },
-                    "女儿": { male: "儿子", female: "女儿" },
-                    "哥哥": { male: "哥哥", female: "姐姐" },
-                    "弟弟": { male: "弟弟", female: "妹妹" },
-                    "姐姐": { male: "哥哥", female: "姐姐" },
-                    "妹妹": { male: "弟弟", female: "妹妹" },
-                    "老公": { male: "老公", female: "老婆" },
-                    "老婆": { male: "老公", female: "老婆" },
-                    "丈夫": { male: "丈夫", female: "妻子" },
-                    "妻子": { male: "丈夫", female: "妻子" },
-                    "爸爸": { male: "爸爸", female: "妈妈" },
-                    "妈妈": { male: "爸爸", female: "妈妈" },
-                    "爷爷": { male: "爷爷", female: "奶奶" },
-                    "奶奶": { male: "爷爷", female: "奶奶" },
-                    "外公": { male: "外公", female: "外婆" },
-                    "外婆": { male: "外公", female: "外婆" },
-                    "舅舅": { male: "舅舅", female: "舅妈" },
-                    "舅妈": { male: "舅舅", female: "舅妈" },
-                    "伯伯": { male: "伯伯", female: "伯母" },
-                    "伯母": { male: "伯伯", female: "伯母" },
-                    "叔叔": { male: "叔叔", female: "婶婶" },
-                    "婶婶": { male: "叔叔", female: "婶婶" },
-                    "堂哥": { male: "堂哥", female: "堂姐" },
-                    "堂兄": { male: "堂哥", female: "堂姐" },
-                    "堂弟": { male: "堂弟", female: "堂妹" },
-                    "堂姐": { male: "堂哥", female: "堂姐" },
-                    "堂妹": { male: "堂弟", female: "堂妹" },
-                    "表哥": { male: "表哥", female: "表姐" },
-                    "表兄": { male: "表哥", female: "表姐" },
-                    "表弟": { male: "表弟", female: "表妹" },
-                    "表姐": { male: "表哥", female: "表姐" },
-                    "表妹": { male: "表弟", female: "表妹" },
-                };
-                const entry = labels[raw];
-                if (entry) {
-                    const corrected = isFemale(tNode) ? entry.female : entry.male;
-                    return injectRankingAndRemark(corrected, tNode, vNode, members);
-                }
-                return injectRankingAndRemark(raw, tNode, vNode, members);
-            }
-        }
-
-        // 情况 C: 级联桥接
-        const vSpouseId = vNode.spouseId || members.find(m =>
-            members.some(child => (eq(child.fatherId, vId) && eq(child.motherId, m.id)) || (eq(child.motherId, vId) && eq(child.fatherId, m.id)))
-        )?.id;
-
-        if (vSpouseId && !eq(tId, vSpouseId)) {
-            const vSpouse = members.find(m => eq(m.id, vSpouseId));
-            if (vSpouse) {
-                const sRel = getRigorousRelationship(vSpouse, tNode, members, depth + 1);
-                const cleanSRel = getCleanRelationship(sRel);
-                const map = spouseToViewerMap[vNode.gender === 'female' ? 'female' : 'male'];
-                if (map && map[cleanSRel]) {
-                    const finalTitle = map[cleanSRel];
-                    return injectRankingAndRemark(finalTitle, tNode, vNode, members);
-                }
-            }
-        }
-
-        if (tNode.createdByMemberId && !eq(tNode.createdByMemberId, vId)) {
-            const creator = members.find(m => eq(m.id, tNode.createdByMemberId));
-            if (creator) {
-                const cRel = getRigorousRelationship(viewer, creator, members, depth + 1);
-                const rawT = (tNode.relationship || "").replace(/\s+/g, "").toLowerCase();
-                const sRole = (tNode.standardRole || tNode.standard_role || "").toLowerCase();
-                let tRel = "";
-                if (sRole === "daughter" || rawT === "女儿" || rawT === "女" || rawT.endsWith("女儿")) tRel = "女儿";
-                else if (sRole === "son" || rawT === "儿子" || rawT === "子" || rawT.endsWith("儿子")) tRel = "儿子";
-                else if (sRole === "granddaughter" || rawT.includes("孙女")) tRel = "孙女";
-                else if (sRole === "grandson" || rawT.includes("孙子")) tRel = "孙子";
-                else if (sRole === "brother" || rawT.includes("哥") || rawT.includes("弟")) tRel = "儿子";
-                else if (sRole === "sister" || rawT.includes("姐") || rawT.includes("妹")) tRel = "女儿";
-                else if (sRole === "wife" || ["老婆", "妻子", "爱人", "夫人", "内人", "太太"].some(w => rawT.includes(w))) tRel = "妻子";
-                else if (sRole === "husband" || ["老公", "丈夫", "爱人", "先生"].some(w => rawT.includes(w))) tRel = "丈夫";
-                else tRel = getCleanRelationship(tNode.relationship || "");
-
-                const cRelOptions = cRel.split("/").map(s => getCleanRelationship(s));
-                for (const cleanCRel of cRelOptions) {
-                    if (bridgeMap[cleanCRel] && bridgeMap[cleanCRel][tRel]) {
-                        const finalTitle = bridgeMap[cleanCRel][tRel].replace("夫家", "");
-                        return injectRankingAndRemark(finalTitle, tNode, vNode, members, getRankPrefix(creator, members));
-                    }
-                }
-            }
-        }
-
-        // 情况 D: 终极反转推演
-        if (depth === 0) {
-            const tToV = getRigorousRelationship(tNode, vNode, members, 1);
-            const cleanTToV = getCleanRelationship(tToV);
-            if (cleanTToV && cleanTToV !== "家人" && cleanTToV !== "我") {
-                let inverseMatch = inverseMap[cleanTToV];
-                if (!inverseMatch) {
-                    for (const key of Object.keys(inverseMap)) {
-                        if (cleanTToV.includes(key)) {
-                            inverseMatch = inverseMap[key];
-                            break;
-                        }
-                    }
-                }
-                if (inverseMatch) {
-                    const rawT = (tNode.relationship || "").trim();
-                    let finalTitleRaw = "";
-
-                    // 1. 优先通过“打标”锁死名分 (名分锚定)
-                    if (rawT.includes("母家") || rawT.includes("母系")) {
-                        finalTitleRaw = isFemale(tNode) ? "姨妈" : "舅舅";
-                    } else if (rawT.includes("父家") || rawT.includes("父系")) {
-                        finalTitleRaw = isFemale(tNode) ? "姑姑" : "叔叔";
-                    } else if (rawT.includes("血亲")) {
-                        // 如果是长辈辈分反转
-                        const isElder = ["叔", "伯", "姑", "舅", "姨"].some(k => inverseMatch.female.includes(k) || inverseMatch.male.includes(k));
-                        if (isElder) {
-                            if (isFemale(tNode)) finalTitleRaw = rawT.includes("妈") ? "姨妈" : "姑姑";
-                            else finalTitleRaw = rawT.includes("爸") ? "叔叔" : "舅舅";
-                        }
-                    } else if (rawT.includes("姻亲")) {
-                        if (isFemale(tNode)) finalTitleRaw = "舅妈";
-                        else finalTitleRaw = "姑父";
-                    } else if (rawT.includes("舅妈")) {
-                        finalTitleRaw = "舅妈";
-                    } else if (rawT.includes("舅舅")) {
-                        finalTitleRaw = "舅舅";
-                    } else if (rawT.includes("姨") || rawT.includes("阿姨")) {
-                        finalTitleRaw = "阿姨";
-                    } else {
-                        // 2. 如果没标记，再按性别取默认值
-                        const female = isFemale(tNode);
-                        finalTitleRaw = female ? inverseMatch.female.split("/")[0] : inverseMatch.male.split("/")[0];
-                    }
-                    return injectRankingAndRemark(finalTitleRaw, tNode, vNode, members);
-                }
-            }
-        }
-
-        // 回退逻辑
+        // --- 5. 终极回退：使用原始称谓或“家人” ---
         const baseRel = (tNode.relationship || "").trim();
-        if (baseRel && !["本人", "家人", "创建者", "其他", "创建人"].includes(baseRel)) {
-            return injectRankingAndRemark(baseRel, tNode, vNode, members);
-        }
-        return injectRankingAndRemark("家人", tNode, vNode, members);
+        return injectRankingAndRemark(baseRel && !["本人", "家人", "创建者", "创建人", ""].includes(baseRel) ? baseRel : "家人", tNode, vNode, members);
 
     } catch (error) {
         console.error("家族逻辑推导异常:", error);
         return target?.relationship || target?.name || "家门亲戚";
     }
 
-    // 内部注入函数
-    function injectRankingAndRemark(baseRel: string, tNode: any, vNode: any, members: any[], inheritedPrefixStr: string = "") {
+    function injectRankingAndRemark(baseRel: string, tNode: any, vNode: any, members: any[]) {
         let finalTitle = baseRel;
-        const prefix = getRankPrefix(tNode, members) || inheritedPrefixStr;
-        const rankable = ["爸爸", "叔叔", "叔伯", "姑姑", "阿姨", "舅舅", "姐/妹", "哥/弟", "兄弟", "姐妹", "堂姐/妹", "堂兄/弟", "表姐/妹", "表哥/弟", "嫂子", "嫂", "弟媳", "姐夫", "妹夫", "伯母", "婶婶", "舅妈", "姨父", "姑父"];
-        if (prefix && rankable.some(r => baseRel.includes(r))) {
-            if (!prefix.split("").some(char => baseRel.startsWith(char))) {
-                finalTitle = prefix + baseRel;
-                finalTitle = finalTitle.replace("嫂子", "嫂").replace("弟媳妇", "弟媳");
-            }
+        const prefix = getRankPrefix(tNode, members);
+        const rankable = ["爸爸", "叔叔", "姑姑", "阿姨", "舅舅", "姐", "哥", "弟", "妹", "堂", "表"];
+        if (prefix && rankable.some(r => baseRel.includes(r)) && !baseRel.startsWith(prefix)) {
+            finalTitle = prefix + baseRel;
         }
         const vDate = vNode.birthDate || vNode.birth_date;
         const tDate = tNode.birthDate || tNode.birth_date;
         if (vDate && tDate) {
             const isTargetOlder = tDate < vDate;
-            finalTitle = finalTitle
-                .replace("姐/妹", isTargetOlder ? "姐" : "妹")
-                .replace("姊妹", isTargetOlder ? "姐" : "妹")
-                .replace("哥/弟", isTargetOlder ? "哥" : "弟")
-                .replace("兄弟", isTargetOlder ? "哥" : "弟")
-                .replace("姐妹", isTargetOlder ? "姐" : "妹");
-        }
-        const rawRemark = (tNode.relationship || "").trim();
-        const standardLabels = ["儿子", "女儿", "孩子", "后辈", "本人", "家人"];
-        const isDuplicate = !rawRemark || ["本人", "家人", "创建者", "创建人", "其他"].includes(rawRemark) || standardLabels.includes(rawRemark) || finalTitle === rawRemark || finalTitle.includes(rawRemark) || getCleanRelationship(finalTitle) === getCleanRelationship(rawRemark);
-        if (!isDuplicate && !finalTitle.includes(rawRemark)) {
-            return `${finalTitle} (${rawRemark})`;
+            finalTitle = finalTitle.replace("姐/妹", isTargetOlder ? "姐" : "妹").replace("哥/弟", isTargetOlder ? "哥" : "弟");
         }
         return finalTitle;
     }
 }
+
 
 /**
  * 原有的简单推断逻辑
@@ -1301,13 +790,13 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
 
     // 🚀 核心纠偏：逻辑坐标或角色属性优先
     if (tTag.startsWith('[F]') || ['brother', 'sister', 'father', 'grandfather_paternal', 'grandmother_paternal', 'uncle_paternal', 'aunt_paternal'].includes(sRole)) {
-        if (tTag.includes('SIB') || sRole === 'brother' || sRole === 'sister') return "【家门】";
+        if (tTag.includes('SIB') || sRole === 'brother' || sRole === 'sister' || rel.includes('哥') || rel.includes('姐')) return "【家门】";
         if (sRole === 'grandfather_paternal' || tTag.includes('F,F')) return "【宗长】";
-        return "【同宗】";
+        return rel.includes('堂') ? "【同宗】" : "【宗亲】";
     }
 
     if (tTag.startsWith('[M]') || ['uncle_maternal', 'aunt_maternal', 'grandfather_maternal', 'grandmother_maternal'].includes(sRole)) {
-        if (sRole === 'grandfather_maternal' || tTag.includes('M,F')) return "【外大父】";
+        if (sRole === 'grandfather_maternal' || tTag.includes('M,F') || tTag.includes('M,M')) return "【外大父/母】";
         return "【母系外戚】";
     }
 

@@ -51,7 +51,7 @@ export function getLogicTag(side: 'paternal' | 'maternal', connector: string, ra
         self_p: 'x', child_p: 's', self_m: 'x,m', child_m: 's,m'
     };
     const path = paths[connector] || 'unknown';
-    const r = rank && rank !== '无' ? `-o${rank}` : '';
+    const r = rank && rank !== '不知道' ? `-o${rank}` : '';
     return `${s}${suffix}-${path}${r}`;
 }
 
@@ -232,7 +232,10 @@ export function createKinshipSearchFilter(query: string) {
  * 为《全家福大地图》自动排版生成坐标：采用弹性智能布局 (Smart Layout)
  * Generate SVG coordinates for members using an elastic collision-free layout.
  */
-export function generateSmartLayout(members: any[]) {
+export function generateSmartLayout(rawMembers: any[]) {
+    // 过滤掉宠物，宠物不参与家族谱的计算力
+    const members = (rawMembers || []).filter(m => m.memberType !== 'pet' && m.member_type !== 'pet');
+
     // Canvas settings
     const CENTER_X = 500;
     const START_Y = 100;

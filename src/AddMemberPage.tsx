@@ -307,23 +307,22 @@ export const AddMemberPage: React.FC = () => {
       // 【亲兄弟姐妹】绝对禁止表/堂
       finalRel = baseRel.replace(/[表堂]/g, '');
       if (!/[\u4e00-\u9fa5]/.test(finalRel)) finalRel = gender === 'female' ? '姐姐/妹妹' : '哥哥/弟弟';
-    } else if (side === 'paternal') {
-      // 【父系分支】
-      if (connectorNode === 'self_p') {
-        // 堂亲路径 (父系同代)：强制“堂”，剔除“表”
+    } else if (side === 'paternal' || connectorNode?.endsWith('_p') || connectorNode === 'father' || connectorNode === 'grandfather') {
+      // 【父系/宗亲分支】强制“堂”，剔除“表” (除非是姑表、姨表在特殊路径下，但通常优先保证堂哥正确)
+      if (baseRel.includes('堂') || connectorNode === 'self_p') {
         finalRel = baseRel.replace('表', '堂');
-        if (!finalRel.includes('堂')) finalRel = '堂' + finalRel;
+        if (!finalRel.includes('堂') && (baseRel.includes('哥') || baseRel.includes('弟') || baseRel.includes('姐') || baseRel.includes('妹'))) {
+          finalRel = '堂' + finalRel;
+        }
       }
-      // 💡 重点：如果是在 father 或 grandfather 路径下录入“表” (如：姑表亲)
-      // 我们不做强制剔除，尊重用户的专业录入
-    } else if (side === 'maternal') {
+    } else if (side === 'maternal' || connectorNode?.endsWith('_m') || connectorNode === 'mother' || connectorNode === 'm_grandfather') {
       // 【母系分支】强制使用“表”系，屏蔽“堂”
       finalRel = baseRel.replace('堂', '表');
       if (connectorNode === 'self_m' && !finalRel.includes('表')) finalRel = '表' + finalRel;
     }
 
     // 2. 处理最后录入排行的问题 (排行补偿)
-    if (selectedRank && selectedRank !== '无' && !finalRel.startsWith(selectedRank)) {
+    if (selectedRank && selectedRank !== '不知道' && !finalRel.startsWith(selectedRank)) {
       // ⚡️ 核心修复：先去掉可能存在的所有旧排行前缀，再补上最新的
       const cleanRel = finalRel.replace(/^(大|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|小|老)/, '');
       finalRel = `${selectedRank}${cleanRel}`;
@@ -382,7 +381,7 @@ export const AddMemberPage: React.FC = () => {
         let baseRel = isMaternalSide ? "姨/舅" : "伯/叔";
         if (kinshipType === 'affinal') baseRel = isMaternalSide ? "表外祖/姻亲长辈" : "族亲长辈";
         let finalVirtualName = virtualParentName.trim() || `${name}的父辈`;
-        if (kinshipType === 'blood' && connectingRank && connectingRank !== '无') {
+        if (kinshipType === 'blood' && connectingRank && connectingRank !== '不知道') {
           if (isMaternalSide) {
             finalVirtualName = relationship.includes("舅") ? `${connectingRank}舅` : `${connectingRank}姨`;
           } else {
@@ -404,7 +403,7 @@ export const AddMemberPage: React.FC = () => {
             memberType: 'virtual',
             is_placeholder: true,
             generationNum: genNum,
-            ancestralHall: connectingRank && connectingRank !== '无'
+            ancestralHall: connectingRank && connectingRank !== '不知道'
               ? `${connectingRank}房`
               : (finalVirtualName.includes("二") ? "二房" : finalVirtualName.includes("大") ? "大房" : null)
           })
@@ -439,7 +438,7 @@ export const AddMemberPage: React.FC = () => {
           surname: computedTargetSurname,
           generationNum: targetGen,
           generation_num: targetGen,
-          ancestralHall: (selectedRank && selectedRank !== '无' ? `${selectedRank}房` : (parent?.ancestralHall || null)),
+          ancestralHall: (selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : (parent?.ancestralHall || null)),
           logicTag: currentLogicTag
         })
       });
@@ -467,7 +466,7 @@ export const AddMemberPage: React.FC = () => {
           surname: computedTargetSurname,
           generationNum: targetGen,
           generation_num: targetGen,
-          ancestralHall: (selectedRank && selectedRank !== '无' ? `${selectedRank}房` : (parent?.ancestralHall || null)),
+          ancestralHall: (selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : (parent?.ancestralHall || null)),
           logicTag: currentLogicTag
         });
         localStorage.setItem("demoCustomMembers", JSON.stringify(customMembers));
@@ -768,13 +767,13 @@ export const AddMemberPage: React.FC = () => {
                 <div className="space-y-3 animate-in fade-in zoom-in duration-300">
                   <label className="text-xl font-black px-1 block text-[#eab308]">您自己在亲兄弟姐妹中排行？</label>
                   <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
-                    {['大', '二', '三', '四', '五', '小', '无'].map(rk => (
+                    {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小', '不知道'].map(rk => (
                       <button
                         key={rk}
                         onClick={() => {
                           setMyRank(rk);
                           // 自动基于排行差异进行关系预判
-                          if (selectedRank && selectedRank !== '无' && rk !== '无') {
+                          if (selectedRank && selectedRank !== '不知道' && rk !== '不知道') {
                             const myN = ['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(rk);
                             const taN = ['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(selectedRank);
                             if (myN !== -1 && taN !== -1) {
@@ -798,13 +797,13 @@ export const AddMemberPage: React.FC = () => {
                   {connectorNode === 'sibling' ? `那么，${name}本人排行第几？` : 'TA在自家兄弟姐妹中排行老几？'}
                 </label>
                 <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
-                  {['大', '二', '三', '四', '五', '小', '无'].map(rk => (
+                  {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小', '不知道'].map(rk => (
                     <button
                       key={rk}
                       onClick={() => {
                         setSelectedRank(rk);
                         // 亲手足自动判定逻辑
-                        if (connectorNode === 'sibling' && myRank && myRank !== '无' && rk !== '无') {
+                        if (connectorNode === 'sibling' && myRank && myRank !== '不知道' && rk !== '不知道') {
                           const myN = ['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(myRank);
                           const taN = ['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(rk);
                           if (myN !== -1 && taN !== -1) {
@@ -840,7 +839,7 @@ export const AddMemberPage: React.FC = () => {
                                   : connectorNode === 'm_grandmother' ? '外婆连脉'
                                     : connectorNode === 'self_p' || connectorNode === 'self_m' ? '同宗同代'
                                       : '子路晚辈'}
-                      {selectedRank && selectedRank !== '无' && (
+                      {selectedRank && selectedRank !== '不知道' && (
                         <>
                           <ChevronRight size={10} className="inline opacity-50" />
                           {selectedRank}房

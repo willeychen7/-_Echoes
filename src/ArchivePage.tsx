@@ -59,7 +59,8 @@ export const ArchivePage: React.FC = () => {
     name: "",
     gender: "male",
     birthday: "",
-    bio: ""
+    bio: "",
+    ranking: "不知道"
   });
   // NOTE: 全局头像缓存，用户改头像后全局同步
   const avatarCache = useAvatarCache();
@@ -246,6 +247,54 @@ export const ArchivePage: React.FC = () => {
   const handleUpdateInfo = async () => {
     if (!member) return;
     try {
+      // 🚀 核心：同步更新排行逻辑
+      const newRank = editInfoForm.ranking;
+      const oldTag = member.logicTag || member.logic_tag || "";
+      const baseTag = String(oldTag).split('-o')[0];
+      const newTag = newRank !== '不知道' ? `${baseTag}-o${newRank}` : baseTag;
+
+      // 处理称谓中的排行补偿
+      let newRel = member.relationship || "";
+      if (newRank !== '不知道') {
+        const cleanRel = newRel.replace(/^(大|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|小|老)/, '');
+        newRel = `${newRank}${cleanRel}`;
+      } else {
+        newRel = newRel.replace(/^(大|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|小|老)/, '');
+      }
+
+      const isDemo = isDemoMode(currentUser);
+      if (isDemo) {
+        const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
+        const updatedMembers = customMembers.map((m: any) => m.id === member.id ? {
+          ...m,
+          name: editInfoForm.name,
+          gender: editInfoForm.gender,
+          birthDate: editInfoForm.birthday,
+          birth_date: editInfoForm.birthday,
+          bio: editInfoForm.bio,
+          ancestralHall: newRank !== '不知道' ? `${newRank}房` : null,
+          logicTag: newTag,
+          relationship: newRel
+        } : m);
+        localStorage.setItem("demoCustomMembers", JSON.stringify(updatedMembers));
+
+        // 更新当前页面视图
+        setMember({
+          ...member,
+          name: editInfoForm.name,
+          gender: editInfoForm.gender,
+          birthDate: editInfoForm.birthday,
+          birth_date: editInfoForm.birthday,
+          bio: editInfoForm.bio,
+          ancestralHall: newRank !== '不知道' ? `${newRank}房` : null,
+          logicTag: newTag,
+          relationship: newRel
+        } as any);
+        setMembers(updatedMembers);
+        setShowEditInfoModal(false);
+        return;
+      }
+
       const response = await fetch(`/api/family-members/${member.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -253,7 +302,10 @@ export const ArchivePage: React.FC = () => {
           name: editInfoForm.name,
           gender: editInfoForm.gender,
           birthDate: editInfoForm.birthday,
-          bio: editInfoForm.bio
+          bio: editInfoForm.bio,
+          ancestralHall: newRank !== '不知道' ? `${newRank}房` : null,
+          logicTag: newTag,
+          relationship: newRel
         })
       });
       if (response.ok) {
@@ -263,10 +315,20 @@ export const ArchivePage: React.FC = () => {
           gender: editInfoForm.gender,
           birthDate: editInfoForm.birthday,
           birth_date: editInfoForm.birthday,
-          bio: editInfoForm.bio
+          bio: editInfoForm.bio,
+          ancestralHall: newRank !== '不知道' ? `${newRank}房` : null,
+          logicTag: newTag,
+          relationship: newRel
         } as any);
         // 同时更新列表，确保关系推导用的是新数据
-        setMembers(prev => prev.map(m => m.id === member.id ? { ...m, ...editInfoForm, birth_date: editInfoForm.birthday } : m) as any);
+        setMembers(prev => prev.map(m => m.id === member.id ? {
+          ...m,
+          ...editInfoForm,
+          birth_date: editInfoForm.birthday,
+          ancestral_hall: newRank !== '不知道' ? `${newRank}房` : null,
+          logic_tag: newTag,
+          relationship: newRel
+        } : m) as any);
         setShowEditInfoModal(false);
       }
     } catch (err) {
@@ -729,7 +791,12 @@ export const ArchivePage: React.FC = () => {
                           name: member.name || "",
                           gender: member.gender || "male",
                           birthday: member.birthDate || "",
-                          bio: member.bio || ""
+                          bio: member.bio || "",
+                          ranking: (() => {
+                            const tag = member.logicTag || member.logic_tag || "";
+                            const match = String(tag).match(/-O(二十|十一|十二|十三|十四|十五|十六|十七|十八|十九|一|二|三|四|五|六|七|八|九|十|大|小|幺|老)$/i);
+                            return match ? match[1] : (member.ancestralHall?.replace('房', '') || "不知道");
+                          })()
                         });
                         setShowEditInfoModal(true);
                       }}
@@ -1257,6 +1324,27 @@ export const ArchivePage: React.FC = () => {
                         {g === "male" ? "男 (♂)" : "女 (♀)"}
                       </button>
                     ))}
+                  </div>
+                  <div className="space-y-2 pb-6">
+                    <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">排行 (房分)</label>
+                    <div className="grid grid-cols-4 gap-2 px-1">
+                      {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小', '不知道'].map((rk) => (
+                        <button
+                          key={rk}
+                          type="button"
+                          onClick={() => setEditInfoForm({ ...editInfoForm, ranking: rk })}
+                          className={cn(
+                            "py-3 rounded-xl font-bold transition-all border-2 text-xs",
+                            editInfoForm.ranking === rk
+                              ? "bg-[#eab308] border-[#eab308] text-black"
+                              : "bg-slate-50 border-transparent text-slate-400"
+                          )}
+                        >
+                          {rk}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400 px-4 mt-2">若不清楚具体排行，请选‘不知道’。录入后将自动同步更新宗族称谓与地图位置。</p>
                   </div>
                 </div>
               </div>

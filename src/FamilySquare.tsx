@@ -648,7 +648,7 @@ export const FamilySquare: React.FC = () => {
                   ) || currentUser;
 
                   const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
-                  const isRealMember = (m: any) => !(m.member_type === 'virtual' || m.memberType === 'virtual' || ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"].some(k => (m.name || "").includes(k)));
+                  const isRealMember = (m: any) => !(m.member_type === 'virtual' || m.memberType === 'virtual' || m.member_type === 'pet' || m.memberType === 'pet' || ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"].some(k => (m.name || "").includes(k)));
 
                   return (
                     <>
@@ -740,7 +740,7 @@ export const FamilySquare: React.FC = () => {
                       {/* 第二组：家族姻亲 */}
                       {(() => {
                         const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
-                        const isRealMember = (m: any) => !(m.member_type === 'virtual' || m.memberType === 'virtual' || ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"].some(k => (m.name || "").includes(k)));
+                        const isRealMember = (m: any) => !(m.member_type === 'virtual' || m.memberType === 'virtual' || m.member_type === 'pet' || m.memberType === 'pet' || ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"].some(k => (m.name || "").includes(k)));
                         const affinals = members.filter(isRealMember).filter(searchFilter).filter(member => {
                           const rel = getRigorousRelationship(meNode, member, members);
                           return getRelationType(rel) === 'affinal';
