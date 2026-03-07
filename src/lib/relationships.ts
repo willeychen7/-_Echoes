@@ -410,6 +410,13 @@ export function isClan(vNode: any, tNode: any, currentSide?: 'paternal' | 'mater
  * 根据生日及房头计算排行前缀 (大, 二, 三, 小)
  */
 function getRankPrefix(targetNode: any, members: any[]) {
+    // --- 🚀 核心纠偏：逻辑坐标优先 (LogicTag Rank First) ---
+    const tTag = (targetNode.logicTag || targetNode.logic_tag || "").toString().toUpperCase();
+    const rankMatch = tTag.match(/-O(二十|十一|十二|十三|十四|十五|十六|十七|十八|十九|一|二|三|四|五|六|七|八|九|十|大|小|幺|老)$/);
+    if (rankMatch) {
+        return rankMatch[1];
+    }
+
     // --- 逻辑 A：名分优先 (针对“二爸”、“老小姨”) ---
     const rawRemark = (targetNode.relationship || "").trim();
     const explicitRankMatch = rawRemark.match(/^(大|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|小|老|排行老|细|幺)/);
