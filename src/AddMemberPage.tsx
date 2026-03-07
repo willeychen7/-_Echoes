@@ -442,7 +442,11 @@ export const AddMemberPage: React.FC = () => {
           surname: computedTargetSurname,
           generationNum: targetGen,
           generation_num: targetGen,
-          ancestralHall: (selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : (parent?.ancestralHall || null)),
+          ancestralHall: (
+            parent?.ancestralHall ||
+            (connectingRank && connectingRank !== '不知道' ? `${connectingRank}房` : null) ||
+            (['father', 'mother', 'grandfather', 'grandmother', 'm_grandfather', 'm_grandmother'].includes(connectorNode as string) && selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : null)
+          ),
           logicTag: currentLogicTag
         })
       });
@@ -470,7 +474,11 @@ export const AddMemberPage: React.FC = () => {
           surname: computedTargetSurname,
           generationNum: targetGen,
           generation_num: targetGen,
-          ancestralHall: (selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : (parent?.ancestralHall || null)),
+          ancestralHall: (
+            parent?.ancestralHall ||
+            (connectingRank && connectingRank !== '不知道' ? `${connectingRank}房` : null) ||
+            (['father', 'mother', 'grandfather', 'grandmother', 'm_grandfather', 'm_grandmother'].includes(connectorNode as string) && selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : null)
+          ),
           logicTag: currentLogicTag
         });
         localStorage.setItem("demoCustomMembers", JSON.stringify(customMembers));
@@ -774,6 +782,29 @@ export const AddMemberPage: React.FC = () => {
             </div>
 
             <div className="space-y-6">
+              {/* === 🚀 核心新增：支脉定位器 (仅针对堂/表亲) === */}
+              {['self_p', 'self_m'].includes(connectorNode as string) && (
+                <div className="space-y-3 p-5 bg-amber-50/50 rounded-[2rem] border-2 border-dashed border-amber-200/50 animate-in fade-in zoom-in duration-500">
+                  <label className="text-xl font-black px-1 block text-amber-700">
+                    TA是您哪位{lineageSide === 'paternal' ? '叔伯' : '舅姨'}家的孩子？
+                  </label>
+                  <p className="text-[10px] text-amber-600/60 px-1 mb-2 font-bold italic">
+                    💡 这里选的是“父辈排行”。例如：二叔家的孩子，就属于“二房”。
+                  </p>
+                  <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
+                    {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小', '不知道'].map(rk => (
+                      <button
+                        key={rk}
+                        onClick={() => setConnectingRank(rk)}
+                        className={`h-11 border-2 rounded-xl font-bold text-sm transition-all ${connectingRank === rk ? 'bg-amber-500 border-amber-500 text-white shadow-lg' : 'bg-white border-white hover:border-amber-200 text-amber-800/40'}`}
+                      >
+                        {rk}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {connectorNode === 'sibling' && (
                 <div className="space-y-3 animate-in fade-in zoom-in duration-300">
                   <label className="text-xl font-black px-1 block text-[#eab308]">您自己在亲兄弟姐妹中排行？</label>
