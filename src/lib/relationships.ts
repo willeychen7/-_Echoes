@@ -591,7 +591,7 @@ function computeRigorousRelationship(
                 if (tagGenDiff === -1) {
                     if (pathOnly === 'f') {
                         if (eq(tId, bF) && !rankStr) return "爸爸";
-                        if (hasValidManual && /叔|伯|姑|婶|婿|夫/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
+                        if (hasValidManual && /叔|伯|姑|婶|婿|夫|哥|姐|弟|妹/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                         if (isFem) return `${prefix}姑姑`;
                         const fNode = getMB(bF);
                         const fDate = fNode?.birthDate || fNode?.birth_date || "9999-99-99";
@@ -601,7 +601,7 @@ function computeRigorousRelationship(
                     }
                     if (pathOnly === 'm') {
                         if (eq(tId, bM) && !rankStr) return "妈妈";
-                        if (hasValidManual && /舅|姨|妗|丈/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
+                        if (hasValidManual && /舅|姨|妗|丈|哥|姐|弟|妹/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                         return isFem ? `${prefix}姨妈` : `${prefix}舅舅`;
                     }
                 }
@@ -609,13 +609,13 @@ function computeRigorousRelationship(
                     if (pathOnly === 'f,f' || pathOnly === 'f,m') {
                         if (eq(tId, bFF) && pathOnly === 'f,f' && !rankStr) return "爷爷";
                         if (eq(tId, bFM) && pathOnly === 'f,m' && !rankStr) return "奶奶";
-                        if (hasValidManual && /公|婆|爷|奶/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
+                        if (hasValidManual && /公|婆|爷|奶|叔|伯|姑|舅|姨|哥|姐|弟|妹/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                         return isFem ? `${prefix}姑婆` : `${prefix}叔公`;
                     }
                     if (pathOnly === 'm,f' || pathOnly === 'm,m') {
                         if (eq(tId, bMF) && pathOnly === 'm,f' && !rankStr) return "外公";
                         if (eq(tId, bMM) && pathOnly === 'm,m' && !rankStr) return "外婆";
-                        if (hasValidManual && /公|婆|爷|奶/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
+                        if (hasValidManual && /公|婆|爷|奶|叔|伯|姑|舅|姨|哥|姐|弟|妹/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                         return isFem ? `${prefix}姨婆` : `${prefix}舅公`;
                     }
                 }
@@ -628,7 +628,7 @@ function computeRigorousRelationship(
                     }
 
                     if (pathOnly === 'sib') {
-                        if (hasValidManual && /哥|姐|弟|妹/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
+                        if (hasValidManual && /哥|姐|弟|妹|兄|弟/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                         if (isFem) return isOlder ? `${prefix}姐姐` : `${prefix}妹妹`;
                         return isOlder ? `${prefix}哥哥` : `${prefix}弟弟`;
                     }
@@ -644,7 +644,7 @@ function computeRigorousRelationship(
                     }
                 }
                 if (tagGenDiff === 1) {
-                    if (hasValidManual && /儿子|女儿|侄|甥|媳|婿/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
+                    if (hasValidManual && /儿子|女儿|侄|甥|媳|婿|哥|姐|弟|妹/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                     const isBioChild = eq(vId, tNode.fatherId) || eq(vId, tNode.motherId);
                     if (isBioChild && pathOnly === 's' && !rankStr) return isFem ? "女儿" : "儿子";
                     if (pathOnly === 's') return isFem ? `${prefix}侄女` : `${prefix}侄子`;
@@ -653,16 +653,16 @@ function computeRigorousRelationship(
                 // 深层代际支持
                 if (tagGenDiff === -3) {
                     if (eq(tId, getMB(bFF)?.fatherId) && !rankStr) return isFem ? "曾祖母" : "曾祖父";
-                    if (hasValidManual && /曾|曾祖/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
+                    if (hasValidManual && /曾|曾祖|祖|爷|奶|公|婆/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                     if (pathOnly.startsWith('f,f,f')) return isFem ? `${prefix}曾祖母` : `${prefix}曾祖父`;
                     return isFem ? `${prefix}外曾祖母` : `${prefix}外曾祖父`;
                 }
                 if (tagGenDiff === -4) {
-                    if (hasValidManual && /高|高祖/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
+                    if (hasValidManual && /高|高祖|祖|爷|奶|公|婆/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                     return isFem ? `${prefix}高祖母` : `${prefix}高祖父`;
                 }
                 if (tagGenDiff === 2) {
-                    if (hasValidManual && /孙|媳|婿/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
+                    if (hasValidManual && /孙|媳|婿|儿|侄|甥/.test(manualRel)) return injectRankingAndRemark(manualRel, tNode, vNode, members);
                     const isBioGrand = (tNode.fatherId && (eq(getMB(tNode.fatherId)?.fatherId, vId) || eq(getMB(tNode.fatherId)?.motherId, vId))) ||
                         (tNode.motherId && (eq(getMB(tNode.motherId)?.fatherId, vId) || eq(getMB(tNode.motherId)?.motherId, vId)));
                     if (isBioGrand && !rankStr) return isFem ? "孙女" : "孙子";
