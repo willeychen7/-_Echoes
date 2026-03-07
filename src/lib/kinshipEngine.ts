@@ -7,10 +7,13 @@ export const CONNECTOR_SUGGESTIONS: Record<string, string[]> = {
     'father': ['叔叔', '伯伯', '姑姑'],
     'grandfather': ['伯公', '叔公', '姑婆', '堂伯', '堂叔'],
     'grandmother': ['舅公', '姨婆', '堂舅', '堂姨'],
+    'self_p': ['哥哥', '弟弟', '姐姐', '妹妹', '堂哥', '堂弟', '堂姐', '堂妹'],
+    'child_p': ['儿子', '女儿', '侄子', '侄女', '孙子', '孙女'],
     'mother': ['舅舅', '阿姨'],
     'm_grandfather': ['堂舅', '堂姨', '表舅', '外舅公'],
     'm_grandmother': ['姨姥', '表姨'],
-    'sibling': ['哥', '弟', '姐', '妹']
+    'self_m': ['表哥', '表弟', '表姐', '表妹'],
+    'child_m': ['外甥', '外甥女', '外孙', '外孙女'],
 };
 
 /**
@@ -25,8 +28,10 @@ export function extractRankFromText(text: string): string | null {
 /**
  * 生成逻辑坐标 (Logic Tag) - 用于全家福地图自动排版
  */
-export function getLogicTag(side: 'paternal' | 'maternal', connector: string, rank?: string): string {
+export function getLogicTag(side: 'paternal' | 'maternal', connector: string, rank?: string, isSameSurname?: boolean): string {
     const s = side === 'paternal' ? '[F]' : '[M]';
+    // 如果同姓但在母系，增加标记位 '!S' (Same Surname)
+    const suffix = (side === 'maternal' && isSameSurname) ? '!S' : '';
     const paths: Record<string, string> = {
         father: 'f', grandfather: 'f,f', grandmother: 'f,m',
         mother: 'm', m_grandfather: 'm,f', m_grandmother: 'm,m', sibling: 'b/p',
@@ -34,7 +39,7 @@ export function getLogicTag(side: 'paternal' | 'maternal', connector: string, ra
     };
     const path = paths[connector] || 'unknown';
     const r = rank && rank !== '无' ? `-o${rank}` : '';
-    return `${s}-${path}${r}`;
+    return `${s}${suffix}-${path}${r}`;
 }
 
 /**
@@ -47,12 +52,12 @@ export function validateKinshipLogic(
     targetSurname?: string,
     mySurname?: string
 ): { isValid: boolean, warning?: string, type: 'error' | 'warning' | 'success', tag?: string } {
-    const tag = getLogicTag(side, connector);
+    const isMaternal = side === 'maternal';
+    const isSameSurname = !!(mySurname && targetSurname && targetSurname === mySurname);
+
+    const tag = getLogicTag(side, connector, undefined, isSameSurname);
     const rel = relText || "";
     if (!rel) return { isValid: true, type: 'success', tag };
-
-    const isMaternal = side === 'maternal';
-    const isSameSurname = mySurname && targetSurname && targetSurname === mySurname;
 
     // 增加：同姓堂舅/姨的特殊识别
     if (isMaternal && isSameSurname && (rel.includes('舅') || rel.includes('姨'))) {
@@ -204,10 +209,13 @@ export function generateSmartLayout(members: any[]) {
     // 注入排序预处理辅助字段
     const parsedMembers = members.map(m => {
         const tag = m.logicTag || m.logic_tag || "";
+        const fallbackSide = m.originSide === 'maternal' || m.origin_side === 'maternal' ? 'maternal' :
+            (m.originSide === 'paternal' || m.origin_side === 'paternal' ? 'paternal' : 'unknown');
+
         return {
             ...m,
             _gen: getGenLevel(tag),
-            _side: tag.startsWith('[F]') ? 'paternal' : (tag.startsWith('[M]') ? 'maternal' : 'unknown'),
+            _side: tag.startsWith('[F]') ? 'paternal' : (tag.startsWith('[M]') ? 'maternal' : fallbackSide),
             _rank: getRankIndex(tag),
             _rawTag: tag
         };
@@ -245,6 +253,9 @@ export function generateSmartLayout(members: any[]) {
             let x = CENTER_X;
             let y = START_Y + (gen + 1) * LEVEL_HEIGHT;
 
+            // 特殊排斥标记 (!S) -> 追加向外侧的额外推移距离
+            const extraRepulsion = m._rawTag.includes('!S') ? 160 : 0;
+
             if (gen === 99) {
                 // 没有Tag的随意发配到底部或周边
                 x = CENTER_X + (Math.random() * 800 - 400);
@@ -253,10 +264,10 @@ export function generateSmartLayout(members: any[]) {
                 // 弹性分布：基于中心偏移，向两端蔓延
                 if (isPaternal) {
                     const centerX = CENTER_X - SIDE_OFFSET;
-                    x = centerX - (totalWidth / 2) + index * MIN_NODE_GAP;
+                    x = centerX - (totalWidth / 2) + index * MIN_NODE_GAP - extraRepulsion;
                 } else if (isMaternal) {
                     const centerX = CENTER_X + SIDE_OFFSET;
-                    x = centerX - (totalWidth / 2) + index * MIN_NODE_GAP;
+                    x = centerX - (totalWidth / 2) + index * MIN_NODE_GAP + extraRepulsion;
                 } else {
                     x = CENTER_X - (totalWidth / 2) + index * MIN_NODE_GAP;
                 }

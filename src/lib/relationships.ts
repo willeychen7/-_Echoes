@@ -385,6 +385,9 @@ function getParentIds(nodeId: any, members: any[]) {
 export function isClan(vNode: any, tNode: any, currentSide?: 'paternal' | 'maternal'): boolean {
     if (!vNode || !tNode) return false;
 
+    // 名分锁优先：如果在创建档案时已经打上了母系的永久烙印，绝对不是宗亲
+    if (tNode.originSide === 'maternal' || tNode.origin_side === 'maternal') return false;
+
     // 如果已经明确选择了母系方位，即便同姓，也不属于“宗亲”
     if (currentSide === 'maternal') return false;
 

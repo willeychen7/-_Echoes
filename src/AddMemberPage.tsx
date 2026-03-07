@@ -8,7 +8,7 @@ import { ImageCropper } from "./components/ImageCropper";
 import { getRelativeTime, cn } from "./lib/utils";
 import { isDemoMode } from "./demo-data";
 import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
-import { getLogicTag, validateKinshipLogic, getReverseKinship } from "./lib/kinshipEngine";
+import { getLogicTag, validateKinshipLogic, getReverseKinship, CONNECTOR_SUGGESTIONS } from "./lib/kinshipEngine";
 
 export const AddMemberPage: React.FC = () => {
   const navigate = useNavigate();
@@ -258,169 +258,18 @@ export const AddMemberPage: React.FC = () => {
     const familyId = currentUser?.familyId || null;
     const createdByMemberId = currentUser?.memberId;
 
-    const finalRelationship = (relationship === "其他" ? customRelationship : relationship) || "";
+    let finalRelationship = (relationship === "其他" ? customRelationship : relationship) || "";
 
-    // 触发前置向导检查: 当用户点击建立档案时才检查是否需要完善关系
-    const ambiguousKeywords = ["叔", "伯", "舅", "姨", "姑", "婶", "妗", "公", "婆", "爷", "奶", "堂", "表", "侄", "甥", "孙", "外孙"];
-    const exactMatchesToSkip = ["爷爷", "奶奶", "外公", "外婆", "爸爸", "妈妈", "父亲", "母亲", "儿子", "女儿", "妻子", "丈夫", "老公", "老婆", "亲爸", "亲妈", "老爸", "老妈"];
-    const isDirectFatherOfSomethingElse = finalRelationship.includes("爸") && !["父亲", "爸", "爸爸", "老爸", "亲爸"].includes(finalRelationship);
-    const isAmbiguous = (ambiguousKeywords.some(k => finalRelationship.includes(k)) && !exactMatchesToSkip.includes(finalRelationship)) || isDirectFatherOfSomethingElse;
-
-    if (isAmbiguous) {
-      if (!selectedRank) { setSafetyStep('ask'); setSafetyStage(1); return; }
-      if (!kinshipType) { setSafetyStep('ask'); setSafetyStage(2); return; }
-      if (kinshipType !== 'social') {
-        if (!lineageSide) { setSafetyStep('ask'); setSafetyStage(3); return; }
-        if (!connectingRank) { setSafetyStep('ask'); setSafetyStage(4); return; }
+    // 把向导第四步的排行和第三步的称呼组合起来
+    let relationshipToStore = finalRelationship;
+    if (selectedRank && selectedRank !== 'none' && selectedRank !== '无') {
+      if (!relationshipToStore.startsWith(selectedRank)) {
+        // 处理 "大" + "舅舅" = "大舅舅", "大" + "舅" = "大舅"
+        relationshipToStore = `${selectedRank}${relationshipToStore}`;
       }
     }
 
-    let resolvedRelationship = finalRelationship;
-    let autoInferredBranch = selectedBranch;
-    let autoInferredRank = selectedRank;
-
-    // 1. 智能预解析：从输入文字中提取支系与排行 (如输入“堂大哥”，提取“堂”和“大”)
-    if (!autoInferredBranch) {
-      if (finalRelationship.startsWith("堂")) {
-        autoInferredBranch = "堂";
-        resolvedRelationship = resolvedRelationship.substring(1);
-      } else if (finalRelationship.startsWith("表")) {
-        autoInferredBranch = "表";
-        resolvedRelationship = resolvedRelationship.substring(1);
-      } else if (finalRelationship.startsWith("亲")) {
-        autoInferredBranch = "亲生";
-        resolvedRelationship = resolvedRelationship.substring(3).startsWith("的手足") ? resolvedRelationship.substring(5) : resolvedRelationship.substring(1);
-      }
-    }
-
-    // 继续提取排行 (支持更多口语化：排行老三、细妹、幺儿等)
-    if (!autoInferredRank) {
-      const rankMatch = resolvedRelationship.match(/^(二|三|四|五|六|七|八|九|十|大|小|幺|老|排行老|排行|细|第一|第二|第三)/);
-      if (rankMatch) {
-        autoInferredRank = rankMatch[0];
-        resolvedRelationship = resolvedRelationship.substring(rankMatch[0].length);
-      }
-    }
-
-    // 2. 逻辑分流判定器 (智能推理：如果已经选择了父母，直接推断血统，不弹出询问)
-    if (!autoInferredBranch && parentId) {
-      const parent = members.find(m => Number(m.id) === Number(parentId));
-      if (parent) {
-        const parentRel = (parent.relationship || "").trim();
-        const parentRole = parent.standardRole || "";
-        const isMyDirectParent = ["父亲", "母亲", "爸", "妈", "爸爸", "妈妈", "老爸", "老妈"].some(k => parentRel.includes(k)) || ["father", "mother"].includes(parentRole);
-
-        if (isMyDirectParent) {
-          if (["哥", "姐", "弟", "妹", "兄"].some(k => resolvedRelationship.includes(k))) autoInferredBranch = "亲生";
-          if (["甥", "侄", "孙"].some(k => resolvedRelationship.includes(k))) autoInferredBranch = "血亲";
-        }
-      }
-    }
-
-    // 防错校验：如果手动选的分支与已选父母冲突 (如选了亲爹却非说是堂亲)
-    if (parentId && selectedBranch) {
-      const parent = members.find(m => Number(m.id) === Number(parentId));
-      const parentRel = (parent?.relationship || "").trim();
-      const parentRole = parent?.standardRole || "";
-      const isMyDirectParent = ["父亲", "母亲", "爸", "妈", "爸爸", "妈妈", "老爸", "老妈"].some(k => parentRel.includes(k)) || ["father", "mother"].includes(parentRole);
-
-      if (isMyDirectParent && ["堂", "表", "姻亲", "社会好友"].includes(selectedBranch)) {
-        setCorrectionNotice(`逻辑矛盾：该成员的长辈是“${parent?.name}(${parentRel})”，TA应属同脉手足，不可选为“${selectedBranch}”。`);
-        setSelectedBranch(null);
-        return;
-      }
-    }
-
-    if (!autoInferredBranch) {
-      if (["外甥", "侄", "孙", "孙辈"].some(k => finalRelationship.includes(k))) {
-        setBranchMode('lineage');
-        setBranchStage('type');
-        setShowBranchAsk(true);
-        return;
-      }
-      if (["哥", "姐", "弟", "妹", "兄"].some(k => finalRelationship.includes(k))) {
-        setBranchMode('closeness');
-        setBranchStage('type');
-        setShowBranchAsk(true);
-        return;
-      }
-      if (["叔", "伯", "姑", "舅", "姨", "公", "婆", "爷", "奶", "妗", "婶"].some(k => finalRelationship.includes(k))) {
-        setBranchMode('nature');
-        setBranchStage('type');
-        setShowBranchAsk(true);
-        return;
-      }
-    }
-
-    // 3. 深度安全检查 (Wizard Step)：处理向导交互
-    if (safetyStep === 'ask' && !parentId) {
-      if (!selectedRank) {
-        setCorrectionNotice("请求阻断：请先完成【第一阶段】指定该成员在其同辈中的排行。");
-        return;
-      }
-      if (!kinshipType) {
-        setCorrectionNotice("请求阻断：请先完成【第二阶段】确认该成员与您的根本关系定性。");
-        return;
-      }
-      if (kinshipType !== 'social' && !lineageSide) {
-        setCorrectionNotice("请求阻断：请先完成【第三阶段】指明该亲属所属的宗亲或外戚方位。");
-        return;
-      }
-      if (kinshipType !== 'social' && !connectingRank) {
-        setCorrectionNotice("请求阻断：请先完成【第四阶段】明确该支脉在家族中的房分排行。");
-        return;
-      }
-    }
-
-    // 4. 终极兜底：如果系统现在还是无法判定属于哪个支系 (Branch)，强制弹出询问，不准含糊
-    if (!autoInferredBranch && !selectedBranch && relationship !== "挚友/其他" && !parentId) {
-      if (["表", "堂", "亲", "姑", "姨", "舅", "叔", "伯", "侄", "甥", "孙", "公", "婆", "爷", "奶", "妗", "婶"].some(k => finalRelationship.includes(k))) {
-        setCorrectionNotice("该称谓涉及分支归属，请先在下方弹出层中确认其亲疏归属选项。");
-        setBranchMode('lineage');
-        setBranchStage('type');
-        setShowBranchAsk(true);
-        return;
-      }
-    }
-
-    const currentBranch = selectedBranch || autoInferredBranch;
-    const currentRank = (selectedRank === "none" || selectedRank === "无" ? null : (selectedRank || autoInferredRank));
-
-    // 检查是否需要询问排行
-    if (!currentRank && currentBranch !== "社会好友" && ["哥", "姐", "弟", "妹", "甥", "侄", "孙"].some(k => resolvedRelationship.includes(k))) {
-      setBranchStage('rank');
-      setShowBranchAsk(true);
-      return;
-    }
-
-    if (finalRelationship.includes("/")) {
-      const parts = finalRelationship.split("/");
-      if (['母家', '表', '姻亲'].includes(currentBranch || '')) {
-        resolvedRelationship = parts[1] || parts[parts.length - 1];
-      } else {
-        resolvedRelationship = parts[0];
-      }
-    }
-
-    // --- 逻辑守卫 (Logic Guard) ---
-    // 强制执行传统的宗法逻辑：母系无“堂”，父系姑表为“表”
-    const currentBranchName = selectedBranch || autoInferredBranch;
-    const side = lineageSide || (currentBranchName === '母家' ? 'maternal' : 'paternal');
-
-    // 如果是母系（外戚）或选择了母家选项，绝对不能出现“堂”
-    if (side === 'maternal' && (resolvedRelationship.includes("堂") || currentBranchName === '堂')) {
-      setCorrectionNotice(`违背传统礼法：母系（外家）一脉不可存在“堂”之名分，请修正关系称谓或选择正确的亲疏方位。`);
-      return; // 强拦截，决不允许创建档案
-    }
-
-    // 最终组合逻辑：确保“堂/表”逻辑与支系一致
-    let relationshipToStore = currentBranchName
-      ? `${resolvedRelationship}(${currentBranchName})`
-      : resolvedRelationship;
-
-    if (currentRank) {
-      relationshipToStore = `${currentRank}${relationshipToStore}`;
-    }
+    const side = lineageSide || 'paternal';
 
     // 智能打标签：如果是母系但恰好同姓，加个逻辑补丁
     if (side === 'maternal' && mySurname && targetSurname && mySurname === targetSurname) {
@@ -499,7 +348,7 @@ export const AddMemberPage: React.FC = () => {
           memberType,
           fatherId: currentParentId,
           ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null)),
-          logicTag: logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '')
+          logicTag: logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '', mySurname !== "" && targetSurname !== "" && mySurname === targetSurname)
         })
       });
       const data = await response.json().catch(() => ({}));
@@ -522,7 +371,7 @@ export const AddMemberPage: React.FC = () => {
           memberType,
           fatherId: currentParentId,
           ancestralHall: (connectingRank && connectingRank !== '无' ? `${connectingRank}房` : (parent?.ancestralHall || null)),
-          logicTag: logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '')
+          logicTag: logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '', mySurname !== "" && targetSurname !== "" && mySurname === targetSurname)
         });
         localStorage.setItem("demoCustomMembers", JSON.stringify(customMembers));
       } else if (!data.id) {
@@ -753,7 +602,7 @@ export const AddMemberPage: React.FC = () => {
               <div className="space-y-3">
                 <label className="text-xl font-black px-1 block">您如何称呼TA？</label>
                 <div className="grid grid-cols-3 gap-2">
-                  {["叔叔", "伯伯", "姑姑", "舅舅", "阿姨", "堂哥", "堂弟", "表姐", "堂妹", "其他"].map(rel => (
+                  {(CONNECTOR_SUGGESTIONS[connectorNode as string] || ["其他"]).concat(CONNECTOR_SUGGESTIONS[connectorNode as string]?.includes("其他") ? [] : ["其他"]).map(rel => (
                     <button key={rel} onClick={() => { setRelationship(rel); if (rel !== '其他') setCustomRelationship(""); }} className={`h-12 border-2 rounded-xl font-bold text-sm ${relationship === rel ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
                       {rel}
                     </button>
@@ -846,7 +695,7 @@ export const AddMemberPage: React.FC = () => {
                     </span>
                   </div>
                   <p className="text-indigo-900 font-bold text-lg mb-2">TA 将称呼您为：<span className="text-[#eab308] text-2xl mx-1 bg-white px-3 py-0.5 rounded-lg shadow-sm border border-indigo-50">{getReverseKinship(relationship === '其他' ? customRelationship : relationship, lineageSide as 'paternal' | 'maternal', connectorNode as string, gender)}</span></p>
-                  <p className="text-xs text-indigo-400/80 font-mono font-bold uppercase border-t border-indigo-100/50 pt-2 mt-2">Logic_Coordinate: {logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '')}</p>
+                  <p className="text-xs text-indigo-400/80 font-mono font-bold uppercase border-t border-indigo-100/50 pt-2 mt-2">Logic_Coordinate: {logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '', mySurname !== "" && targetSurname !== "" && mySurname === targetSurname)}</p>
                 </div>
               </div>
             </div>
