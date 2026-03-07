@@ -280,9 +280,13 @@ export const AddMemberPage: React.FC = () => {
 
     // 把向导第四步的排行和第三步的称呼组合起来
     let relationshipToStore = finalRelationship;
+    // 💡 修正：如果方位选了亲兄弟，强制剔除可能带入的“表/堂”字眼 (处理用户点击建议词的残留)
+    if (connectorNode === 'sibling') {
+      relationshipToStore = relationshipToStore.replace(/[表堂]/g, '');
+    }
+
     if (selectedRank && selectedRank !== 'none' && selectedRank !== '无') {
       if (!relationshipToStore.startsWith(selectedRank)) {
-        // 处理 "大" + "舅舅" = "大舅舅", "大" + "舅" = "大舅"
         relationshipToStore = `${selectedRank}${relationshipToStore}`;
       }
     }

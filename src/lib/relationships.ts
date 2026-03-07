@@ -385,24 +385,18 @@ function getParentIds(nodeId: any, members: any[]) {
 export function isClan(vNode: any, tNode: any, currentSide?: 'paternal' | 'maternal'): boolean {
     if (!vNode || !tNode) return false;
 
-    // 名分锁优先：如果在创建档案时已经打上了母系的永久烙印，绝对不是宗亲
-    if (tNode.originSide === 'maternal' || tNode.origin_side === 'maternal') return false;
+    // 1. 档案打标优先 (存入数据库的标记具有最高法律效力)
+    const tSide = tNode.origin_side || tNode.originSide;
+    if (tSide === 'maternal') return false;
+    if (tSide === 'paternal') return true;
 
-    // 如果已经明确选择了母系方位，即便同姓，也不属于“宗亲”
+    // 2. 当前方位参数优先 (用于实时计算/校验)
     if (currentSide === 'maternal') return false;
+    if (currentSide === 'paternal') return true;
 
-    // 原有逻辑：同姓且同房头，或默认同姓同宗
-    if (vNode.surname && tNode.surname && vNode.surname === tNode.surname) {
-        if (vNode.ancestralHall && tNode.ancestralHall) {
-            return vNode.ancestralHall === tNode.ancestralHall;
-        }
-        return true;
-    }
-
-    // 备选逻辑：如果明确打上了父系烙印且方位正确，优先信任
-    if (tNode.originSide === 'paternal' || tNode.origin_side === 'paternal') {
-        // 核心修正：即便姓氏不同，只要在档案建立时选择了“父系方位”，就应视为宗亲
-        return true;
+    // 3. 姓氏兜底逻辑
+    if (vNode.surname && tNode.surname) {
+        return vNode.surname === tNode.surname;
     }
 
     return false;
