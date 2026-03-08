@@ -780,22 +780,6 @@ export const FamilySquare: React.FC = () => {
                         );
                       })()}
 
-                      {/* 5. 家族普亲 (未归类血亲) */}
-                      {(() => {
-                        const left = allReal.filter(m => {
-                          const label = getKinshipLabel(meNode, m, members);
-                          return label === "【血亲】" && getRelationType(getRigorousRelationship(meNode, m, members)) !== 'social';
-                        });
-                        if (left.length === 0) return null;
-                        return (
-                          <div className="space-y-4 mb-8">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
-                              <div className="size-1.5 bg-slate-200 rounded-full" /> 家族亲人
-                            </h3>
-                            <div className="grid grid-cols-2 gap-4">{left.map(renderMemberCard)}</div>
-                          </div>
-                        );
-                      })()}
 
                       {/* 6. 社会关系 */}
                       {(() => {

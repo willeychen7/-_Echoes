@@ -320,7 +320,7 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
     if (tTag.startsWith('[F]')) return `【宗亲】${hallSuffix}`;
     if (tTag.startsWith('[M]')) return `【外戚】${hallSuffix}`;
 
-    return "【血亲】";
+    return `【宗亲】${hallSuffix}`;
 }
 
 /**
