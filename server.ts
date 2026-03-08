@@ -1406,8 +1406,8 @@ export async function createApp() {
               member_id: inviter.id,
               sender_name: name || target.name,
               sender_avatar: avatarUrl || target.avatar_url,
-              type: "identity_update", // 特殊类型：身份补全
-              content: `协助您锁定了“${inviterAncestralHall}”身份（基于对方称呼您的父亲为“${elderRelName}”）。若不准确请点击修正。`,
+              type: "identity_update",
+              content: `已根据受邀者的反馈，协助补全了您的支脉信息（${inviterAncestralHall}），这有助于完善家族树排位。若不准请点击修正。`,
               link_url: "/profile",
               is_read: false
             });
