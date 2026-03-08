@@ -80,12 +80,19 @@ CREATE TABLE family_members (
     member_type TEXT DEFAULT 'human',  -- 成员类型：human | pet
     added_by_member_id INTEGER REFERENCES family_members(id) ON DELETE SET NULL, -- 记录是谁把此人加入家族的
     sibling_order INTEGER DEFAULT NULL, -- 记录在同辈中的排行（老大=1, 老二=2...）
+    is_placeholder BOOLEAN DEFAULT FALSE, -- 是否为占位占坑节点（用于自动化对齐）
+    logic_tag TEXT, -- 关系逻辑坐标（如 [F]-2-O1）
+    origin_side TEXT, -- 来源方位（paternal/maternal）
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 索引：方便查询「某个成员是谁带进来的」
 CREATE INDEX IF NOT EXISTS idx_family_members_added_by
     ON family_members(added_by_member_id);
+
+-- 索引：多维对齐优化（房分 + 代数 + 排行）
+CREATE INDEX IF NOT EXISTS idx_family_members_rank_reconcile 
+    ON family_members(family_id, ancestral_hall, generation_num, sibling_order);
 
 -- 档案创建维护表 (Archive Memory Creators)
 -- NOTE: 记录哪个成员创建了谁的档案，实现权限和归属的分离
