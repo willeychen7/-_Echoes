@@ -292,6 +292,15 @@ export const AddMemberPage: React.FC = () => {
 
     // 🚀 核心：排重检查
     const relationshipToStoreRaw = (relationship === "其他" ? customRelationship : relationship) || "";
+
+    // 🚀 核心校验：堂/表亲必须写明房分 (代际链路约束)
+    if (['self_p', 'self_m'].includes(connectorNode!) || relationshipToStoreRaw.includes("堂") || relationshipToStoreRaw.includes("表")) {
+      if (!connectingRank || connectingRank === '不知道') {
+        alert(`⚠️ 请填写 ${name} 父辈的排行。对于堂/表亲，系统必须明确 TA 属于哪一房 (如：大房、二房)，否则无法生成准确的家族树。`);
+        return;
+      }
+    }
+
     const isDuplicate = members.some(m =>
       m.name === name.trim() &&
       (m.relationship === relationshipToStoreRaw || (m.logic_tag || m.logicTag || "").includes(connectorNode || ""))
@@ -796,11 +805,11 @@ export const AddMemberPage: React.FC = () => {
                     💡 这里选的是“父辈排行”。例如：二叔排老二，就属于“二房”。
                   </p>
                   <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
-                    {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小', '不知道'].map(rk => (
+                    {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].map(rk => (
                       <button
                         key={rk}
                         onClick={() => setConnectingRank(rk)}
-                        className={`h-11 border-2 rounded-xl font-bold text-sm transition-all ${connectingRank === rk ? 'bg-amber-500 border-amber-500 text-white shadow-lg' : 'bg-white border-white hover:border-amber-200 text-amber-800/40'}`}
+                        className={`h-11 border-2 rounded-xl font-bold text-sm transition-all ${connectingRank === rk ? 'bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-500/20' : 'bg-white border-white hover:border-amber-200 text-amber-800'}`}
                       >
                         {rk}
                       </button>
