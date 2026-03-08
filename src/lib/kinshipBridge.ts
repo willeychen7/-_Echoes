@@ -41,18 +41,30 @@ export function computeKinshipViaMumuy(
 
     const getFullNode = (id: any) => id ? members?.find(m => String(m.id) === String(id)) : null;
 
-    const tG = targetNode.generation_num || targetNode.generationNum;
-    const vG = viewerNode.generation_num || viewerNode.generationNum;
+    const tG = targetNode.generation_num ?? targetNode.generationNum;
+    const vG = viewerNode.generation_num ?? viewerNode.generationNum;
+
+    // Normalize data access for both DB and API patterns
+    const getVal = (node: any, keys: string[]) => {
+        for (const k of keys) if (node[k] !== undefined) return node[k];
+        return undefined;
+    };
+
+    const targetHall = getVal(targetNode, ['ancestral_hall', 'ancestralHall']);
+    const viewerHall = getVal(viewerNode, ['ancestral_hall', 'ancestralHall']);
+    const targetBD = getVal(targetNode, ['birth_date', 'birthDate']);
+    const viewerBD = getVal(viewerNode, ['birth_date', 'birthDate']);
+
     const tS = getExplicitOrder(targetNode);
     const vS = getExplicitOrder(viewerNode);
-    const tSex = normalizeGender(targetNode.gender) === 'female' ? 'F' : 'M';
-    const vSex = normalizeGender(viewerNode.gender) === 'female' ? 'F' : 'M';
+    const tSex = normalizeGender(getVal(targetNode, ['gender'])) === 'female' ? 'F' : 'M';
+    const vSex = normalizeGender(getVal(viewerNode, ['gender'])) === 'female' ? 'F' : 'M';
 
-    const tFatherId = targetNode.father_id || targetNode.fatherId;
-    const vFatherId = viewerNode.father_id || viewerNode.fatherId;
-    const tMotherId = targetNode.mother_id || targetNode.motherId;
-    const vMotherId = viewerNode.mother_id || viewerNode.motherId;
-    const vSpouseId = viewerNode.spouse_id || viewerNode.spouseId;
+    const tFatherId = getVal(targetNode, ['father_id', 'fatherId']);
+    const vFatherId = getVal(viewerNode, ['father_id', 'fatherId']);
+    const tMotherId = getVal(targetNode, ['mother_id', 'motherId']);
+    const vMotherId = getVal(viewerNode, ['mother_id', 'motherId']);
+    const vSpouseId = getVal(viewerNode, ['spouse_id', 'spouseId']);
 
     const genDiff = tG - vG;
 
@@ -66,7 +78,7 @@ export function computeKinshipViaMumuy(
     if (vChildren?.some(c => String(c.spouse_id) === String(targetNode.id))) return tSex === 'F' ? "儿媳" : "女婿";
 
     const vSpouseNode = getFullNode(vSpouseId);
-    if (vSpouseNode && (String(targetNode.id) === String(vSpouseNode.father_id) || String(targetNode.id) === String(vSpouseNode.mother_id))) {
+    if (vSpouseNode && (String(targetNode.id) === String(getVal(vSpouseNode, ['father_id', 'fatherId'])) || String(targetNode.id) === String(getVal(vSpouseNode, ['mother_id', 'motherId'])))) {
         if (vSex === 'F') return tSex === 'F' ? "婆婆" : "公公";
         return tSex === 'F' ? "岳母" : "岳父";
     }
@@ -74,19 +86,19 @@ export function computeKinshipViaMumuy(
     const isBioAncestor = isAncestorRecursive(targetNode, viewerNode, members);
     const isBioDescendant = isDescendantRecursive(targetNode, viewerNode, members);
 
-    let effectiveVH = viewerNode.ancestral_hall;
+    let effectiveVH = viewerHall;
     let effectiveVFatherId = vFatherId;
     let effectiveVMotherId = vMotherId;
 
     if (vSex === 'F' && vSpouseId && !isBioAncestor && !isBioDescendant) {
         if (vSpouseNode) {
-            effectiveVH = vSpouseNode.ancestral_hall;
-            effectiveVFatherId = vSpouseNode.father_id || vSpouseNode.fatherId;
-            effectiveVMotherId = vSpouseNode.mother_id || vSpouseNode.motherId;
+            effectiveVH = getVal(vSpouseNode, ['ancestral_hall', 'ancestralHall']);
+            effectiveVFatherId = getVal(vSpouseNode, ['father_id', 'fatherId']);
+            effectiveVMotherId = getVal(vSpouseNode, ['mother_id', 'motherId']);
         }
     }
 
-    const hT = HALL_RANK[targetNode.ancestral_hall] ?? 99;
+    const hT = HALL_RANK[targetHall] ?? 99;
     const hV = HALL_RANK[effectiveVH] ?? 99;
 
     if (isSpouse(targetNode, viewerNode)) return tSex === 'F' ? '妻子' : '丈夫';
@@ -99,8 +111,8 @@ export function computeKinshipViaMumuy(
     const areSiblings = (aNodeId, bNodeId) => {
         const a = getFullNode(aNodeId), b = getFullNode(bNodeId);
         if (!a || !b || String(a.id) === String(b.id)) return false;
-        const af = a.father_id || a.fatherId, bf = b.father_id || b.fatherId;
-        const am = a.mother_id || a.motherId, bm = b.mother_id || b.motherId;
+        const af = getVal(a, ['father_id', 'fatherId']), bf = getVal(b, ['father_id', 'fatherId']);
+        const am = getVal(a, ['mother_id', 'motherId']), bm = getVal(b, ['mother_id', 'motherId']);
         return (af && String(af) === String(bf)) || (am && String(am) === String(bm));
     };
 
@@ -110,22 +122,22 @@ export function computeKinshipViaMumuy(
     let isMaternal = viewerMaternal || targetMaternal || isSibOfMother;
     const isRealSib = (tFatherId && String(tFatherId) === String(effectiveVFatherId)) ||
         (tMotherId && String(tMotherId) === String(effectiveVMotherId)) ||
-        (targetNode.ancestral_hall && targetNode.ancestral_hall === effectiveVH);
+        (targetHall && targetHall === effectiveVH);
 
     // 🚀 核心：亲手足生日排序诱导排行 (针对未明确设置排行的情况)
     let finalTS = tS;
     let finalVS = vS;
     if (members && isRealSib) {
         const getBirthRank = (node: any, fId: any, mId: any) => {
-            const bd = node.birth_date || node.birthDate;
+            const bd = getVal(node, ['birth_date', 'birthDate']);
             if (!bd) return 99;
             const sibs = members.filter(m =>
-                (fId && String(m.father_id) === String(fId)) ||
-                (mId && String(m.mother_id) === String(mId)) ||
-                (targetNode.ancestral_hall && m.ancestral_hall === targetNode.ancestral_hall)
+                (fId && String(getVal(m, ['father_id', 'fatherId'])) === String(fId)) ||
+                (mId && String(getVal(m, ['mother_id', 'motherId'])) === String(mId)) ||
+                (targetHall && getVal(m, ['ancestral_hall', 'ancestralHall']) === targetHall)
             );
-            const sortedBDs = sibs.filter(s => s.birth_date || s.birthDate)
-                .sort((a, b) => new Date(a.birth_date || a.birthDate).getTime() - new Date(b.birth_date || b.birthDate).getTime());
+            const sortedBDs = sibs.filter(s => getVal(s, ['birth_date', 'birthDate']))
+                .sort((a, b) => new Date(getVal(a, ['birth_date', 'birthDate'])).getTime() - new Date(getVal(b, ['birth_date', 'birthDate'])).getTime());
             const idx = sortedBDs.findIndex(s => String(s.id) === String(node.id));
             return idx !== -1 ? idx + 1 : 99;
         };
@@ -151,7 +163,7 @@ export function computeKinshipViaMumuy(
             }
         }
 
-        // 启发式：如果最终还是无法确定 viewer 的排行 (仍然是 99)，参考原始倾向
+        // 启发式：如果最终还是无法确定某个视角
         if (finalVS === 99 && finalTS !== 99) {
             const oldRel = targetNode.relationship || "";
             if (oldRel.includes("弟") || oldRel.includes("妹")) {
@@ -159,9 +171,8 @@ export function computeKinshipViaMumuy(
             } else if (oldRel.includes("哥") || oldRel.includes("姐")) {
                 isO = true;
             } else {
-                // 默认视角：1为长，>1为幼
-                isO = (finalTS === 1);
-                if (finalTS > 1) isO = false;
+                // 如果没有明确倾向，回归排行索引比较：2 < 99 = true (哥/姐)
+                isO = (finalTS < finalVS);
             }
         }
 
