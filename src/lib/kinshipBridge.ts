@@ -353,23 +353,25 @@ export function computeKinshipViaMumuy(
 
         if (!lca && !isRealSib && !isSpouse(targetNode, viewerNode)) return targetNode.relationship || "亲戚";
 
+        // 计算堂/表兄弟姊妹的具体称谓（再从、三从等）
+        const distV = lca ? getGenerationDistance(viewerNode, lca, members) : 0;
         let cousinPrefix = isRealSib ? '' : (isMaternal ? '表' : '堂');
+
+        if (!isRealSib && !isMaternal && distV >= 3) {
+            if (distV === 3) cousinPrefix = '再从';
+            else if (distV === 4) cousinPrefix = '三从';
+            else cousinPrefix = '族';
+        }
+
         // 精准修正：如果 target 的父母是女性，且该女性是 viewer 父亲的姐妹（姑姑）→ 表亲
         if (!isRealSib) {
-            const tParentFId = tFatherId ? getFullNode(tFatherId) : null;
-            const tParentMId = tMotherId ? getFullNode(tMotherId) : null;
-            const tParentFromFather = tParentFId && !tParentMId ? tParentFId : null; // 只有父亲
-            const hasMotherAsParent = !!tParentMId; // target 有母亲记录
-            // 如果 target 的直系父母中有女性，且该女性是 viewer 的亲属（姑姑方向），则是表亲
             const tMother = tMotherId ? getFullNode(tMotherId) : null;
             const tFather = tFatherId ? getFullNode(tFatherId) : null;
-            const parentIsAunt = (tMother && isSibOfFather && areSiblings(tMother.id, vFatherId)) ||
-                (tMother && areSiblings(tMother.id, vFatherId)) ||
+            const parentIsAunt = (tMother && areSiblings(tMother.id, vFatherId)) ||
                 (tFather && areSiblings(tFather.id, vMotherId));
             if (parentIsAunt) cousinPrefix = '表';
-            // 如果 target 的直接母亲是 viewer 父亲的姐妹（姑姑）→ 表亲
-            if (tMother && vFatherId && areSiblings(tMother.id, vFatherId)) cousinPrefix = '表';
         }
+
         if (isO) return cousinPrefix + rank + (tSex === 'F' ? '姐' : '哥');
         return cousinPrefix + rank + (tSex === 'F' ? '妹' : '弟');
     }
@@ -385,7 +387,13 @@ export function computeKinshipViaMumuy(
         }
 
         if (!lca) return targetNode.relationship || "亲戚";
-        const prefix = (isRealSib || targetNode.ancestral_hall === effectiveVH) ? '' : (isMaternal ? '表' : '堂');
+
+        const distV = getGenerationDistance(viewerNode, lca, members);
+        let prefix = (isRealSib || targetNode.ancestral_hall === effectiveVH) ? '' : (isMaternal ? '表' : '堂');
+        if (!isMaternal && distV >= 4) {
+            prefix = distV === 4 ? '再从' : '族';
+        }
+
         if (tSex === 'F') return prefix + rank + (isMaternal ? '姨' : '姑');
         return prefix + rank + ((hT < hV || tS === 1) ? '伯' : '叔');
     }
@@ -440,7 +448,7 @@ export function computeKinshipViaMumuy(
                             return isFemaleTarget ? rank + "姨外婆" : rank + "舅外婆";
                         } else {
                             // 外公的兄弟姐妹
-                            return isFemaleTarget ? rank + "姑外婆" : rank + "外公";
+                            return isFemaleTarget ? rank + "姑外婆" : (tS < getExplicitOrder(ancSib) ? rank + "伯外公" : rank + "叔外公");
                         }
                     } else {
                         // 父系 (爷爷/奶奶一侧)
@@ -566,8 +574,22 @@ function getVal(node: any, keys: string[]) {
     return undefined;
 }
 
-function getFullNode(id: any, members: any[]) {
+function getFullNode(id: any, members?: any[]) {
     return id ? members?.find(m => String(m.id) === String(id)) : null;
+}
+
+function getGenerationDistance(target: any, ancestor: any, members?: any[]) {
+    if (!target || !ancestor) return 0;
+    let dist = 0;
+    let curr = target;
+    while (curr && String(curr.id) !== String(ancestor.id)) {
+        const fId = getVal(curr, ['father_id', 'fatherId']);
+        const mId = getVal(curr, ['mother_id', 'motherId']);
+        curr = getFullNode(fId || mId, members);
+        dist++;
+        if (dist > 15) break;
+    }
+    return String(curr?.id) === String(ancestor.id) ? dist : 0;
 }
 
 export function computeReverseViaMumuy(m: string, s: 'male' | 'female'): string | null { return null; }
