@@ -79,6 +79,7 @@ CREATE TABLE family_members (
     is_adopted BOOLEAN DEFAULT FALSE, -- 是否为继嗣/祧子
     member_type TEXT DEFAULT 'human',  -- 成员类型：human | pet
     added_by_member_id INTEGER REFERENCES family_members(id) ON DELETE SET NULL, -- 记录是谁把此人加入家族的
+    sibling_order INTEGER DEFAULT NULL, -- 记录在同辈中的排行（老大=1, 老二=2...）
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

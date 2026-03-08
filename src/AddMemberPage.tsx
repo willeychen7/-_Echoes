@@ -421,6 +421,9 @@ export const AddMemberPage: React.FC = () => {
 
     const parent = members.find(m => Number(m.id) === Number(currentParentId));
 
+    const rankMap: Record<string, number> = { '大': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10, '小': 11 };
+    const siblingOrder = selectedRank ? rankMap[selectedRank] : (connectingRank ? rankMap[connectingRank] : null);
+
     try {
       const response = await fetch("/api/family-members", {
         method: "POST",
@@ -447,7 +450,8 @@ export const AddMemberPage: React.FC = () => {
             (connectingRank && connectingRank !== '不知道' ? `${connectingRank}房` : null) ||
             (['father', 'mother', 'grandfather', 'grandmother', 'm_grandfather', 'm_grandmother'].includes(connectorNode as string) && selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : null)
           ),
-          logicTag: currentLogicTag
+          logicTag: currentLogicTag,
+          siblingOrder: siblingOrder || null
         })
       });
       const data = await response.json().catch(() => ({}));

@@ -285,7 +285,8 @@ export async function createApp() {
           memberType: m.member_type,
           logicTag: m.logic_tag,
           createdByMemberId: createdByMemberId || null,
-          addedByMemberId: m.added_by_member_id || null
+          addedByMemberId: m.added_by_member_id || null,
+          siblingOrder: m.sibling_order || null
         };
       });
       res.json(members);
@@ -565,7 +566,8 @@ export async function createApp() {
           member_type: memberType || 'human',
           generation_num: generationNum || null,
           logic_tag: logicTag || null,
-          added_by_member_id: createdByMemberId || null  // 记录是谁把此人加入家族的
+          added_by_member_id: createdByMemberId || null,  // 记录是谁把此人加入家族的
+          sibling_order: req.body.siblingOrder || null    // 家中排行
         };
 
         console.log("[API:MEMBER] Attempting primary insert...");
@@ -1259,10 +1261,11 @@ export async function createApp() {
                 const gen = vNode.generation_num;
                 if (!hall) continue;
 
-                // 查找同房、同代的真实成员（精确匹配）
+                // 查找同房、同代、同排行的真实成员（多重精确匹配）
                 const matches = realNodes.filter((r: any) =>
                   r.ancestral_hall === hall &&
-                  (gen == null || r.generation_num == null || Number(r.generation_num) === Number(gen))
+                  (gen == null || r.generation_num == null || Number(r.generation_num) === Number(gen)) &&
+                  (vNode.sibling_order == null || r.sibling_order == null || Number(r.sibling_order) === Number(vNode.sibling_order))
                 );
 
                 // NOTE: 每一"房"按长幼顺序唯一对应一个房主祖先（大伯=大房、二伯=二房…无重叠）
