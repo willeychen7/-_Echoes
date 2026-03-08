@@ -6,6 +6,8 @@
  * 3. 房分排行强化：支持“三姨姑婆”、“外二公”等特定称谓。
  */
 
+import { normalizeGender } from './utils';
+
 const HALL_RANK: Record<string, number> = {
     '根': 0, '根房': 0, '大房': 1, '一房': 1, '二房': 2, '三房': 3, '四房': 4, '五房': 5,
     '六房': 6, '七房': 7, '八房': 8, '九房': 9, '十房': 10, '小房': 99, '外家房': 1
@@ -28,8 +30,8 @@ export function computeKinshipViaMumuy(
 
     const tG = targetNode.generation_num || targetNode.generationNum;
     const vG = viewerNode.generation_num || viewerNode.generationNum;
-    const tSex = (targetNode.gender === 'female' || targetNode.gender === '女') ? 'F' : 'M';
-    const vSex = (viewerNode.gender === 'female' || viewerNode.gender === '女') ? 'F' : 'M';
+    const tSex = normalizeGender(targetNode.gender) === 'female' ? 'F' : 'M';
+    const vSex = normalizeGender(viewerNode.gender) === 'female' ? 'F' : 'M';
     const tS = targetNode.sibling_order ?? targetNode.siblingOrder ?? 99;
     const vS = viewerNode.sibling_order ?? viewerNode.siblingOrder ?? 99;
 
@@ -126,7 +128,7 @@ export function computeKinshipViaMumuy(
     if (genDiff === 1) {
         const pNode = getFullNode(tFatherId || tMotherId);
         if (areSiblings(viewerNode.id, pNode?.id)) {
-            const pIsFemale = pNode?.gender === 'female' || pNode?.gender === '女';
+            const pIsFemale = normalizeGender(pNode?.gender) === 'female';
             if (pIsFemale) return tSex === 'F' ? "外甥女" : "外甥";
             return tSex === 'F' ? "侄女" : "侄子";
         }
@@ -150,7 +152,7 @@ export function computeKinshipViaMumuy(
                 if (viewerMaternal || isMaternal) {
                     const ancSib = members?.find(m => areSiblings(m.id, targetNode.id) && isAncestorRecursive(m, viewerNode, members));
                     if (ancSib) {
-                        const ancSibIsFemale = ancSib.gender === 'female' || ancSib.gender === '女';
+                        const ancSibIsFemale = normalizeGender(ancSib.gender) === 'female';
                         if (ancSibIsFemale) return rank + "姨外婆"; // 外婆的姐妹
                         if (tSex === 'F') return rank + "姨姑婆"; // 外公的姐妹 (用户特定要求)
                         return "外" + rank + "公"; // 外公的兄弟

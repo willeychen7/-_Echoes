@@ -25,3 +25,10 @@ export function getRelativeTime(dateString: string) {
   if (diffInSeconds < 172800) return "昨天";
   return `${Math.floor(diffInSeconds / 86400)}天前`;
 }
+export function normalizeGender(g: any): 'male' | 'female' | null {
+  if (!g) return null;
+  const s = String(g).toLowerCase().trim();
+  if (s === 'male' || s === '男' || s === 'm') return 'male';
+  if (s === 'female' || s === '女' || s === 'f') return 'female';
+  return null;
+}

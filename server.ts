@@ -74,11 +74,33 @@ export async function createApp() {
           } catch (err: any) {
             console.log("Members Migration check failed:", err.message);
           }
+
+          // ONE-TIME CLEANUP: Standardize existing gender data in database
+          try {
+            await supabase.rpc('exec_sql', {
+              sql_query: `
+              UPDATE users SET gender = 'male' WHERE gender = '男';
+              UPDATE users SET gender = 'female' WHERE gender = '女';
+              UPDATE family_members SET gender = 'male' WHERE gender = '男';
+              UPDATE family_members SET gender = 'female' WHERE gender = '女';
+            ` });
+            console.log("Database gender standardization migration completed.");
+          } catch (err: any) {
+            console.log("Gender standardization migration failed or already run:", err.message);
+          }
         }
       } catch (e) {
         console.warn("Migration error:", e);
       }
     })();
+
+    const normalizeGender = (g: any) => {
+      if (!g) return null;
+      const s = String(g).toLowerCase().trim();
+      if (s === 'male' || s === '男' || s === 'm') return 'male' as const;
+      if (s === 'female' || s === '女' || s === 'f') return 'female' as const;
+      return null;
+    };
 
     // Express middleware
     app.use(express.json({ limit: "50mb" }));
@@ -282,6 +304,7 @@ export async function createApp() {
           spouseId: m.spouse_id,
           ancestralHall: m.ancestral_hall,
           generationNum: m.generation_num,
+          gender: normalizeGender(m.gender),
           memberType: m.member_type,
           logicTag: m.logic_tag,
           createdByMemberId: createdByMemberId || null,
@@ -467,7 +490,7 @@ export async function createApp() {
       if (avatarUrl !== undefined) updatePayload.avatar_url = avatarUrl;
       if (bio !== undefined) updatePayload.bio = bio;
       if (birthDate !== undefined) updatePayload.birth_date = (birthDate === "" ? null : birthDate);
-      if (gender !== undefined) updatePayload.gender = gender;
+      if (gender !== undefined) updatePayload.gender = normalizeGender(gender);
       if (ancestralHall !== undefined) updatePayload.ancestral_hall = ancestralHall;
       if (logicTag !== undefined) updatePayload.logic_tag = logicTag;
 
@@ -483,7 +506,7 @@ export async function createApp() {
 
       // 3. 核心同步逻辑：更新关联的 users 表
       const userUpdate: any = { name, relationship };
-      if (gender) userUpdate.gender = gender;
+      if (gender) userUpdate.gender = normalizeGender(gender);
       if (bio) userUpdate.bio = bio;
       if (birthDate) userUpdate.birth_date = birthDate;
       if (avatarUrl) userUpdate.avatar_url = avatarUrl;
@@ -601,7 +624,7 @@ export async function createApp() {
           standard_role: standardRole || "",
           father_id: fatherId || null,
           ancestral_hall: ancestralHall || null,
-          gender: gender || null,
+          gender: normalizeGender(gender),
           member_type: memberType || 'human',
           generation_num: generationNum || null,
           logic_tag: logicTag || null,
@@ -815,9 +838,8 @@ export async function createApp() {
     const getInverseLabel = async (relText: string, targetGender: string) => {
       if (!relText) return "家人";
       // 🚀 核心纠偏：支持多态性别归一化 (男/女/male/female)
-      const normalizedGender = (targetGender === '女' || targetGender === 'female') ? 'female' : 'male';
-      const g = normalizedGender === 'female' ? '女' : '男';
-
+      const normG = normalizeGender(targetGender) || 'male';
+      const g = normG === 'female' ? '女' : '男';
       const invMap: Record<string, string> = {
         "堂姐": g === '女' ? "堂妹" : "堂弟", "堂哥": g === '女' ? "堂妹" : "堂弟",
         "表姐": g === '女' ? "表妹" : "表弟", "表哥": g === '女' ? "表妹" : "表弟",
@@ -841,7 +863,7 @@ export async function createApp() {
     // --- Helper: Kinship Gender Guard ---
     const checkGenderConflict = (rel: string, gender: string) => {
       if (!rel || !gender) return false;
-      const normalizedGender = (gender === '男' || gender === 'male') ? 'male' : (gender === '女' || gender === 'female' ? 'female' : gender);
+      const normalizedGender = normalizeGender(gender);
       const femaleKeywords = ["姑", "姨", "妈", "娘", "奶", "婆", "姐", "妹", "嫂", "侄女", "外甥女", "媳", "婶", "妗", "姥", "女"];
       const maleKeywords = ["叔", "伯", "爸", "爹", "爷", "公", "哥", "弟", "婿", "夫", "男", "侄子", "外甥", "舅"];
       const isRelFemale = femaleKeywords.some(k => rel.includes(k));
@@ -1305,7 +1327,7 @@ export async function createApp() {
         if (!inviter || !target) return res.status(404).json({ error: "档案不存在" });
 
         // 2. Gender & Relationship Guard
-        const effectiveGender = gender || currentUser.gender || target.gender;
+        const effectiveGender = normalizeGender(gender || currentUser.gender || (target ? target.gender : null)) || 'male';
         const finalInverseRelLabel = await getInverseLabel(relationshipToInviter, effectiveGender);
         if (effectiveGender && checkGenderConflict(finalInverseRelLabel, effectiveGender)) {
           return res.status(400).json({ error: `礼法冲突：根据您的称谓，您的身份应当是“${finalInverseRelLabel}”，这与您的性别（${effectiveGender === 'male' ? '男' : '女'}）不符。` });
@@ -1424,7 +1446,7 @@ export async function createApp() {
             family_id: family.id,
             relationship: "创建者",
             avatar_url: avatar || "",
-            gender: req.body.gender,
+            gender: normalizeGender(req.body.gender),
             birth_date: birthDate || null,
             is_registered: true,
             standard_role: "creator",
@@ -1543,7 +1565,7 @@ export async function createApp() {
           avatar: member?.avatar_url || (user as any).avatar_url || "",
           bio: member?.bio || (user as any).bio || "",
           birthday: member?.birth_date || (user as any).birth_date || "",
-          gender: member?.gender || (user as any).gender || "男",
+          gender: normalizeGender(member?.gender || (user as any).gender) || "male",
           joinDate: user.created_at || new Date().toISOString(),
           stats: {
             memories: memoriesCount,
@@ -2379,6 +2401,9 @@ export async function createApp() {
         const userUpdate: any = {};
         if (name) userUpdate.name = name;
         if (avatarUrl) userUpdate.avatar_url = avatarUrl;
+        if (bio) userUpdate.bio = bio;
+        if (birthDate) userUpdate.birth_date = birthDate;
+        if (gender) userUpdate.gender = normalizeGender(gender);
 
         if (Object.keys(userUpdate).length > 0) {
           const { error } = await supabase.from("users").update(userUpdate).eq("id", numericUserId);
@@ -2391,7 +2416,7 @@ export async function createApp() {
           bio: bio || undefined,
           birth_date: birthDate || undefined,
           avatar_url: avatarUrl || undefined,
-          gender: gender || undefined
+          gender: normalizeGender(gender) || undefined
         }).eq("user_id", numericUserId).select("id");
 
         // NEW: BEST-EFFORT SYNC BY NAME (For unlinked accounts like 'test_profile')

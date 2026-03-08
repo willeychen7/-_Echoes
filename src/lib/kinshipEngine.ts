@@ -3,6 +3,8 @@
  * GitHub: https://github.com/mumuy/relationship
  */
 
+import { normalizeGender } from "./utils";
+
 // 基于衔接点的快捷建议表
 export const CONNECTOR_SUGGESTIONS: Record<string, string[]> = {
     'father': ['叔叔', '伯伯', '姑姑'],
@@ -175,7 +177,7 @@ export function getReverseKinship(
     }
 
     const coreRel = getCleanRelationship(rel);
-    const isMale = String(myGender).toLowerCase() === 'male' || String(myGender) === '男' || String(myGender) === 'M';
+    const isMale = normalizeGender(myGender) === 'male';
     const mySexStr: 'male' | 'female' = isMale ? 'male' : 'female';
 
     // =====================================================================

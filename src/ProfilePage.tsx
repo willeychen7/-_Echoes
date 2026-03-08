@@ -8,7 +8,7 @@ import {
   AlertTriangle, Gift, Users, Clock, LogOut, Sparkles, ChevronDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { cn } from "./lib/utils";
+import { cn, normalizeGender } from "./lib/utils";
 import { updateAvatarCache } from "./lib/useAvatarCache";
 import { ImageCropper } from "./components/ImageCropper";
 import { DEMO_PERSONAS, isDemoMode } from "./demo-data";
@@ -143,7 +143,7 @@ export const ProfilePage: React.FC = () => {
       familyId: parsed?.familyId || null,
       bio: parsed?.bio || parsed?.signature || "热爱生活，记录美好。",
       birthday: parsed?.birthday || parsed?.birthDate || "",
-      gender: parsed?.gender || "男",
+      gender: normalizeGender(parsed?.gender) || "male",
       phone: parsed?.phone || "", // 核心修复：防止 phone 字段在后续同步中丢失
       stats: cachedStats,
       isRegistered: !!parsed?.isRegistered
@@ -154,7 +154,7 @@ export const ProfilePage: React.FC = () => {
     name: "",
     bio: "",
     birthday: "",
-    gender: "男"
+    gender: "male"
   });
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -444,7 +444,7 @@ export const ProfilePage: React.FC = () => {
       name: editForm.name,
       bio: editForm.bio,
       birthday: editForm.birthday,
-      gender: editForm.gender
+      gender: (normalizeGender(editForm.gender) || "male") as "male" | "female"
     };
     setUser(updatedUser);
 
@@ -479,7 +479,7 @@ export const ProfilePage: React.FC = () => {
           bio: updatedUser.bio,
           birthDate: updatedUser.birthday,
           avatarUrl: updatedUser.avatar,
-          gender: updatedUser.gender || "男"
+          gender: updatedUser.gender || "male"
         })
       }).catch(console.error);
     }
@@ -514,7 +514,7 @@ export const ProfilePage: React.FC = () => {
       } else {
         // 降级逻辑：如果无法智能推导，尝试简单的角色镜像
         const targetRole = data.targetRole || "";
-        const targetGender = data.gender === 'female' || data.gender === '女' ? 'female' : 'male';
+        const targetGender = normalizeGender(data.gender) || 'male';
         if (targetRole.includes("弟") || targetRole.includes("妹")) {
           setSelectedRel(targetGender === 'female' ? "姐姐" : "哥哥");
         } else if (targetRole.includes("哥") || targetRole.includes("姐")) {
@@ -807,16 +807,16 @@ export const ProfilePage: React.FC = () => {
             {user.gender && (
               <span className={cn(
                 "px-2 py-0.5 rounded-full text-[10px] font-black shadow-sm",
-                user.gender === "女" ? "bg-rose-100 text-rose-500" : "bg-blue-100 text-blue-500"
+                user.gender === "female" ? "bg-rose-100 text-rose-500" : "bg-blue-100 text-blue-500"
               )}>
-                {user.gender === "女" ? "♀" : "♂"}
+                {user.gender === "female" ? "♀" : "♂"}
               </span>
             )}
           </div>
           <div
             className="flex items-center justify-center gap-2 mb-4 cursor-pointer group px-4 py-1 -mt-1 rounded-full hover:bg-slate-50 transition-colors"
             onClick={() => {
-              setEditForm({ name: user.name, bio: user.bio, birthday: user.birthday, gender: user.gender || "男" });
+              setEditForm({ name: user.name, bio: user.bio, birthday: user.birthday, gender: (user.gender as any) || "male" });
               setShowEditModal(true);
             }}
           >

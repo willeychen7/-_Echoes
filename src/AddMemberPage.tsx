@@ -5,7 +5,7 @@ import { Button } from "./components/Button";
 import { motion, AnimatePresence } from "motion/react";
 import { deduceRole, RELATIONSHIP_OPTIONS, isFemale } from "./lib/relationships";
 import { ImageCropper } from "./components/ImageCropper";
-import { getRelativeTime, cn } from "./lib/utils";
+import { getRelativeTime, cn, normalizeGender } from "./lib/utils";
 import { isDemoMode } from "./demo-data";
 import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
 import { getLogicTag, validateKinshipLogic, getReverseKinship, CONNECTOR_SUGGESTIONS } from "./lib/kinshipEngine";
@@ -134,7 +134,7 @@ export const AddMemberPage: React.FC = () => {
       if (match) setMyRank(match[1]);
     }
     if (me?.gender) {
-      setMeGender(me.gender === 'female' || me.gender === '女' ? 'female' : 'male');
+      setMeGender(normalizeGender(me.gender) || 'male');
     }
   }, [members, myRank]);
 
