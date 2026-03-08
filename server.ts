@@ -1262,8 +1262,18 @@ export async function createApp() {
                   (gen == null || r.generation_num == null || Number(r.generation_num) === Number(gen))
                 );
 
-                if (matches.length === 1) {
-                  const realNode = matches[0];
+                // NOTE: 每一"房"按长幼顺序唯一对应一个房主祖先（大伯=大房、二伯=二房…无重叠）
+                // 唯一可能造成多匹配的是：婶婶（伯母）也被标记为同房同代
+                // 去姻亲过滤：优先取血亲成员（排除关系为"妻子/老婆/婶婶/伯母/配偶"的）
+                const affinalKeywords = ['妻', '婶', '伯母', '嫂', '配偶', 'wife'];
+                const bloodMatches = matches.filter((r: any) => {
+                  const rel = (r.relationship || '').toLowerCase();
+                  return !affinalKeywords.some(k => rel.includes(k));
+                });
+                const finalMatches = bloodMatches.length > 0 ? bloodMatches : matches;
+
+                if (finalMatches.length === 1) {
+                  const realNode = finalMatches[0];
                   console.log(`[RECONCILE] 虚拟节点 ${vNode.id}（${vNode.name}/${hall}）→ 对齐到真实节点 ${realNode.id}（${realNode.name}）`);
 
                   // 把所有把 vNode 当爸/妈的成员，改指向 realNode
@@ -1271,10 +1281,10 @@ export async function createApp() {
                   await supabase.from("family_members").update({ mother_id: realNode.id }).eq("mother_id", vNode.id);
                   // 删除虚拟节点
                   await supabase.from("family_members").delete().eq("id", vNode.id);
-                } else if (matches.length > 1) {
-                  console.log(`[RECONCILE] 虚拟节点 ${vNode.id}（${hall}）找到多个候选（${matches.map((m: any) => m.name).join('，')}），跳过自动合并，需人工确认`);
+                } else if (finalMatches.length > 1) {
+                  console.log(`[RECONCILE] 虚拟节点 ${vNode.id}（${hall}）去姻亲后仍有多个候选（${finalMatches.map((m: any) => m.name).join('，')}），跳过自动合并，需人工确认`);
                 }
-                // matches.length === 0 → 没有对应真实节点，保留虚拟节点
+                // finalMatches.length === 0 → 没有对应真实节点，保留虚拟节点
               }
             } catch (err: any) {
               console.warn("[RECONCILE] 房分对齐出错（非致命）:", err.message);
