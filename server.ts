@@ -1265,19 +1265,26 @@ export async function createApp() {
               for (const vNode of virtualNodes) {
                 const hall = vNode.ancestral_hall;
                 const gen = vNode.generation_num;
-                if (!hall) continue;
+                const role = vNode.standard_role;
 
-                // 查找同房、同代、同排行的真实成员（多重精确匹配）
-                const matches = realNodes.filter((r: any) =>
-                  r.ancestral_hall === hall &&
-                  (gen == null || r.generation_num == null || Number(r.generation_num) === Number(gen)) &&
-                  (vNode.sibling_order == null || r.sibling_order == null || Number(r.sibling_order) === Number(vNode.sibling_order))
-                );
+                // 查找候选：
+                // 1. 如果有房分，按房号+代数+排行精准找 (最稳固)
+                // 2. 如果没房分但有 standard_role（如爷爷/奶奶），按角色+代数找 (祖辈/直系)
+                const matches = realNodes.filter((r: any) => {
+                  if (hall && r.ancestral_hall === hall) {
+                    const genMatch = (gen == null || r.generation_num == null || Number(r.generation_num) === Number(gen));
+                    const rankMatch = (vNode.sibling_order == null || r.sibling_order == null || Number(r.sibling_order) === Number(vNode.sibling_order));
+                    return genMatch && rankMatch;
+                  }
+                  // 针对祖辈：如果没有房分，但在同代中有唯一的角色匹配（如爷爷）
+                  if (!hall && role && r.standard_role === role) {
+                    return (gen == null || r.generation_num == null || Number(r.generation_num) === Number(gen));
+                  }
+                  return false;
+                });
 
-                // NOTE: 每一"房"按长幼顺序唯一对应一个房主祖先（大伯=大房、二伯=二房…无重叠）
-                // 唯一可能造成多匹配的是：婶婶（伯母）也被标记为同房同代
-                // 去姻亲过滤：优先取血亲成员（排除关系为"妻子/老婆/婶婶/伯母/配偶"的）
-                const affinalKeywords = ['妻', '婶', '伯母', '嫂', '配偶', 'wife'];
+                // 姻亲关键词扩展：涵盖父系、母系、及长辈配偶
+                const affinalKeywords = ['妻', '婶', '伯母', '嫂', '配偶', 'wife', '婆', '妈', '娘', '公', '奶', '舅妈', '姨丈'];
                 const bloodMatches = matches.filter((r: any) => {
                   const rel = (r.relationship || '').toLowerCase();
                   return !affinalKeywords.some(k => rel.includes(k));
