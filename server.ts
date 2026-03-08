@@ -1395,6 +1395,25 @@ export async function createApp() {
         // 4. Update inviter back-link
         if (inviterAncestralHall && !inviter.ancestral_hall) {
           invUpdate.ancestral_hall = inviterAncestralHall;
+
+          // === 核心新增：发送协作确认通知给邀请人 ===
+          try {
+            const relMap: any = { "大伯": "大房", "二伯": "二房", "三伯": "三房", "爸爸": "同房" };
+            // 找到 B 对 A 父亲的原始称呼（逆推）
+            const elderRelName = Object.keys(relMap).find(key => relMap[key] === inviterAncestralHall) || "长辈";
+
+            await supabase.from("notifications").insert({
+              member_id: inviter.id,
+              sender_name: name || target.name,
+              sender_avatar: avatarUrl || target.avatar_url,
+              type: "identity_update", // 特殊类型：身份补全
+              content: `协助您锁定了“${inviterAncestralHall}”身份（基于对方称呼您的父亲为“${elderRelName}”）。若不准确请点击修正。`,
+              link_url: "/profile",
+              is_read: false
+            });
+          } catch (notifErr) {
+            console.error("[ACCEPT-INVITE] Failed to send id-update notif:", notifErr);
+          }
         }
 
         if (Object.keys(invUpdate).length > 1) {
