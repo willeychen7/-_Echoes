@@ -510,11 +510,16 @@ export const ProfilePage: React.FC = () => {
       if (recommendation) {
         setSelectedRel(recommendation.identity || recommendation.title);
       } else {
-        // 降级逻辑：如果无法智能推导，尝试通过 standard_role 进行简单的性别反转
-        const inviterGender = data.inviterGender === 'female' || data.inviterGender === '女' ? 'female' : 'male';
+        // 降级逻辑：如果无法智能推导，尝试简单的角色镜像
         const targetRole = data.targetRole || "";
-        // 这里可以调用现有的反转逻辑，或者简单设置
-        setSelectedRel(targetRole.includes("弟") ? (inviterGender === 'female' ? "姐姐" : "哥哥") : "");
+        const targetGender = data.gender === 'female' || data.gender === '女' ? 'female' : 'male';
+        if (targetRole.includes("弟") || targetRole.includes("妹")) {
+          setSelectedRel(targetGender === 'female' ? "姐姐" : "哥哥");
+        } else if (targetRole.includes("哥") || targetRole.includes("姐")) {
+          setSelectedRel(targetGender === 'female' ? "妹妹" : "弟弟");
+        } else {
+          setSelectedRel(targetRole);
+        }
       }
 
       setIsManualRelMode(false);
@@ -1454,7 +1459,9 @@ export const ProfilePage: React.FC = () => {
                                         // 自动更新选中的关系
                                         setTimeout(() => {
                                           const newRecommendation = getIdentityRecommendation({ ...inviteData, inviterAncestralHall: mappedHall });
-                                          if (newRecommendation) setSelectedRel(newRecommendation.title);
+                                          if (newRecommendation) {
+                                            setSelectedRel(newRecommendation.identity || newRecommendation.title);
+                                          }
                                         }, 0);
                                       }
                                     }
@@ -1634,7 +1641,7 @@ export const ProfilePage: React.FC = () => {
                         )}
                       >
                         {(!isManualRelMode && getIdentityRecommendation(inviteData))
-                          ? `确认我是邀请人的“${selectedRel}”`
+                          ? `确认身份：${selectedRel}`
                           : "确认此身份进入档案"
                         }
                       </button>
