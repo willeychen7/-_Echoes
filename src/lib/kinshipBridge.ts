@@ -86,6 +86,71 @@ export function computeKinshipViaMumuy(
     const targetSpouseId = getVal(targetNode, ['spouse_id', 'spouseId']);
     if (targetSpouseId && vChildren?.some(c => String(c.id) === String(targetSpouseId))) return tSex === 'F' ? "儿媳" : "女婿";
 
+    // --- 姻亲：target 是 viewer 亲兄弟/姐妹的配偶 → 妹夫/姐夫/弟妹/嫂子 ---
+    // 例：外婆大姐 → 外公（外婆的丈夫）= 妹夫
+    const vSiblings = members?.filter(m => {
+        if (String(m.id) === String(viewerNode.id)) return false;
+        const mF = getVal(m, ['father_id', 'fatherId']);
+        const mM = getVal(m, ['mother_id', 'motherId']);
+        return (vFatherId && mF && String(mF) === String(vFatherId)) ||
+            (vMotherId && mM && String(mM) === String(vMotherId));
+    });
+    const sibWithTargetAsSpouse = vSiblings?.find(sib => {
+        const sibSpouseId = getVal(sib, ['spouse_id', 'spouseId']);
+        return sibSpouseId && String(sibSpouseId) === String(targetNode.id);
+    });
+    if (sibWithTargetAsSpouse) {
+        const sibIsFemale = normalizeGender(sibWithTargetAsSpouse.gender) === 'female';
+        const sibOrder = getExplicitOrder(sibWithTargetAsSpouse);
+        const vOrder = getExplicitOrder(viewerNode);
+        const sibIsOlderThanViewer = sibOrder < vOrder;
+        if (sibIsFemale) {
+            // 妹妹/姐姐的丈夫 → 妹夫/姐夫
+            return sibIsOlderThanViewer ? "姐夫" : "妹夫";
+        } else {
+            // 哥哥/弟弟的妻子 → 嫂子/弟妹
+            return sibIsOlderThanViewer ? "嫂子" : "弟妹";
+        }
+    }
+
+    // --- 检测 target 是否是 viewer 亲兄弟/姐妹的子女或其配偶 ---
+    // 例1：外婆大姐 → 妈妈（外婆的女儿）= 外甥女
+    // 例2：外婆大姐 → 爸爸（外婆的女婿）= 外甥女婿
+    const sibWithTargetAsChildOrSpouse = vSiblings?.find(sib => {
+        const sibId = String(sib.id);
+        // 直接子女
+        if (String(tFatherId) === sibId || String(tMotherId) === sibId) return true;
+        // 子女的配偶
+        const sibChildren = members?.filter(m => (String(getVal(m, ['father_id', 'fatherId'])) === sibId || String(getVal(m, ['mother_id', 'motherId'])) === sibId));
+        if (sibChildren?.some(c => {
+            const cSpouseId = getVal(c, ['spouse_id', 'spouseId']);
+            return cSpouseId && String(cSpouseId) === String(targetNode.id);
+        })) return true;
+        return false;
+    });
+
+    if (sibWithTargetAsChildOrSpouse) {
+        const sibIsFemale = normalizeGender(sibWithTargetAsChildOrSpouse.gender) === 'female';
+        // 判定是直接子女还是子女配偶
+        const isSpouseOfChild = !(String(tFatherId) === String(sibWithTargetAsChildOrSpouse.id) || String(tMotherId) === String(sibWithTargetAsChildOrSpouse.id));
+
+        if (sibIsFemale) {
+            if (isSpouseOfChild) return tSex === 'F' ? "外甥媳妇" : "外甥女婿";
+            return tSex === 'F' ? "外甥女" : "外甥";
+        } else {
+            if (isSpouseOfChild) return tSex === 'F' ? "侄媳妇" : "侄女婿";
+            return tSex === 'F' ? "侄女" : "侄子";
+        }
+    }
+
+    // --- 检测 target 是否是 viewer 亲兄弟/姐妹的孙辈 (甥孙/侄孙) ---
+    const sibWithTargetAsGrandchild = vSiblings?.find(sib => isDescendantRecursive(targetNode, sib, members) && Math.abs((targetNode.generation_num || targetNode.generationNum) - (sib.generation_num || sib.generationNum)) === 2);
+    if (sibWithTargetAsGrandchild) {
+        const sibIsFemale = normalizeGender(sibWithTargetAsGrandchild.gender) === 'female';
+        const prefix = sibIsFemale ? "甥孙" : "侄孙";
+        return prefix + (tSex === 'F' ? "女" : "");
+    }
+
     const vSpouseNode = getFullNode(vSpouseId);
 
     // --- 姻亲：配偶的父母 → 公婆/岳父母 ---
@@ -94,8 +159,46 @@ export function computeKinshipViaMumuy(
         return tSex === 'F' ? "岳母" : "岳父";
     }
 
-    // --- 姻亲：子女的配偶的父母 → 亲家公/亲家母 ---
-    // 例：奶奶 → 外公/外婆（儿媳妈妈的父母）
+    // --- 姻亲：子女（或其亲兄弟姐妹的子女）的配偶的父母 → 亲家公/亲家母 ---
+    // 此逻辑覆盖：外婆大姐 (Viewer) -> 爷爷 (Target)。
+    // 路径：Viewer 的亲姐妹 (外婆) 的女儿 (妈妈) 嫁给了 Target 的儿子 (爸爸)。
+
+    // 1. 找到 viewer 及其亲兄弟姐妹的所有后代
+    const vLineageMembers = [viewerNode, ...(vSiblings || [])];
+    const vAllDescendantsIds = new Set<string>();
+    vLineageMembers.forEach(m => {
+        members?.forEach(potentialDesc => {
+            if (isDescendantRecursive(potentialDesc, m, members)) {
+                vAllDescendantsIds.add(String(potentialDesc.id));
+            }
+        });
+    });
+
+    // 2. 检查 target (或其亲兄弟姐妹) 是否是 viewer 线任一后代的配偶的祖先
+    const isTargetQinJia = members?.some(m => {
+        // m 是 viewer 线的某个后代的配偶
+        const mSpouseId = getVal(m, ['spouse_id', 'spouseId']);
+        if (!mSpouseId || !vAllDescendantsIds.has(String(mSpouseId))) return false;
+
+        // target (或其亲兄弟/姐妹) 是否是 m 的祖先 (或 m 本身)
+        const tSibs = members?.filter(sib => {
+            const sibF = getVal(sib, ['father_id', 'fatherId']);
+            const sibM = getVal(sib, ['mother_id', 'motherId']);
+            const tF = getVal(targetNode, ['father_id', 'fatherId']);
+            const tM = getVal(targetNode, ['mother_id', 'motherId']);
+            return (tF && sibF && String(sibF) === String(tF)) ||
+                (tM && sibM && String(sibM) === String(tM)) ||
+                (String(sib.id) === String(targetNode.id));
+        });
+
+        return tSibs?.some(sib => isAncestorRecursive(sib, m, members) || String(sib.id) === String(m.id));
+    });
+
+    if (isTargetQinJia && genDiff === 0) {
+        return tSex === 'F' ? "亲家母" : "亲家公";
+    }
+
+    // --- 姻亲原逻辑兜底：子女的配偶的父母 ---
     const vChildrenSpouseParents: number[] = [];
     vChildren?.forEach(child => {
         const childSpouseId = getVal(child, ['spouse_id', 'spouseId']);
@@ -330,21 +433,44 @@ export function computeKinshipViaMumuy(
                 }
 
                 // 旁系祖辈精准术语
-                if (viewerMaternal || isMaternal) {
-                    const ancSib = members?.find(m => areSiblings(m.id, targetNode.id) && isAncestorRecursive(m, viewerNode, members));
-                    if (ancSib) {
-                        const ancSibIsFemale = normalizeGender(ancSib.gender) === 'female';
-                        if (ancSibIsFemale) return rank + "姨外婆"; // 外婆的姐妹
-                        if (tSex === 'F') return rank + "姨姑婆"; // 外公的姐妹 (用户特定要求)
-                        return "外" + rank + "公"; // 外公的兄弟
+                // 查找 target 的兄弟姐妹中谁是 viewer 的直系祖代
+                const ancSib = members?.find(m => areSiblings(m.id, targetNode.id) && isAncestorRecursive(m, viewerNode, members));
+
+                // 判断是父系还是母系 (通过该直系祖代判断)
+                const lineageNode = ancSib || targetNode;
+                const throughMother = isDescendantThroughDaughter(viewerNode, lineageNode, members);
+                const isFemaleTarget = tSex === 'F';
+
+                if (ancSib) {
+                    const ancSibIsFemale = normalizeGender(ancSib.gender) === 'female';
+                    if (throughMother) {
+                        // 母系 (外公/外婆一侧)
+                        if (ancSibIsFemale) {
+                            // 外婆的兄弟姐妹
+                            return isFemaleTarget ? rank + "姨外婆" : rank + "舅外婆";
+                        } else {
+                            // 外公的兄弟姐妹
+                            return isFemaleTarget ? rank + "姑外婆" : rank + "外公";
+                        }
+                    } else {
+                        // 父系 (爷爷/奶奶一侧)
+                        if (ancSibIsFemale) {
+                            // 奶奶的兄弟姐妹
+                            return isFemaleTarget ? rank + "姨奶奶" : rank + "舅公";
+                        } else {
+                            // 爷爷的兄弟姐妹
+                            return isFemaleTarget ? rank + "姑奶奶" : (tS < getExplicitOrder(ancSib) ? rank + "伯公" : rank + "叔公");
+                        }
                     }
-                    if (tSex === 'M') return "外" + rank + "公";
-                    return rank + (isMaternal ? '姨' : '堂') + (tSex === 'F' ? '婆' : '公');
                 }
-                const hSide = hT === hV ? "" : "堂";
-                return hSide + rank + (tSex === 'F' ? '奶奶' : '爷爷');
+
+                // 默认兜底
+                const sidePrefix = throughMother ? "外" : "";
+                return sidePrefix + rank + (isFemaleTarget ? '奶奶' : '爷爷');
             }
-            const sidePrefix = (isBioAncestor || hT === hV) ? '' : (isMaternal ? '外' : '堂');
+            // 曾祖辈及以上旁系
+            const throughMother = isDescendantThroughDaughter(viewerNode, targetNode, members);
+            const sidePrefix = throughMother ? "外" : "";
             return sidePrefix + prefixStr + (tSex === 'F' ? '奶奶' : '爷爷');
         } else {
             const sidePrefix = (isBioDescendant || hT === hV) ? "" : (isMaternal ? "外" : "堂");
