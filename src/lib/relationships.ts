@@ -466,15 +466,33 @@ export function getRelationshipChain(viewer: any, target: any, members: any[]): 
         }
     }
 
-    // === 策略 2（兜底）：创建者路径 ===
-    // BFS 找不到连通路径时（结构化连线不完整），退而求其次：
-    // 用「谁建了这个档案（createdByMemberId）」+ 「建档时的称谓（relationship）」来推导
+    // === 策略 2（兜底）：创建者链路回溯 ===
+    // BFS 图找不到路径时，用「谁建了这个档案」来追溯
+    //
+    // 双跳逻辑：
+    //   target.createdByMemberId = 堂弟  （堂弟创建了二姨）
+    //   target.relationship = "阿姨"       （堂弟眼中的二姨）
+    //   堂弟.createdByMemberId = 我       （我创建了堂弟的档案）
+    //   堂弟.relationship = "堂弟"         （我眼中的堂弟）
+    //   → 生成：「小明（我堂弟）的阿姨」✅
     const creatorId = target.createdByMemberId || target.created_by_member_id;
     const creatorRelLabel = (target.relationship || '').trim();
     if (creatorId && creatorRelLabel && Number(creatorId) !== vId && Number(creatorId) !== tId) {
         const creatorNode = ctx.membersMap.get(Number(creatorId));
         if (creatorNode) {
-            const viewerCallsCreator = getRigorousRelationship(viewer, creatorNode, members);
+            // 优先：用 mumuy 计算 viewer → creator 的称谓
+            let viewerCallsCreator = getRigorousRelationship(viewer, creatorNode, members);
+
+            // NOTE: mumuy 失效时（返回"亲戚"/"家人"），改用「creator 本身的创建者链」递归回溯
+            // 如果 creator 正好是由 viewer 创建的，那 creator.relationship 就是"viewer 眼中的 creator"称谓
+            if (!viewerCallsCreator || ['家人', '亲戚', '本人', ''].includes(viewerCallsCreator)) {
+                const creatorOfCreatorId = creatorNode.createdByMemberId || creatorNode.created_by_member_id;
+                if (creatorOfCreatorId && Number(creatorOfCreatorId) === vId) {
+                    // creator 是由 viewer 直接创建的！creator.relationship 就是相对 viewer 的称谓
+                    viewerCallsCreator = (creatorNode.relationship || '').trim();
+                }
+            }
+
             if (viewerCallsCreator && !['家人', '亲戚', '本人', ''].includes(viewerCallsCreator)
                 && !isAncestor.test(viewerCallsCreator)) {
                 const cName = creatorNode.name || '';
@@ -487,4 +505,5 @@ export function getRelationshipChain(viewer: any, target: any, members: any[]): 
 
     return null;
 }
+
 
