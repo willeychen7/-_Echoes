@@ -18,6 +18,19 @@ const NUM_CHAR = ['零', '一', '二', '三', '四', '五', '六', '七', '八',
 const ANCESTOR_PREFIX = ['', '', '', '曾', '高', '太', '烈', '天', '远', '鼻'];
 const DESCENDANT_PREFIX = ['', '', '', '曾', '玄', '来', '晜', '仍', '云', '耳'];
 
+function getExplicitOrder(node: any): number {
+    const raw = node.sibling_order ?? node.siblingOrder;
+    if (raw !== undefined && raw !== null) return Number(raw);
+    const tag = node.logic_tag || node.logicTag || "";
+    const match = String(tag).match(/-o(二十|十一|十二|十三|十四|十五|十六|十七|十八|十九|一|二|三|四|五|六|七|八|九|十|大|小|幺|老)/i);
+    if (match) {
+        const val = match[1];
+        const map: Record<string, number> = { '大': 1, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10, '十一': 11, '十二': 12, '十三': 13, '十四': 14, '十五': 15, '十六': 16, '十七': 17, '十八': 18, '十九': 19, '二十': 20, '小': 11, '老': 11, '幺': 11 };
+        return map[val] || 99;
+    }
+    return 99;
+}
+
 export function computeKinshipViaMumuy(
     targetNode: any,
     viewerNode: any,
@@ -30,10 +43,10 @@ export function computeKinshipViaMumuy(
 
     const tG = targetNode.generation_num || targetNode.generationNum;
     const vG = viewerNode.generation_num || viewerNode.generationNum;
+    const tS = getExplicitOrder(targetNode);
+    const vS = getExplicitOrder(viewerNode);
     const tSex = normalizeGender(targetNode.gender) === 'female' ? 'F' : 'M';
     const vSex = normalizeGender(viewerNode.gender) === 'female' ? 'F' : 'M';
-    const tS = targetNode.sibling_order ?? targetNode.siblingOrder ?? 99;
-    const vS = viewerNode.sibling_order ?? viewerNode.siblingOrder ?? 99;
 
     const tFatherId = targetNode.father_id || targetNode.fatherId;
     const vFatherId = viewerNode.father_id || viewerNode.fatherId;
@@ -104,7 +117,19 @@ export function computeKinshipViaMumuy(
 
     // 同辈
     if (genDiff === 0) {
-        const isO = isRealSib ? (tS < vS) : ((hT < hV) || (hT === hV && tS < vS));
+        // 🚀 核心纠偏：长幼逻辑
+        // 如果 viewer 没有排行 (99)，而 target 有排行，且 target 关系曾经是“弟/妹”或“姐/哥”，我们应该尊重原倾向
+        // 这里采用更稳健的逻辑：如果 viewer 是 99，不要轻易判定 target 为 "哥/姐"
+        let isO = isRealSib ? (tS < vS) : ((hT < hV) || (hT === hV && tS < vS));
+        if (vS === 99 && tS !== 99) {
+            // 启发式：如果 viewer 没有排行，默认假设 viewer 是老大 (如果是主账户的话)
+            // 或者检查 target 的 node 里的 relationship 是否含有弟/妹关键字
+            const oldRel = targetNode.relationship || "";
+            if (oldRel.includes("弟") || oldRel.includes("妹")) isO = false;
+            else if (oldRel.includes("哥") || oldRel.includes("姐")) isO = true;
+            else isO = (tS < 1); // 默认假设比我小，除非他是老大
+        }
+
         const prefix = isRealSib ? '' : (isMaternal ? '表' : '堂');
         if (isO) return prefix + rank + (tSex === 'F' ? '姐' : '哥');
         return prefix + rank + (tSex === 'F' ? '妹' : '弟');

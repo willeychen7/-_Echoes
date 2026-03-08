@@ -837,24 +837,37 @@ export async function createApp() {
     // --- Helper: Get Inverse Relationship Label ---
     const getInverseLabel = async (relText: string, targetGender: string) => {
       if (!relText) return "家人";
-      // 🚀 核心纠偏：支持多态性别归一化 (男/女/male/female)
       const normG = normalizeGender(targetGender) || 'male';
-      const g = normG === 'female' ? '女' : '男';
       const invMap: Record<string, string> = {
-        "堂姐": g === '女' ? "堂妹" : "堂弟", "堂哥": g === '女' ? "堂妹" : "堂弟",
-        "表姐": g === '女' ? "表妹" : "表弟", "表哥": g === '女' ? "表妹" : "表弟",
-        "姐姐": g === '女' ? "妹妹" : "弟弟", "哥哥": g === '女' ? "妹妹" : "弟弟",
-        "叔叔": g === '女' ? "侄女" : "侄子", "伯伯": g === '女' ? "侄女" : "侄子",
-        "大伯": g === '女' ? "侄女" : "侄子", "二伯": g === '女' ? "侄女" : "侄子",
-        "舅舅": g === '女' ? "外甥女" : "外甥", "大舅": g === '女' ? "外甥女" : "外甥",
-        "姑姑": g === '女' ? "侄女" : "侄子", "姑妈": g === '女' ? "侄女" : "侄子",
-        "姨妈": g === '女' ? "外甥女" : "外甥", "阿姨": g === '女' ? "外甥女" : "外甥",
-        "儿子": g === '女' ? "母亲" : "父亲", "女儿": g === '女' ? "母亲" : "父亲"
+        "哥哥": normG === 'female' ? "妹妹" : "弟弟",
+        "姐姐": normG === 'female' ? "妹妹" : "弟弟",
+        "弟弟": normG === 'female' ? "姐姐" : "哥哥",
+        "妹妹": normG === 'female' ? "姐姐" : "哥哥",
+        "堂姐": normG === 'female' ? "堂妹" : "堂弟",
+        "堂哥": normG === 'female' ? "堂妹" : "堂弟",
+        "堂弟": normG === 'female' ? "堂姐" : "堂哥",
+        "堂妹": normG === 'female' ? "堂姐" : "堂哥",
+        "表姐": normG === 'female' ? "表妹" : "表弟",
+        "表哥": normG === 'female' ? "表妹" : "表弟",
+        "表弟": normG === 'female' ? "表姐" : "表哥",
+        "表妹": normG === 'female' ? "表姐" : "表哥",
+        "叔叔": normG === 'female' ? "侄女" : "侄子",
+        "伯伯": normG === 'female' ? "侄女" : "侄子",
+        "大伯": normG === 'female' ? "侄女" : "侄子",
+        "二伯": normG === 'female' ? "侄女" : "侄子",
+        "舅舅": normG === 'female' ? "外甥女" : "外甥",
+        "大舅": normG === 'female' ? "外甥女" : "外甥",
+        "姑姑": normG === 'female' ? "侄女" : "侄子",
+        "姑妈": normG === 'female' ? "侄女" : "侄子",
+        "姨妈": normG === 'female' ? "外甥女" : "外甥",
+        "阿姨": normG === 'female' ? "外甥女" : "外甥",
+        "儿子": normG === 'female' ? "母亲" : "父亲",
+        "女儿": normG === 'female' ? "母亲" : "父亲"
       };
       // Handle terms with rank prefix
       let result = invMap[relText];
       if (!result) {
-        const cleanRel = relText.replace(/^[大二三四五六七八九十]+/, "");
+        const cleanRel = relText.replace(/^(大|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|小|老)/, "");
         if (invMap[cleanRel]) result = invMap[cleanRel];
       }
       return result || relText;
