@@ -209,7 +209,7 @@ export async function createApp() {
     });
 
     // --- Helper for syncing member profile changes to messages/memories ---
-    async function syncMemberContent(memberId: string | number, name: string, oldName: string | null, avatarUrl: string | null, relationship: string | null) {
+    const syncMemberContent = async (memberId: string | number, name: string, oldName: string | null, avatarUrl: string | null, relationship: string | null) => {
       if (!supabase) return;
 
       const memoriesFields: any = {};
@@ -729,6 +729,138 @@ export async function createApp() {
       });
     });
 
+    // --- Helper: Rigorous Relationship Resolver ---
+    const resolveRigorousRel = async (role: string, inviter: any, targetId: number, explicitGender?: "male" | "female" | null) => {
+      let updateData: any = { id: targetId, gender: explicitGender || undefined };
+      let invUpdate: any = { id: inviter.id };
+
+      // Get target's current data for reconciliation
+      const { data: targetRecord } = await supabase.from("family_members").select("*").eq("id", targetId).single();
+
+      // 1. Generation Deduction (forward & inverse)
+      if (inviter.generation_num != null) {
+        const g = Number(inviter.generation_num);
+        if (["father", "mother", "uncle", "aunt"].includes(role)) updateData.generation_num = g - 1;
+        else if (["son", "daughter", "nephew", "niece"].includes(role)) updateData.generation_num = g + 1;
+        else if (["grandfather", "grandmother"].includes(role)) updateData.generation_num = g - 2;
+        else if (["grandson", "granddaughter"].includes(role)) updateData.generation_num = g + 2;
+        else if (["brother", "sister", "cousin", "spouse"].includes(role)) updateData.generation_num = g;
+      } else if (targetRecord?.generation_num != null) {
+        // Inverse deduction: if inviter's gen is missing but target's is known
+        const g = Number(targetRecord.generation_num);
+        if (["father", "mother", "uncle", "aunt"].includes(role)) invUpdate.generation_num = g + 1;
+        else if (["son", "daughter", "nephew", "niece"].includes(role)) invUpdate.generation_num = g - 1;
+        else if (["grandfather", "grandmother"].includes(role)) invUpdate.generation_num = g + 2;
+        else if (["grandson", "granddaughter"].includes(role)) invUpdate.generation_num = g - 2;
+        else if (["brother", "sister", "cousin", "spouse"].includes(role)) invUpdate.generation_num = g;
+      }
+
+      // 2. Ancestral Hall (Paternal Branch) Propagation
+      if (inviter.ancestral_hall && !targetRecord?.ancestral_hall) {
+        if (["father", "son", "brother", "grandfather", "grandson", "uncle", "nephew"].includes(role)) {
+          updateData.ancestral_hall = inviter.ancestral_hall;
+        }
+      }
+
+      // 3. Biological Linkage Implementation
+      const ensureParent = async (memberId: number, gen: 'male' | 'female') => {
+        const { data: m } = await supabase.from("family_members").select("*").eq("id", memberId).single();
+        let pId = gen === 'male' ? m.father_id : m.mother_id;
+        if (!pId) {
+          const { data: nP } = await supabase.from("family_members").insert({
+            family_id: m.family_id,
+            name: `${m.name}的${gen === 'male' ? '父亲' : '母亲'}`,
+            gender: gen,
+            is_registered: false,
+            member_type: 'virtual'
+          }).select().single();
+          if (nP) pId = nP.id;
+        }
+        return pId;
+      };
+
+      const ensureSiblingParents = async (memberId: number) => {
+        const fId = await ensureParent(memberId, 'male');
+        const mId = await ensureParent(memberId, 'female');
+        return { fId, mId };
+      };
+
+      if (role === "father") {
+        invUpdate.father_id = targetId;
+        updateData.gender = "male";
+      } else if (role === "mother") {
+        invUpdate.mother_id = targetId;
+        updateData.gender = "female";
+      } else if (role === "son" || role === "daughter") {
+        updateData.gender = role === "son" ? "male" : "female";
+        if (inviter.gender === "female") updateData.mother_id = inviter.id;
+        else updateData.father_id = inviter.id;
+      } else if (role === "brother" || role === "sister") {
+        const { fId, mId } = await ensureSiblingParents(inviter.id);
+        updateData.father_id = fId;
+        updateData.mother_id = mId;
+        updateData.gender = role === "brother" ? "male" : "female";
+      } else if (role === "spouse") {
+        updateData.spouse_id = inviter.id;
+        invUpdate.spouse_id = targetId;
+        updateData.gender = inviter.gender === "male" ? "female" : "male";
+      } else if (role === "grandfather" || role === "grandmother") {
+        const pId = await ensureParent(inviter.id, 'male');
+        if (pId) {
+          if (role === "grandfather") await supabase.from("family_members").update({ father_id: targetId }).eq("id", pId);
+          else await supabase.from("family_members").update({ mother_id: targetId }).eq("id", pId);
+        }
+        updateData.gender = role === "grandfather" ? "male" : "female";
+      } else if (role === "grandson" || role === "granddaughter") {
+        const { data: child } = await supabase.from("family_members").insert({
+          family_id: inviter.family_id,
+          name: `${inviter.name}的孩子`,
+          is_registered: false,
+          member_type: 'virtual',
+          [inviter.gender === 'female' ? 'mother_id' : 'father_id']: inviter.id
+        }).select().single();
+        if (child) updateData[inviter.gender === 'female' ? 'mother_id' : 'father_id'] = child.id;
+        updateData.gender = role === "grandson" ? "male" : "female";
+      } else if (role === "uncle" || role === "aunt") {
+        const parentId = await ensureParent(inviter.id, 'male');
+        if (parentId) {
+          const { fId, mId } = await ensureSiblingParents(parentId);
+          updateData.father_id = fId;
+          updateData.mother_id = mId;
+        }
+        updateData.gender = role === "uncle" ? "male" : "female";
+      } else if (role === "nephew" || role === "niece") {
+        const gps = await ensureSiblingParents(inviter.id);
+        const { data: sib } = await supabase.from("family_members").insert({
+          family_id: inviter.family_id,
+          name: `${inviter.name}的兄弟姐妹`,
+          is_registered: false,
+          member_type: 'virtual',
+          father_id: gps.fId,
+          mother_id: gps.mId
+        }).select().single();
+        if (sib) updateData[inviter.gender === 'male' ? 'father_id' : 'mother_id'] = sib.id;
+        updateData.gender = role === "nephew" ? "male" : "female";
+      } else if (role === "cousin") {
+        const pId = await ensureParent(inviter.id, 'male');
+        if (pId) {
+          const gpId = await ensureParent(pId, 'male');
+          if (gpId) {
+            const { data: vSib } = await supabase.from("family_members").insert({
+              family_id: inviter.family_id,
+              name: `${inviter.name}的伯叔`,
+              is_registered: false,
+              member_type: 'virtual',
+              father_id: gpId
+            }).select().single();
+            if (vSib) updateData.father_id = vSib.id;
+          }
+        }
+      }
+
+      return { updateData, invUpdate };
+    };
+
     app.post("/api/register-claim", async (req, res) => {
       try {
         const { inviteCode, name, avatarUrl, relationshipToInviter, standardRole, phone, password, birthDate } = req.body;
@@ -766,91 +898,11 @@ export async function createApp() {
         if (!target) return res.status(404).json({ error: "Target profile not found" });
         if (!inviter) return res.status(404).json({ error: "Inviter not found" });
 
-        // 2. Perform Relationship Mapping (Atomic Logic)
-        const resolveRigorousRel = async (role: string, inviter: any, targetId: number, explicitGender?: "male" | "female" | null) => {
-          let updateData: any = { id: targetId, gender: explicitGender || undefined };
-          let invUpdate: any = { id: inviter.id };
-
-          const ensureParent = async (memberId: number, gender: 'male' | 'female') => {
-            const { data: m } = await supabase.from("family_members").select("*").eq("id", memberId).single();
-            let pId = gender === 'male' ? m.father_id : m.mother_id;
-            // NOTE: 移除“幽灵档案”自动生成逻辑，避免产生冗余档案记录。
-            return pId || null;
-          };
-
-          const ensureSiblingParents = async (memberId: number) => {
-            const fId = await ensureParent(memberId, 'male');
-            const mId = await ensureParent(memberId, 'female');
-            return { fId, mId };
-          };
-
-          if (role === "father") {
-            invUpdate.father_id = targetId;
-            updateData.gender = "male";
-          } else if (role === "mother") {
-            invUpdate.mother_id = targetId;
-            updateData.gender = "female";
-          } else if (role === "son" || role === "daughter") {
-            updateData.gender = role === "son" ? "male" : "female";
-            if (inviter.gender === "female") updateData.mother_id = inviter.id;
-            else updateData.father_id = inviter.id;
-          } else if (role === "brother" || role === "sister") {
-            const { fId, mId } = await ensureSiblingParents(inviter.id);
-            updateData.father_id = fId;
-            updateData.mother_id = mId;
-            updateData.gender = role === "brother" ? "male" : "female";
-          } else if (role === "spouse") {
-            updateData.spouse_id = inviter.id;
-            invUpdate.spouse_id = targetId;
-            updateData.gender = inviter.gender === "male" ? "female" : "male";
-          } else if (role === "grandfather" || role === "grandmother") {
-            const pId = await ensureParent(inviter.id, 'male'); // Default to father's path for simplicity
-            if (role === "grandfather") await supabase.from("family_members").update({ father_id: targetId }).eq("id", pId);
-            else await supabase.from("family_members").update({ mother_id: targetId }).eq("id", pId);
-            updateData.gender = role === "grandfather" ? "male" : "female";
-          } else if (role === "grandson" || role === "granddaughter") {
-            // Create anchor child if not exists
-            const { data: child } = await supabase.from("family_members").insert({
-              family_id: inviter.family_id,
-              name: `${inviter.name}的孩子`,
-              is_registered: false,
-              [inviter.gender === 'female' ? 'mother_id' : 'father_id']: inviter.id
-            }).select().single();
-            if (child) {
-              updateData[inviter.gender === 'female' ? 'mother_id' : 'father_id'] = child.id;
-            }
-            updateData.gender = role === "grandson" ? "male" : "female";
-          } else if (role === "uncle" || role === "aunt") {
-            const parentId = await ensureParent(inviter.id, 'male');
-            const { fId, mId } = await ensureSiblingParents(parentId);
-            updateData.father_id = fId;
-            updateData.mother_id = mId;
-            updateData.gender = role === "uncle" ? "male" : "female";
-          } else if (role === "nephew" || role === "niece") {
-            // Nephew is child of a sibling
-            const gp = await ensureSiblingParents(inviter.id);
-            const { data: sibling } = await supabase.from("family_members").insert({
-              family_id: inviter.family_id,
-              name: `${inviter.name}的兄弟姐妹`,
-              is_registered: false,
-              father_id: gp.fId,
-              mother_id: gp.mId
-            }).select().single();
-            if (sibling) {
-              // We just need a link to the sibling. 
-              // Using father_id as default link for the nephew to the anchor sibling.
-              updateData.father_id = sibling.id;
-            }
-            updateData.gender = role === "nephew" ? "male" : "female";
-          }
-
-          return { updateData, invUpdate };
-        };
-
+        // 2. Perform rigorous relationship calculation & data update
         const { updateData, invUpdate } = await resolveRigorousRel(standardRole, inviter, target.id);
 
         // Merge additional fields
-        const finalTargetData = { ...updateData, is_registered: true, name, avatar_url: avatarUrl };
+        const finalTargetData = { ...updateData, is_registered: true, name, avatar_url: avatarUrl, relationship: relationshipToInviter };
 
         // 3. Update target member
         const { data, error } = await supabase.from("family_members").update(finalTargetData).eq("id", target.id).select().single();
@@ -915,23 +967,7 @@ export async function createApp() {
           await supabase.from("family_members").update({ user_id: userData.id }).eq("id", targetId);
         }
 
-        // 6. Perform rigorous relationship calculation & tree update
-        const resolvedRel = await resolveRigorousRel(standardRole, inviter, targetId, req.body.gender);
-
-        // Update Target (B)
-        const finalTargetUpdate: any = { ...resolvedRel.updateData, is_registered: true, user_id: userData.id };
-        if (avatarUrl) finalTargetUpdate.avatar_url = avatarUrl;
-        if (name) finalTargetUpdate.name = name;
-
-        await supabase.from("family_members").update(finalTargetUpdate).eq("id", targetId);
-
-        // Update Inviter (A)
-        if (Object.keys(resolvedRel.invUpdate).length > 1) {
-          const { id, ...rest } = resolvedRel.invUpdate;
-          await supabase.from("family_members").update(rest).eq("id", id);
-        }
-
-        // 7. Sync profile changes
+        // 6. Final Sync
         await syncMemberContent(targetId, name, target.name, avatarUrl, "我");
 
         console.log("[CLAIM] Success:", { memberId: data.id, familyId: inviter.family_id, userId: userData?.id });
@@ -1032,145 +1068,7 @@ export async function createApp() {
         if (!inviter || !target) return res.status(404).json({ error: "Invitation record not found" });
 
         // 2. Resolve Relationship
-        const resolveRigorousRel = async (role: string, inviter: any, targetId: number) => {
-          let updateData: any = { id: targetId };
-          let invUpdate: any = { id: inviter.id };
-
-          const ensureParent = async (memberId: number, gender: 'male' | 'female') => {
-            const { data: m } = await supabase.from("family_members").select("*").eq("id", memberId).single();
-            let pId = gender === 'male' ? m.father_id : m.mother_id;
-            if (!pId) {
-              const { data: nP, error: vErr } = await supabase.from("family_members").insert({
-                family_id: m.family_id,
-                name: `${m.name}的${gender === 'male' ? '父亲' : '母亲'}`,
-                gender: gender,
-                is_registered: false,
-                member_type: 'virtual'
-              }).select().single();
-
-              if (vErr && (vErr.message?.includes("column") || vErr.code === "PGRST204" || vErr.code === "42703")) {
-                const { data: nP2 } = await supabase.from("family_members").insert({
-                  family_id: m.family_id,
-                  name: `${m.name}的${gender === 'male' ? '父亲' : '母亲'}`,
-                  gender: gender,
-                  is_registered: false
-                }).select().single();
-                if (nP2) pId = nP2.id;
-              } else if (nP) {
-                pId = nP.id;
-              }
-              if (pId) {
-                await supabase.from("family_members").update({ [gender === 'male' ? 'father_id' : 'mother_id']: pId }).eq("id", memberId);
-              }
-            }
-            return pId;
-          };
-
-          const ensureSiblingParents = async (memberId: number) => {
-            const fId = await ensureParent(memberId, 'male');
-            const mId = await ensureParent(memberId, 'female');
-            return { fId, mId };
-          };
-
-          if (role === "father") {
-            invUpdate.father_id = targetId;
-            updateData.gender = "male";
-          } else if (role === "mother") {
-            invUpdate.mother_id = targetId;
-            updateData.gender = "female";
-          } else if (role === "son" || role === "daughter") {
-            updateData.gender = role === "son" ? "male" : "female";
-            if (inviter.gender === "female") updateData.mother_id = inviter.id;
-            else updateData.father_id = inviter.id;
-          } else if (role === "brother" || role === "sister") {
-            const { fId, mId } = await ensureSiblingParents(inviter.id);
-            updateData.father_id = fId;
-            updateData.mother_id = mId;
-            updateData.gender = role === "brother" ? "male" : "female";
-          } else if (role === "spouse") {
-            updateData.spouse_id = inviter.id;
-            invUpdate.spouse_id = targetId;
-            updateData.gender = inviter.gender === "male" ? "female" : "male";
-          } else if (role === "grandfather" || role === "grandmother") {
-            const pId = await ensureParent(inviter.id, 'male');
-            if (role === "grandfather") await supabase.from("family_members").update({ father_id: targetId }).eq("id", pId);
-            else await supabase.from("family_members").update({ mother_id: targetId }).eq("id", pId);
-            updateData.gender = role === "grandfather" ? "male" : "female";
-          } else if (role === "grandson" || role === "granddaughter") {
-            const { data: child, error: cErr } = await supabase.from("family_members").insert({
-              family_id: inviter.family_id,
-              name: `${inviter.name}的孩子`,
-              is_registered: false,
-              member_type: 'virtual',
-              [inviter.gender === 'female' ? 'mother_id' : 'father_id']: inviter.id
-            }).select().single();
-
-            let finalChild = child;
-            if (cErr && (cErr.message?.includes("column") || cErr.code === "PGRST204" || cErr.code === "42703")) {
-              const { data: child2 } = await supabase.from("family_members").insert({
-                family_id: inviter.family_id,
-                name: `${inviter.name}的孩子`,
-                is_registered: false,
-                [inviter.gender === 'female' ? 'mother_id' : 'father_id']: inviter.id
-              }).select().single();
-              finalChild = child2;
-            }
-            if (finalChild) {
-              updateData[inviter.gender === 'female' ? 'mother_id' : 'father_id'] = finalChild.id;
-            }
-            updateData.gender = role === "grandson" ? "male" : "female";
-          } else if (role === "uncle" || role === "aunt") {
-            const parentId = await ensureParent(inviter.id, 'male');
-            const { fId, mId } = await ensureSiblingParents(parentId);
-            updateData.father_id = fId;
-            updateData.mother_id = mId;
-            updateData.gender = role === "uncle" ? "male" : "female";
-          } else if (role === "nephew" || role === "niece") {
-            const { data: sibling, error: sErr } = await supabase.from("family_members").insert({
-              family_id: inviter.family_id,
-              name: `${inviter.name}的兄弟姐妹`,
-              is_registered: false,
-              member_type: 'virtual',
-              father_id: (await ensureSiblingParents(inviter.id)).fId,
-              mother_id: (await ensureSiblingParents(inviter.id)).mId
-            }).select().single();
-
-            let finalSibling = sibling;
-            if (sErr && (sErr.message?.includes("column") || sErr.code === "PGRST204" || sErr.code === "42703")) {
-              const { data: sibling2 } = await supabase.from("family_members").insert({
-                family_id: inviter.family_id,
-                name: `${inviter.name}的兄弟姐妹`,
-                is_registered: false,
-                father_id: (await ensureSiblingParents(inviter.id)).fId,
-                mother_id: (await ensureSiblingParents(inviter.id)).mId
-              }).select().single();
-              finalSibling = sibling2;
-            }
-            if (finalSibling) {
-              updateData[inviter.gender === 'male' ? 'father_id' : 'mother_id'] = finalSibling.id;
-            }
-            updateData.gender = role === "nephew" ? "male" : "female";
-          } else if (role === "cousin") {
-            // 堂/表亲逻辑：需要一个共同的祖父/祖母
-            // 1. 确保邀请人的父辈节点
-            const pId = await ensureParent(inviter.id, 'male');
-            // 2. 确保邀请人的祖辈节点
-            const gpId = await ensureParent(pId, 'male');
-            // 3. 创建父辈的虚拟手足（堂/表亲的父母）
-            const { data: vSib } = await supabase.from("family_members").insert({
-              family_id: inviter.family_id,
-              name: `${inviter.name}的伯叔`,
-              is_registered: false,
-              member_type: 'virtual',
-              father_id: gpId
-            }).select().single();
-            if (vSib) {
-              updateData.father_id = vSib.id;
-            }
-          }
-
-          return { updateData, invUpdate };
-        };
+        let { updateData, invUpdate } = await resolveRigorousRel(standardRole, inviter, target.id);
 
         // 1.5 IDENTITY GUARD & DATA MIGRATION
         // NOTE: 优先用 userId（UUID）查询，不再依赖 phone——UUID 是最稳定的用户唯一标识
@@ -1217,7 +1115,23 @@ export async function createApp() {
             // 迁移模式：把旧家族里用户自己的内容重定向到新 member 档案
             const oldMemberId = currentUser.member_id;
             if (oldMemberId) {
-              console.log(`[ACCEPT-INVITE:MIGRATE] Moving content from old member ${oldMemberId} to target ${target.id}`);
+              // 迁移元数据：将旧档案的辈分、房分、性别等带入新档案，以触发更精准的关系推导
+              const { data: oldMember } = await supabase.from("family_members").select("generation_num, ancestral_hall, gender, birth_date, bio").eq("id", oldMemberId).single();
+              if (oldMember) {
+                const updateBag: any = {};
+                if (oldMember.generation_num && !target.generation_num) updateBag.generation_num = oldMember.generation_num;
+                if (oldMember.ancestral_hall && !target.ancestral_hall) updateBag.ancestral_hall = oldMember.ancestral_hall;
+                if (oldMember.birth_date && !target.birth_date) updateBag.birth_date = oldMember.birth_date;
+                if (oldMember.gender && !target.gender) updateBag.gender = oldMember.gender;
+                if (oldMember.bio && !target.bio) updateBag.bio = oldMember.bio;
+
+                if (Object.keys(updateBag).length > 0) {
+                  await supabase.from("family_members").update(updateBag).eq("id", target.id);
+                  // 同步更新本地 target 对象，供 resolveRigorousRel 实时推导
+                  Object.assign(target, updateBag);
+                }
+              }
+
               await supabase.from("memories").update({ member_id: target.id }).eq("member_id", oldMemberId);
               await supabase.from("memories").update({ author_id: target.id }).eq("author_id", oldMemberId);
               await supabase.from("messages").update({ family_member_id: target.id }).eq("family_member_id", oldMemberId);
@@ -1225,7 +1139,7 @@ export async function createApp() {
               await supabase.from("archive_memory_creators").update({ member_id: target.id }).eq("member_id", oldMemberId);
               await supabase.from("archive_memory_creators").update({ creator_member_id: target.id }).eq("creator_member_id", oldMemberId);
 
-              // 迁移用户在这个小家族里辛辛苦苦创建的其他未注册亲戚（把他们的 family_id 指向新家族），以免家族删除时被连带干掉
+              // 迁移用户在这个小家族里辛辛苦苦创建的其他未注册亲戚（把他们的 family_id 指向新家族）
               await supabase.from("family_members")
                 .update({ family_id: inviter.family_id })
                 .eq("family_id", currentUser.family_id)
@@ -1389,7 +1303,9 @@ export async function createApp() {
         const finalTargetId = target.id;
 
         // 2. Perform rigorous relationship calculation
-        const { updateData, invUpdate } = await resolveRigorousRel(standardRole, inviter, finalTargetId);
+        const resolved = await resolveRigorousRel(standardRole, inviter, finalTargetId);
+        updateData = resolved.updateData;
+        invUpdate = resolved.invUpdate;
 
         const finalTargetData: any = {
           ...updateData,
@@ -1440,19 +1356,15 @@ export async function createApp() {
         }
 
         // 5. Update the User record and synchronize
-        const { data: userData } = await supabase.from("users").select("*").eq("id", currentUser.id).single();
-        if (userData) {
-          await supabase.from("users").update({
-            relationship: relationshipToInviter,
-            family_id: inviter.family_id,
-            member_id: finalMember.id,
-            // 同步更新全球用户资料（如用户在加入时确认了 A 建的头像更精美）
-            name: finalTargetData.name,
-            avatar_url: finalTargetData.avatar_url
-          }).eq("id", userData.id);
-        }
+        await supabase.from("users").update({
+          relationship: relationshipToInviter,
+          family_id: inviter.family_id,
+          member_id: finalMember.id,
+          name: finalTargetData.name,
+          avatar_url: finalTargetData.avatar_url
+        }).eq("id", currentUser.id);
 
-        res.json({ success: true, memberId: finalMember.id, familyId: inviter.family_id, userId: userData?.id });
+        res.json({ success: true, memberId: finalMember.id, familyId: inviter.family_id, userId: currentUser.id });
       } catch (err: any) {
         console.error("[ACCEPT-INVITE] Error:", err.message);
         res.status(500).json({ error: err.message });
