@@ -57,8 +57,8 @@ export function computeKinshipViaMumuy(
 
     const tS = getExplicitOrder(targetNode);
     const vS = getExplicitOrder(viewerNode);
-    const tSex = normalizeGender(getVal(targetNode, ['gender'])) === 'female' ? 'F' : 'M';
-    const vSex = normalizeGender(getVal(viewerNode, ['gender'])) === 'female' ? 'F' : 'M';
+    const tIsFemale = normalizeGender(getVal(targetNode, ['gender'])) === 'female';
+    const vIsFemale = normalizeGender(getVal(viewerNode, ['gender'])) === 'female';
 
     const tFatherId = getVal(targetNode, ['father_id', 'fatherId']);
     const vFatherId = getVal(viewerNode, ['father_id', 'fatherId']);
@@ -71,16 +71,16 @@ export function computeKinshipViaMumuy(
     // --- 0. 直系优先 ---
     if (String(targetNode.id) === String(vFatherId)) return "父亲";
     if (String(targetNode.id) === String(vMotherId)) return "母亲";
-    if (String(tFatherId) === String(viewerNode.id) || String(tMotherId) === String(viewerNode.id)) return tSex === 'F' ? "女儿" : "儿子";
+    if (String(tFatherId) === String(viewerNode.id) || String(tMotherId) === String(viewerNode.id)) return tIsFemale ? "女儿" : "儿子";
 
-    if (isSpouse(targetNode, viewerNode)) return tSex === 'F' ? '妻子' : '丈夫';
+    if (isSpouse(targetNode, viewerNode)) return tIsFemale ? '妻子' : '丈夫';
 
     const vSpouseNode = getFullNode(vSpouseId);
 
     // --- 姻亲：配偶的父母 → 公婆/岳父母 ---
     if (vSpouseNode && (String(targetNode.id) === String(getVal(vSpouseNode, ['father_id', 'fatherId'])) || String(targetNode.id) === String(getVal(vSpouseNode, ['mother_id', 'motherId'])))) {
-        if (vSex === 'F') return tSex === 'F' ? "婆婆" : "公公";
-        return tSex === 'F' ? "岳母" : "岳父";
+        if (vIsFemale) return tIsFemale ? "婆婆" : "公公";
+        return tIsFemale ? "岳母" : "岳父";
     }
 
     const areSiblings = (aNodeId: any, bNodeId: any) => {
@@ -97,14 +97,14 @@ export function computeKinshipViaMumuy(
             const spouseOrder = getExplicitOrder(vSpouseNode);
             const tOrder = getExplicitOrder(targetNode);
             const earlyRank = (tS >= 1 && tS <= 20) ? (tS === 1 ? '大' : NUM_CHAR[tS] || '') : '';
-            if (vSex === 'M') {
-                // 丈夫视角：妻子的兄弟 → 大舅子/小舅子；妻子的姐妹 → 大姨子/小姨子
-                if (tSex === 'F') return (tOrder < spouseOrder ? earlyRank + '大姨子' : earlyRank + '小姨子');
-                return (tOrder < spouseOrder ? earlyRank + '大舅子' : earlyRank + '小舅子');
-            } else {
+            if (vIsFemale) {
                 // 妻子视角：丈夫的兄弟 → 大伯/叔；丈夫的姐妹 → 大姑/小姑
-                if (tSex === 'F') return (tOrder < spouseOrder ? earlyRank + '大姑' : earlyRank + '小姑');
+                if (tIsFemale) return (tOrder < spouseOrder ? earlyRank + '大姑' : earlyRank + '小姑');
                 return (tOrder < spouseOrder ? earlyRank + '大伯' : earlyRank + '叔');
+            } else {
+                // 丈夫视角：妻子的兄弟 → 大舅子/小舅子；妻子的姐妹 → 大姨子/小姨子
+                if (tIsFemale) return (tOrder < spouseOrder ? earlyRank + '大姨子' : earlyRank + '小姨子');
+                return (tOrder < spouseOrder ? earlyRank + '大舅子' : earlyRank + '小舅子');
             }
         }
     }
@@ -112,15 +112,15 @@ export function computeKinshipViaMumuy(
     // --- 姻亲识别 ---
     // 检查 target 是否直接是 viewer 的配偶的儿媳/女婿
     const vChildren = members?.filter(m => (String(getVal(m, ['father_id', 'fatherId'])) === String(viewerNode.id) || String(getVal(m, ['mother_id', 'motherId'])) === String(viewerNode.id)));
-    if (vChildren?.some(c => String(getVal(c, ['spouse_id', 'spouseId'])) === String(targetNode.id))) return tSex === 'F' ? "儿媳" : "女婿";
+    if (vChildren?.some(c => String(getVal(c, ['spouse_id', 'spouseId'])) === String(targetNode.id))) return tIsFemale ? "儿媳" : "女婿";
     // 检查 target 是否是某个孩子的父母的配偶 (儿媳/女婿 - 从目标角度)
     if (vChildren?.some(c => {
         const cSpouseId = getVal(c, ['spouse_id', 'spouseId']);
         return cSpouseId && String(cSpouseId) === String(targetNode.id);
-    })) return tSex === 'F' ? "儿媳" : "女婿";
+    })) return tIsFemale ? "儿媳" : "女婿";
     // 检查 target 是否与 viewer 的某个孩子是配偶关系（反向）
     const targetSpouseId = getVal(targetNode, ['spouse_id', 'spouseId']);
-    if (targetSpouseId && vChildren?.some(c => String(c.id) === String(targetSpouseId))) return tSex === 'F' ? "儿媳" : "女婿";
+    if (targetSpouseId && vChildren?.some(c => String(c.id) === String(targetSpouseId))) return tIsFemale ? "儿媳" : "女婿";
 
     // --- 姻亲：target 是 viewer 亲兄弟/姐妹的配偶 → 妹夫/姐夫/弟妹/嫂子 ---
     // 例：外婆大姐 → 外公（外婆的丈夫）= 妹夫
@@ -171,11 +171,11 @@ export function computeKinshipViaMumuy(
         const isSpouseOfChild = !(String(tFatherId) === String(sibWithTargetAsChildOrSpouse.id) || String(tMotherId) === String(sibWithTargetAsChildOrSpouse.id));
 
         if (sibIsFemale) {
-            if (isSpouseOfChild) return tSex === 'F' ? "外甥媳妇" : "外甥女婿";
-            return tSex === 'F' ? "外甥女" : "外甥";
+            if (isSpouseOfChild) return tIsFemale ? "外甥媳妇" : "外甥女婿";
+            return tIsFemale ? "外甥女" : "外甥";
         } else {
-            if (isSpouseOfChild) return tSex === 'F' ? "侄媳妇" : "侄女婿";
-            return tSex === 'F' ? "侄女" : "侄子";
+            if (isSpouseOfChild) return tIsFemale ? "侄媳妇" : "侄女婿";
+            return tIsFemale ? "侄女" : "侄子";
         }
     }
 
@@ -184,7 +184,7 @@ export function computeKinshipViaMumuy(
     if (sibWithTargetAsGrandchild) {
         const sibIsFemale = normalizeGender(sibWithTargetAsGrandchild.gender) === 'female';
         const prefix = sibIsFemale ? "甥孙" : "侄孙";
-        return prefix + (tSex === 'F' ? "女" : "");
+        return prefix + (tIsFemale ? "女" : "");
     }
 
     // --- 姻亲原逻辑兜底：子女的配偶的父母 ---
@@ -200,7 +200,7 @@ export function computeKinshipViaMumuy(
         if (csM) vChildrenSpouseParents.push(Number(csM));
     });
     if (vChildrenSpouseParents.includes(Number(targetNode.id))) {
-        return tSex === 'F' ? "亲家母" : "亲家公";
+        return tIsFemale ? "亲家母" : "亲家公";
     }    // --- 姻亲扩展：递归 Qin-jia 检测 ---
     const isTargetQinJia = () => {
         // 如果 viewer 或其配偶与 target 有共同祖先，优先走血缘/近姻亲（公婆岳父母/内亲）逻辑
@@ -244,7 +244,7 @@ export function computeKinshipViaMumuy(
     };
 
     if (isTargetQinJia()) {
-        return tSex === 'F' ? "亲家母" : "亲家公";
+        return tIsFemale ? "亲家母" : "亲家公";
     }
     const isBioAncestor = isAncestorRecursive(targetNode, viewerNode, members);
     const isBioDescendant = isDescendantRecursive(targetNode, viewerNode, members);
@@ -253,7 +253,7 @@ export function computeKinshipViaMumuy(
     let effectiveVFatherId = vFatherId;
     let effectiveVMotherId = vMotherId;
 
-    if (vSex === 'F' && vSpouseId && !isBioAncestor && !isBioDescendant) {
+    if (vIsFemale && vSpouseId && !isBioAncestor && !isBioDescendant) {
         if (vSpouseNode) {
             effectiveVH = getVal(vSpouseNode, ['ancestral_hall', 'ancestralHall']);
             effectiveVFatherId = getVal(vSpouseNode, ['father_id', 'fatherId']);
@@ -264,7 +264,7 @@ export function computeKinshipViaMumuy(
     const hT = HALL_RANK[targetHall] ?? 99;
     const hV = HALL_RANK[effectiveVH] ?? 99;
 
-    if (isSpouse(targetNode, viewerNode)) return tSex === 'F' ? '妻子' : '丈夫';
+    if (isSpouse(targetNode, viewerNode)) return tIsFemale ? '妻子' : '丈夫';
 
     // --- 1. 宗法路径辩别 ---
     const lca = findLCA(targetNode, viewerNode, members);
@@ -286,14 +286,14 @@ export function computeKinshipViaMumuy(
         if (areSiblings(targetNode.id, vSpouseNode.id)) {
             const spouseOrder = getExplicitOrder(vSpouseNode);
             const earlyRank = (tS >= 1 && tS <= 20) ? (tS === 1 ? '大' : NUM_CHAR[tS] || '') : '';
-            if (vSex === 'M') {
-                // 丈夫视角：妻子的兄弟 → 大舅子/小舅子；妻子的姐妹 → 大姨子/小姨子
-                if (tSex === 'F') return (tS < spouseOrder ? earlyRank + '大姨子' : earlyRank + '小姨子');
-                return (tS < spouseOrder ? earlyRank + '大舅子' : earlyRank + '小舅子');
-            } else {
+            if (vIsFemale) {
                 // 妻子视角：丈夫的兄弟 → 大伯/叔；丈夫的姐妹 → 大姑/小姑
-                if (tSex === 'F') return (tS < spouseOrder ? earlyRank + '大姑' : earlyRank + '小姑');
+                if (tIsFemale) return (tS < spouseOrder ? earlyRank + '大姑' : earlyRank + '小姑');
                 return (tS < spouseOrder ? earlyRank + '大伯' : earlyRank + '叔');
+            } else {
+                // 丈夫视角：妻子的兄弟 → 大舅子/小舅子；妻子的姐妹 → 大姨子/小姨子
+                if (tIsFemale) return (tS < spouseOrder ? earlyRank + '大姨子' : earlyRank + '小姨子');
+                return (tS < spouseOrder ? earlyRank + '大舅子' : earlyRank + '小舅子');
             }
         }
     }
@@ -371,15 +371,15 @@ export function computeKinshipViaMumuy(
             if (parentIsAunt) cousinPrefix = '表';
         }
 
-        if (isO) return cousinPrefix + rank + (tSex === 'F' ? '姐' : '哥');
-        return cousinPrefix + rank + (tSex === 'F' ? '妹' : '弟');
+        if (isO) return cousinPrefix + rank + (tIsFemale ? '姐' : '哥');
+        return cousinPrefix + rank + (tIsFemale ? '妹' : '弟');
     }
 
     // 长一辈 (-1)
     if (genDiff === -1) {
-        if (isSibOfMother) return tSex === 'F' ? rank + '姨' : rank + '舅';
+        if (isSibOfMother) return tIsFemale ? rank + '姨' : rank + '舅';
         if (isSibOfFather) {
-            if (tSex === 'F') return rank + '姑妈';
+            if (tIsFemale) return rank + '姑妈';
             const fNode = getFullNode(vFatherId);
             const fOrder = getExplicitOrder(fNode);
             return (tS < fOrder) ? (rank + '伯') : (rank + '叔');
@@ -395,7 +395,7 @@ export function computeKinshipViaMumuy(
 
         // 如果路径是从母亲向上的 (viewerMaternal) 且 target 是母亲的父系堂亲 (target 没有 maternal 记录)
         if (viewerMaternal && !targetMaternal) {
-            return tSex === 'F' ? rank + "堂姨" : rank + "堂舅";
+            return tIsFemale ? rank + "堂姨" : rank + "堂舅";
         }
 
         let prefix = (isRealSib || targetNode.ancestral_hall === effectiveVH) ? '' : (isMaternal ? '表' : '堂');
@@ -403,7 +403,7 @@ export function computeKinshipViaMumuy(
             prefix = distV === 4 ? '再从' : '族';
         }
 
-        if (tSex === 'F') return prefix + rank + (isMaternal ? '姨' : '姑');
+        if (tIsFemale) return prefix + rank + (isMaternal ? '姨' : '姑');
         return prefix + rank + ((hT < hV || tS === 1) ? '伯' : '叔');
     }
 
@@ -412,13 +412,13 @@ export function computeKinshipViaMumuy(
         const pNode = getFullNode(tFatherId || tMotherId);
         if (areSiblings(viewerNode.id, pNode?.id)) {
             const pIsFemale = normalizeGender(pNode?.gender) === 'female';
-            if (pIsFemale) return tSex === 'F' ? "外甥女" : "外甥";
-            return tSex === 'F' ? "侄女" : "侄子";
+            if (pIsFemale) return tIsFemale ? "外甥女" : "外甥";
+            return tIsFemale ? "侄女" : "侄子";
         }
         if (!lca) return targetNode.relationship || "亲戚";
-        if (isMaternal) return tSex === 'F' ? "外甥女" : "外甥";
-        if (isRealSib) return tSex === 'F' ? "侄女" : "侄子";
-        return '堂侄' + (tSex === 'F' ? '女' : '');
+        if (isMaternal) return tIsFemale ? "外甥女" : "外甥";
+        if (isRealSib) return tIsFemale ? "侄女" : "侄子";
+        return '堂侄' + (tIsFemale ? '女' : '');
     }
 
     // 隔代
@@ -435,8 +435,8 @@ export function computeKinshipViaMumuy(
                     // 直接检查：viewer 的父亲是否是 target 的后代（即 target 是父系祖辈）
                     const viewerFather = vFatherId ? members?.find(m => String(m.id) === String(vFatherId)) : null;
                     const throughFather = viewerFather ? isDescendantRecursive(viewerFather, targetNode, members) || isAncestorRecursive(targetNode, viewerFather, members) : false;
-                    if (throughFather) return (tSex === 'F' ? "奶奶" : "爷爷");
-                    return (tSex === 'F' ? "外婆" : "外公");
+                    if (throughFather) return (tIsFemale ? "奶奶" : "爷爷");
+                    return (tIsFemale ? "外婆" : "外公");
                 }
 
                 // 旁系祖辈精准术语
@@ -446,7 +446,7 @@ export function computeKinshipViaMumuy(
                 // 判断是父系还是母系 (通过该直系祖代判断)
                 const lineageNode = ancSib || targetNode;
                 const throughMother = isDescendantThroughDaughter(viewerNode, lineageNode, members);
-                const isFemaleTarget = tSex === 'F';
+                const isFemaleTarget = tIsFemale;
 
                 if (ancSib) {
                     const ancSibIsFemale = normalizeGender(ancSib.gender) === 'female';
@@ -478,10 +478,10 @@ export function computeKinshipViaMumuy(
             // 曾祖辈及以上旁系
             const throughMother = isDescendantThroughDaughter(viewerNode, targetNode, members);
             const sidePrefix = throughMother ? "外" : "";
-            return sidePrefix + prefixStr + (tSex === 'F' ? '奶奶' : '爷爷');
+            return sidePrefix + prefixStr + (tIsFemale ? '奶奶' : '爷爷');
         } else {
             const sidePrefix = (isBioDescendant || hT === hV) ? "" : (isMaternal ? "外" : "堂");
-            return sidePrefix + prefixStr + (tSex === 'F' ? '孙女' : '孙子');
+            return sidePrefix + prefixStr + (tIsFemale ? '孙女' : '孙子');
         }
     }
 

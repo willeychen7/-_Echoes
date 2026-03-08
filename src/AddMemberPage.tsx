@@ -27,8 +27,8 @@ export const AddMemberPage: React.FC = () => {
   const [meGender, setMeGender] = useState<'male' | 'female'>('male');
   const [members, setMembers] = useState<any[]>([]);
   const [parentId, setParentId] = useState<number | null>(null);
-  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4 | 5>(1); // 1-5步引导
-  const [generation, setGeneration] = useState<'elder' | 'peer' | 'junior' | null>(null); // 代际
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1); // 1-6步引导
+  const [generation, setGeneration] = useState<'ancestor' | 'elder' | 'peer' | 'junior' | null>(null); // 代际
   const [lineageSide, setLineageSide] = useState<'paternal' | 'maternal' | null>(null); // 方位
   const [connectorNode, setConnectorNode] = useState<string | null>(null); // 衔接点
   const [mySurname, setMySurname] = useState("");
@@ -380,10 +380,22 @@ export const AddMemberPage: React.FC = () => {
     );
 
     const myGen = currentUser?.generationNum ?? 30;
+    const rel = (relationship === '其他' ? customRelationship : relationship) || "";
     let targetGen = myGen;
+
     if (connectorNode === 'father' || connectorNode === 'mother') targetGen = myGen - 1;
     else if (['grandfather', 'grandmother', 'm_grandfather', 'm_grandmother'].includes(connectorNode!)) targetGen = myGen - 2;
+    else if (['g_grandfather', 'm_g_grandfather'].includes(connectorNode!)) {
+      if (rel.includes('高祖') || rel.includes('四')) targetGen = myGen - 5;
+      else if (rel.includes('曾') || rel.includes('太') || rel.includes('三')) targetGen = myGen - 3;
+      else targetGen = myGen - 2; // fallback
+    }
     else if (['child_p', 'child_m'].includes(connectorNode!)) targetGen = myGen + 1;
+    else if (connectorNode === 'grandchild_p') {
+      if (rel.includes('曾') || rel.includes('曾孙')) targetGen = myGen + 3;
+      else if (rel.includes('玄') || rel.includes('耳')) targetGen = myGen + 4;
+      else targetGen = myGen + 2;
+    }
     else targetGen = myGen;
 
     setIsSubmitting(true);
@@ -605,27 +617,29 @@ export const AddMemberPage: React.FC = () => {
       </header>
 
       <main className="flex-1 px-6 py-8 max-w-md mx-auto w-full space-y-10 relative">
-        <div className="flex items-center justify-between mb-8">
-          {[1, 2, 3, 4, 5].map(step => {
-            const maxSteps = (memberType === 'human' && kinshipType === 'blood') ? 5 : 2;
+        <div className="flex items-center justify-between mb-8 px-4">
+          {[1, 2, 3, 4, 5, 6].map(step => {
+            const isFamily = memberType === 'human' && kinshipType === 'blood';
+            const maxSteps = isFamily ? 6 : 2;
             if (step > maxSteps) return null;
             return (
-              <div key={step} className={`flex-1 h-2 rounded-full mx-1 ${wizardStep >= step ? 'bg-[#eab308]' : 'bg-slate-200'}`} />
+              <div key={step} className={`flex-1 h-1.5 rounded-full mx-0.5 ${wizardStep >= step ? 'bg-[#eab308]' : 'bg-slate-200'} transition-all duration-300`} />
             );
           })}
         </div>
 
+        {/* 第 1 步：大类选择 */}
         {wizardStep === 1 && (
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-8">
             <div className="text-center space-y-4">
-              <h2 className="text-3xl font-bold">选择成员大类</h2>
-              <p className="text-slate-500 italic text-lg">第1步：确定要记录的人物或伙伴类型</p>
+              <h2 className="text-3xl font-bold text-slate-800">选择成员大类</h2>
+              <p className="text-slate-500 italic text-base">第 1 步：确定人物或伙伴的基本关系属性</p>
             </div>
 
             <div className="grid grid-cols-1 gap-4">
               {[
-                { type: 'human', kType: 'blood', label: '家族成员', sub: '父母、子女、手足及亲友', icon: <Landmark className="size-6" />, color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
-                { type: 'human', kType: 'social', label: '知心好友', sub: '战友、同学、挚友等社会关系', icon: <Users className="size-6" />, color: 'bg-blue-50 text-blue-600 border-blue-100' },
+                { type: 'human', kType: 'blood', label: '家族至亲', sub: '祖辈、父辈、手足及子孙晚辈', icon: <Landmark className="size-6" />, color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
+                { type: 'human', kType: 'social', label: '知心好友', sub: '战友、老同学、恩师等社会关系', icon: <Users className="size-6" />, color: 'bg-blue-50 text-blue-600 border-blue-100' },
                 { type: 'pet', kType: 'social', label: '忠诚宠物', sub: '陪伴家族成长的毛孩子', icon: <PawPrint className="size-6" />, color: 'bg-amber-50 text-amber-600 border-amber-100' },
               ].map((item) => (
                 <button
@@ -652,431 +666,338 @@ export const AddMemberPage: React.FC = () => {
           </motion.div>
         )}
 
-        {wizardStep === 2 && (
+        {/* 第 2 步：选择代际辈子 (家族成员专用) */}
+        {wizardStep === 2 && memberType === 'human' && kinshipType === 'blood' && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
             <div className="text-center space-y-4">
-              <h2 className="text-3xl font-bold">{memberType === 'pet' ? '伙伴信息' : '基础信息'}</h2>
-              <p className="text-slate-500 italic text-lg">第2步：完善档案基本名分</p>
+              <h2 className="text-3xl font-bold text-slate-800">判定辈分关系</h2>
+              <p className="text-slate-500 italic text-base">第 2 步：TA 在家族长幼中处于哪一环？</p>
             </div>
 
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <label className="text-xl font-black px-1 block">{memberType === 'pet' ? '宠物昵称' : '成员姓名'}</label>
-                <input
-                  type="text"
-                  className="w-full h-16 px-6 rounded-2xl border-none bg-white shadow-md text-xl font-bold focus:ring-2 focus:ring-[#eab308]/20 transition-all"
-                  placeholder={memberType === 'pet' ? "请输入宠物的名字" : "请输入姓名"}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-xl font-black px-1 block">性别</label>
-                <div className="flex gap-4">
-                  {['male', 'female'].map((g) => (
-                    <button
-                      key={g}
-                      type="button"
-                      onClick={() => setGender(g as 'male' | 'female')}
-                      className={cn(
-                        "flex-1 h-16 rounded-2xl font-bold text-lg transition-all border-2",
-                        gender === g
-                          ? "bg-[#eab308] border-[#eab308] text-black shadow-lg shadow-[#eab308]/20 scale-[1.02]"
-                          : "bg-white border-slate-50 text-slate-400 hover:border-slate-200"
-                      )}
-                    >
-                      {g === 'male' ? "男 (♂)" : "女 (♀)"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-xl font-black px-1 block">
-                  {memberType === 'pet' ? '品种或类型' : (kinshipType === 'social' ? '所属关系' : '您称呼TA为？')}
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(memberType === 'pet' ? ["狗狗", "猫咪", "小鸟", "鱼儿", "其他"] :
-                    (kinshipType === 'social' ? ["战友", "老同学", "发小", "故友", "恩师", "其他"] : []))
-                    .map(rel => (
-                      <button
-                        key={rel}
-                        onClick={() => { setRelationship(rel); if (rel !== '其他') setCustomRelationship(""); }}
-                        className={`h-12 border-2 rounded-xl font-bold text-sm ${relationship === rel ? 'bg-black text-[#eab308] border-black' : 'bg-white border-slate-100'}`}
-                      >
-                        {rel}
-                      </button>
-                    ))}
-                  {(memberType === 'human' && kinshipType === 'blood') && (
-                    <div className="col-span-2 text-center p-4 bg-slate-50 rounded-2xl text-slate-400 font-bold border-2 border-dashed">
-                      将进入代际路径选择 →
-                    </div>
-                  )}
-                </div>
-
-                {(relationship === '其他' || (memberType === 'human' && kinshipType === 'blood')) && kinshipType !== 'blood' && (
-                  <input
-                    type="text"
-                    placeholder={memberType === 'pet' ? "例如: 金毛, 拉布拉多" : "请输入详细称谓 (如: 忘年交)"}
-                    className="w-full h-14 px-5 rounded-xl border-none shadow-inner bg-white font-bold text-lg mt-2"
-                    value={customRelationship}
-                    onChange={e => setCustomRelationship(e.target.value)}
-                  />
-                )}
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(1)}>
-                上一步
-              </Button>
-              <Button
-                size="lg"
-                className="flex-1 h-14 text-lg font-bold bg-[#eab308] text-black hover:bg-[#d9a306]"
-                onClick={() => {
-                  if (!name) { alert("请填写姓名"); return; }
-                  if (kinshipType === 'social') {
-                    handleAdd();
-                  } else {
+            <div className="grid grid-cols-1 gap-4">
+              {[
+                { type: 'ancestor', label: '祖辈及以上', sub: '爷爷奶奶、外公外婆、曾祖、高祖等', icon: <div className="p-1 px-2 border rounded font-bold text-[10px] bg-slate-800 text-white">G-2+</div> },
+                { type: 'elder', label: '父辈', sub: '父亲、母亲、叔伯、舅姨等长辈', icon: <div className="p-1 px-2 border rounded font-bold text-[10px] bg-indigo-600 text-white">G-1</div> },
+                { type: 'peer', label: '平辈', sub: '自己的亲/堂/表 兄弟姐妹', icon: <div className="p-1 px-2 border rounded font-bold text-[10px] bg-emerald-600 text-white">G0</div> },
+                { type: 'junior', label: '晚辈', sub: '子女、孙辈、侄儿、外甥等', icon: <div className="p-1 px-2 border rounded font-bold text-[10px] bg-amber-500 text-white">G+1+</div> },
+              ].map((gen) => (
+                <button
+                  key={gen.type}
+                  onClick={() => {
+                    setGeneration(gen.type as any);
                     setWizardStep(3);
-                  }
-                }}
-              >
-                {kinshipType === 'social' ? "立即建立专属档案" : "下一步：选择代际分支"}
-              </Button>
+                  }}
+                  className="p-6 rounded-[2.5rem] bg-white border-2 border-slate-100 text-left transition-all hover:translate-x-2 flex items-center gap-5 shadow-sm active:scale-95"
+                >
+                  <div className="p-4 bg-slate-50 rounded-2xl shadow-sm">{gen.icon}</div>
+                  <div className="flex-1">
+                    <h3 className="font-black text-xl text-slate-800">{gen.label}</h3>
+                    <p className="opacity-60 text-sm font-medium text-slate-500">{gen.sub}</p>
+                  </div>
+                  <ChevronRight className="text-slate-300" />
+                </button>
+              ))}
             </div>
+            <Button variant="outline" className="w-full h-14 font-bold rounded-2xl" onClick={() => setWizardStep(1)}>上一步</Button>
           </motion.div>
         )}
 
+        {/* 第 3 步：选择血脉分支与方位 */}
         {wizardStep === 3 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
             <div className="text-center space-y-4">
-              <h2 className="text-3xl font-bold">代际与衔接点</h2>
-              <p className="text-slate-500 italic text-lg">第2步：确定该亲属所属的家族分支</p>
+              <h2 className="text-3xl font-bold text-slate-800">选择血脉分支</h2>
+              <p className="text-slate-500 italic text-base">第 3 步：确定从哪一侧血脉线路衔接</p>
             </div>
 
             <div className="space-y-6">
-              <div className="space-y-3">
-                <label className="text-xl font-black px-1 block">方位与关系类型</label>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => { setLineageSide(null); setKinshipType('blood'); setConnectorNode(null); }}
-                    className={cn(
-                      "flex-1 h-16 rounded-2xl font-bold transition-all border-2",
-                      (kinshipType === 'blood' && !lineageSide) ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg scale-[1.02]' : 'bg-white border-slate-100 text-slate-500'
-                    )}
-                  >
-                    至亲 (父母/手足/子女)
-                  </button>
-                  <button
-                    onClick={() => { setLineageSide('paternal'); setKinshipType('blood'); setConnectorNode(null); }}
-                    className={cn(
-                      "flex-1 h-16 rounded-2xl font-bold transition-all border-2",
-                      lineageSide === 'paternal' ? 'bg-[#eab308] border-[#eab308] text-black shadow-lg scale-[1.02]' : 'bg-white border-slate-100 text-slate-500'
-                    )}
-                  >
-                    父系宗亲
-                  </button>
-                  <button
-                    onClick={() => { setLineageSide('maternal'); setKinshipType('blood'); setConnectorNode(null); }}
-                    className={cn(
-                      "flex-1 h-16 rounded-2xl font-bold transition-all border-2",
-                      lineageSide === 'maternal' ? 'bg-[#eab308] border-[#eab308] text-black shadow-lg scale-[1.02]' : 'bg-white border-slate-100 text-slate-500'
-                    )}
-                  >
-                    母系外戚
-                  </button>
-                </div>
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl mb-4">
+                {generation !== 'peer' && generation !== 'junior' && (
+                  <>
+                    <button onClick={() => setLineageSide('paternal')} className={cn("flex-1 h-12 rounded-xl font-bold transition-all", lineageSide === 'paternal' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400')}>父系一脉</button>
+                    <button onClick={() => setLineageSide('maternal')} className={cn("flex-1 h-12 rounded-xl font-bold transition-all", lineageSide === 'maternal' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400')}>母系一脉</button>
+                  </>
+                )}
+                {(generation === 'peer' || generation === 'junior') && (
+                  <button onClick={() => setLineageSide('paternal')} className={cn("flex-1 h-12 rounded-xl font-bold bg-white text-slate-800 shadow-sm")}>至亲/我所在的支脉</button>
+                )}
               </div>
 
-              {/* 核心筛选逻辑：根据大类展示细分衔接点 */}
-              <div className="space-y-3 animate-in fade-in duration-500">
-                <label className="text-xl font-black px-1 block">请选择具体分支</label>
-                <div className="grid grid-cols-1 gap-3">
-                  {!lineageSide && kinshipType === 'blood' && (
-                    <>
-                      <button onClick={() => setConnectorNode('father')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'father' ? 'border-indigo-600 bg-indigo-50 shadow-sm' : 'border-slate-100 bg-white'}`}>父亲本人 (或父亲的手足分支)</button>
-                      <button onClick={() => setConnectorNode('mother')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'mother' ? 'border-indigo-600 bg-indigo-50 shadow-sm' : 'border-slate-100 bg-white'}`}>母亲本人 (或母亲的手足分支)</button>
-                      <button onClick={() => setConnectorNode('sibling')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'sibling' ? 'border-indigo-600 bg-indigo-50 shadow-sm' : 'border-slate-100 bg-white'}`}>亲兄弟姐妹 (同父同母/同脉)</button>
-                      <button onClick={() => setConnectorNode('child_p')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'child_p' ? 'border-indigo-600 bg-indigo-50 shadow-sm' : 'border-slate-100 bg-white'}`}>我的子女 / 晚辈 (亲子孙辈)</button>
-                    </>
-                  )}
-                  {lineageSide === 'paternal' && (
-                    <>
-                      <button onClick={() => setConnectorNode('father')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'father' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>父亲一脉的手足 (叔伯/姑)</button>
-                      <button onClick={() => setConnectorNode('grandfather')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'grandfather' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>爷爷的分支 (伯公/叔公/姑婆及远堂系)</button>
-                      <button onClick={() => setConnectorNode('grandmother')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'grandmother' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>奶奶的分支 (父系里的母族：舅公/姨婆/堂舅)</button>
-                      <button onClick={() => setConnectorNode('self_p')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'self_p' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>同宗平辈 (堂兄弟姐妹/同房亲)</button>
-                    </>
-                  )}
-                  {lineageSide === 'maternal' && (
-                    <>
-                      <button onClick={() => setConnectorNode('mother')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'mother' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>母亲一脉的手足 (舅舅/姨妈)</button>
-                      <button onClick={() => setConnectorNode('m_grandfather')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'm_grandfather' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>外公的分支 (老表系、外舅公)</button>
-                      <button onClick={() => setConnectorNode('m_grandmother')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'm_grandmother' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>外婆的分支 (老表系、姨姥等)</button>
-                      <button onClick={() => setConnectorNode('self_m')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'self_m' ? 'border-[#eab308] bg-yellow-50' : 'border-slate-100 bg-white'}`}>母系平辈 (姑/舅/姨表兄弟姐妹)</button>
-                    </>
-                  )}
-                </div>
+              <div className="grid grid-cols-1 gap-3">
+                {generation === 'ancestor' && lineageSide === 'paternal' && (
+                  <>
+                    <button onClick={() => { setConnectorNode('grandfather'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">爷爷的分支 (从伯公/叔公等)</button>
+                    <button onClick={() => { setConnectorNode('g_grandfather'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">太爷爷或更高 (曾祖、祖宗系统)</button>
+                  </>
+                )}
+                {generation === 'ancestor' && lineageSide === 'maternal' && (
+                  <>
+                    <button onClick={() => { setConnectorNode('m_grandfather'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">外公家族的分支 (表长辈系)</button>
+                    <button onClick={() => { setConnectorNode('m_g_grandfather'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">外曾祖或更高</button>
+                  </>
+                )}
+                {generation === 'elder' && lineageSide === 'paternal' && (
+                  <>
+                    <button onClick={() => { setConnectorNode('father'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">父亲的手足兄弟 (叔伯/姑)</button>
+                    <button onClick={() => { setConnectorNode('grandfather'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">堂系长辈 (爷爷家族的叔伯/姑辈)</button>
+                  </>
+                )}
+                {generation === 'elder' && lineageSide === 'maternal' && (
+                  <>
+                    <button onClick={() => { setConnectorNode('mother'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">母亲的手足兄弟 (舅/姨)</button>
+                    <button onClick={() => { setConnectorNode('m_grandfather'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">母系堂系长辈</button>
+                  </>
+                )}
+                {generation === 'peer' && (
+                  <>
+                    <button onClick={() => { setConnectorNode('sibling'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">亲兄弟姐妹 (同父同母)</button>
+                    <button onClick={() => { setConnectorNode('self_p'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">堂兄弟姐妹 (父系同宗族)</button>
+                    <button onClick={() => { setConnectorNode('self_m'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">表兄弟姐妹 (母亲的外戚)</button>
+                  </>
+                )}
+                {generation === 'junior' && (
+                  <>
+                    <button onClick={() => { setConnectorNode('child_p'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">下一辈 (子/女/侄儿/外甥)</button>
+                    <button onClick={() => { setConnectorNode('grandchild_p'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">下两辈及以后 (孙辈/玄孙辈等)</button>
+                  </>
+                )}
               </div>
             </div>
-            <div className="flex gap-4">
-              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(2)}>上一步</Button>
-              <Button className="flex-1 h-14 bg-[#eab308] text-black hover:bg-[#d9a306] font-bold" onClick={() => {
-                if (connectorNode && (lineageSide || (!lineageSide && kinshipType === 'blood'))) {
-                  // 🚀 核心优化：至亲模式 (lineageSide 为空) 直接跳过称谓选择，进入排名确认
-                  if (!lineageSide) {
-                    if (connectorNode === 'father') {
-                      setRelationship('父亲');
-                      setLineageSide('paternal');
-                    } else if (connectorNode === 'mother') {
-                      setRelationship('母亲');
-                      setLineageSide('maternal');
-                    } else if (connectorNode === 'child_p') {
-                      setRelationship(gender === 'female' ? '女儿' : '儿子');
-                      setLineageSide('paternal');
-                    } else if (connectorNode === 'sibling') {
-                      setLineageSide('paternal');
-                      // 此时不设具体称谓，由下一步的排行差自动算出
-                    }
-                    setWizardStep(5); // 直接跳到排名步骤
-                  } else {
-                    setWizardStep(4); // 父系/母系走常规流程
-                  }
-                } else {
-                  alert("请选择方位和分支");
-                }
-              }}>
-                下一步：确认排行建议
-              </Button>
-            </div>
+            <Button variant="outline" className="w-full h-14 font-bold rounded-2xl" onClick={() => setWizardStep(2)}>上一步</Button>
           </motion.div>
         )}
 
+        {/* 第 4 步：称谓选择 */}
         {wizardStep === 4 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
             <div className="text-center space-y-4">
-              <h2 className="text-3xl font-bold">称谓与逻辑守卫</h2>
-              <p className="text-slate-500 italic text-lg">第3步：根据传统宗法智能实时校验</p>
+              <h2 className="text-3xl font-bold text-slate-800">锁定称谓</h2>
+              <p className="text-slate-500 italic text-base">第 4 步：确认您在生活中如何称呼 TA</p>
             </div>
 
             <div className="space-y-6">
-              <div className="space-y-3">
-                <label className="text-xl font-black px-1 block">您如何称呼TA？</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(CONNECTOR_SUGGESTIONS[connectorNode as string] || ["其他"])
-                    .filter(rel => {
-                      if (rel === '其他') return true;
-                      const relIsFemale = isFemale({ relationship: rel });
-                      return gender === 'female' ? relIsFemale : !relIsFemale;
-                    })
-                    .concat(["其他"])
-                    .filter((rel, i, arr) => arr.indexOf(rel) === i) // 去重
-                    .map(rel => (
-                      <button key={rel} onClick={() => { setRelationship(rel); if (rel !== '其他') setCustomRelationship(""); }} className={`h-12 border-2 rounded-xl font-bold text-sm ${relationship === rel ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
-                        {rel}
-                      </button>
-                    ))}
-                </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(CONNECTOR_SUGGESTIONS[connectorNode as string] || ["哥哥", "姐姐", "弟弟", "妹妹", "其他"])
+                  .concat(["其他"])
+                  .filter((rel, i, arr) => arr.indexOf(rel) === i)
+                  .map(rel => (
+                    <button
+                      key={rel}
+                      onClick={() => { setRelationship(rel); if (rel !== '其他') setCustomRelationship(""); }}
+                      className={`h-12 border-2 rounded-xl font-bold text-sm transition-all ${relationship === rel ? 'bg-black text-[#eab308] border-black scale-105 shadow-md' : 'bg-white border-slate-100 text-slate-500 hover:border-slate-200'}`}
+                    >
+                      {rel}
+                    </button>
+                  ))}
               </div>
-
               {relationship === '其他' && (
-                <div className="space-y-3">
-                  <input type="text" placeholder="请输入具体称谓 (如: 表姨, 堂叔)" className="w-full h-14 px-5 rounded-xl border-none shadow-inner bg-white font-bold text-lg" value={customRelationship} onChange={e => setCustomRelationship(e.target.value)} />
-                </div>
+                <input
+                  type="text"
+                  placeholder="请输入具体称谓 (如: 表姨, 堂叔)"
+                  className="w-full h-14 px-6 rounded-2xl border-none shadow-md bg-white font-bold text-lg text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
+                  value={customRelationship}
+                  onChange={e => setCustomRelationship(e.target.value)}
+                />
               )}
-
-              {/* 逻辑反馈区 / 实时校验看板 */}
-              <AnimatePresence>
-                {correctionNotice && (
-                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className={`p-4 rounded-2xl border-2 flex items-start gap-3 shadow-sm ${correctionType === 'error' ? 'bg-rose-50 border-rose-200' : correctionType === 'warning' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
-                    <AlertCircle className={`size-6 mt-0.5 flex-shrink-0 ${correctionType === 'error' ? 'text-rose-500' : correctionType === 'warning' ? 'text-amber-500' : 'text-green-500'}`} />
-                    <p className={`text-sm font-bold leading-relaxed ${correctionType === 'error' ? 'text-rose-700' : correctionType === 'warning' ? 'text-amber-700' : 'text-green-700'}`}>
-                      {correctionNotice}
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {connectorNode === 'grandfather' && (
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
-                  <p className="text-sm font-bold text-slate-600">由于选择了爷爷分支，系统启动姓氏智能辅助：</p>
-                  <div className="flex gap-4">
-                    <div className="flex-1"><label className="text-xs font-bold text-slate-400">您的姓氏</label><input type="text" value={mySurname} onChange={(e) => setMySurname(e.target.value)} className="w-full h-10 px-3 rounded-lg border-none shadow-sm" /></div>
-                    <div className="flex-1"><label className="text-xs font-bold text-slate-400">家属姓氏</label><input type="text" value={targetSurname} onChange={(e) => setTargetSurname(e.target.value)} className="w-full h-10 px-3 rounded-lg border-none shadow-sm" /></div>
-                  </div>
-                </div>
-              )}
-
             </div>
 
             <div className="flex gap-4">
-              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(3)}>
-                上一步
-              </Button>
-              <Button disabled={correctionType === 'error'} className="flex-1 h-14 bg-[#eab308] text-black hover:bg-[#d9a306] font-bold disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => {
-                const relText = relationship === '其他' ? customRelationship : relationship;
-                if (!relText) { alert("请录入称谓"); return; }
-                setWizardStep(5);
-              }}>
-                下一步：确认房分排行
+              <Button variant="outline" className="flex-1 h-14 font-bold rounded-2xl" onClick={() => setWizardStep(3)}>上一步</Button>
+              <Button
+                className="flex-1 h-14 bg-black text-[#eab308] font-bold rounded-2xl shadow-lg shadow-black/10 transition-all active:scale-95"
+                onClick={() => {
+                  if (!relationship && !customRelationship) { alert("请确定称谓"); return; }
+                  setWizardStep(5);
+                }}
+              >
+                下一步
               </Button>
             </div>
           </motion.div>
         )}
 
+        {/* 第 5 步：排行房分 */}
         {wizardStep === 5 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
             <div className="text-center space-y-4">
-              <h2 className="text-3xl font-bold">互称与核准提交</h2>
-              <p className="text-slate-500 italic text-lg">第4步：明确排行及关系互认</p>
+              <h2 className="text-3xl font-bold text-slate-800">确认房分座次</h2>
+              <p className="text-slate-500 italic text-base">第 5 步：TA 在自家兄弟姐妹中排行老几？</p>
             </div>
 
             <div className="space-y-6">
-              {/* === 🚀 核心新增：支脉定位器 (仅针对堂/表亲) === */}
-              {['self_p', 'self_m'].includes(connectorNode as string) && (
-                <div className="space-y-3 p-5 bg-amber-50/50 rounded-[2rem] border-2 border-dashed border-amber-200/50 animate-in fade-in zoom-in duration-500">
-                  <label className="text-xl font-black px-1 block text-amber-700">
-                    TA是您哪位{lineageSide === 'paternal' ? '叔伯' : '舅姨'}家的孩子？
-                  </label>
-                  <p className="text-[10px] text-amber-600/60 px-1 mb-2 font-bold italic">
-                    💡 这里选的是“父辈排行”。例如：二叔排老二，就属于“二房”。
-                  </p>
-                  <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
-                    {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].map(rk => (
-                      <button
-                        key={rk}
-                        onClick={() => setConnectingRank(rk)}
-                        className={`h-11 border-2 rounded-xl font-bold text-sm transition-all ${connectingRank === rk ? 'bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-500/20' : 'bg-white border-white hover:border-amber-200 text-amber-800'}`}
-                      >
-                        {rk}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {connectorNode === 'sibling' && (
-                <div className="space-y-3 animate-in fade-in zoom-in duration-300">
-                  <label className="text-xl font-black px-1 block text-[#eab308]">您自己在亲兄弟姐妹中排行？</label>
-                  <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
-                    {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小', '不知道'].map(rk => (
-                      <button
-                        key={rk}
-                        onClick={() => {
-                          setMyRank(rk);
-                          // 自动基于排行差异进行关系预判
-                          if (selectedRank && selectedRank !== '不知道' && rk !== '不知道') {
-                            const myN = ['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(rk);
-                            const taN = ['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(selectedRank);
-                            if (myN !== -1 && taN !== -1) {
-                              if (taN < myN) setRelationship(gender === 'female' ? "姐姐" : "哥哥");
-                              else if (taN > myN) setRelationship(gender === 'female' ? "妹妹" : "弟弟");
-                            }
-                          }
-                        }}
-                        className={`h-12 border-2 rounded-xl font-bold text-sm ${myRank === rk ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100 hover:border-slate-300'}`}
-                      >
-                        {rk}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[10px] font-medium text-slate-400 px-1 mt-1">系统将根据您与TA的排行差异，自动为您锁定身份。</p>
-                </div>
-              )}
-
-              <div className="space-y-3">
-                <label className="text-xl font-black px-1 block">
-                  {connectorNode === 'sibling' ? `那么，${name}本人排行第几？` : 'TA在自家兄弟姐妹中排行老几？'}
-                </label>
+              <div className="space-y-4">
+                <label className="text-xl font-black px-1 block text-slate-700">选择排行</label>
                 <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
                   {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小', '不知道'].map(rk => (
                     <button
                       key={rk}
-                      onClick={() => {
-                        setSelectedRank(rk);
-                        // 🚀 核心逻辑：亲手足/至亲自动判定
-                        const isCoreSibling = connectorNode === 'sibling';
-                        if (isCoreSibling && myRank && myRank !== '不知道' && rk !== '不知道') {
-                          const myN = ['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(myRank);
-                          const taN = ['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(rk);
-                          if (myN !== -1 && taN !== -1) {
-                            if (taN < myN) setRelationship(gender === 'female' ? "姐姐" : "哥哥");
-                            else if (taN > myN) setRelationship(gender === 'female' ? "妹妹" : "弟弟");
-                          }
-                        }
-                      }}
-                      className={`h-12 border-2 rounded-xl font-bold text-sm ${selectedRank === rk ? 'bg-[#eab308] border-[#eab308]' : 'bg-white border-slate-100 hover:border-slate-300'}`}
+                      onClick={() => setSelectedRank(rk)}
+                      className={`h-11 border-2 rounded-xl font-bold text-sm transition-all ${selectedRank === rk ? 'bg-black text-[#eab308] border-black shadow-lg scale-105' : 'bg-white border-slate-100 text-slate-500 hover:border-slate-200'}`}
                     >
                       {rk}
                     </button>
                   ))}
                 </div>
-                <p className="text-xs font-medium text-slate-400 px-1 mt-2">选填项，录入后系统会自动生成对应的‘房分’ (如：大房、二房)。注：“大”通常指嫡长。</p>
+                <p className="text-[10px] text-slate-400 font-bold px-1 italic">
+                  💡 系统将据此自动标记房分 (如: 大房、二叔公等)。
+                </p>
               </div>
 
-              <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl flex items-start gap-4">
-                <Users className="size-8 text-indigo-400 flex-shrink-0" />
-                <div>
-                  <h4 className="font-black text-indigo-800 text-sm tracking-widest mb-1">互称与血脉追踪定位</h4>
-                  <div className="flex items-center gap-2 mb-3 mt-1 bg-white/50 px-3 py-1.5 rounded-lg border border-indigo-100/50">
-                    <span className="text-xs font-black text-indigo-600">血脉航线：</span>
-                    <span className="text-[10px] text-indigo-500/80 font-bold bg-white px-2 py-0.5 rounded shadow-sm flex items-center gap-1">
-                      {lineageSide === 'paternal' ? '父系宗亲左排' : '母系外家右排'}
-                      <ChevronRight size={10} className="inline opacity-50" />
-                      {connectorNode === 'sibling' ? '亲兄弟姐妹'
-                        : connectorNode === 'father' ? '手足兄弟连'
-                          : connectorNode === 'grandfather' ? '爷爷支脉'
-                            : connectorNode === 'grandmother' ? '奶奶的外戚'
-                              : connectorNode === 'mother' ? '母亲的娘家'
-                                : connectorNode === 'm_grandfather' ? '外公大树'
-                                  : connectorNode === 'm_grandmother' ? '外婆连脉'
-                                    : connectorNode === 'self_p' || connectorNode === 'self_m' ? '同宗同代'
-                                      : '子路晚辈'}
-                      {((selectedRank && selectedRank !== '不知道') || (connectingRank && connectingRank !== '不知道')) && (
-                        <>
-                          <ChevronRight size={10} className="inline opacity-50" />
-                          {selectedRank && selectedRank !== '不知道' ? selectedRank : connectingRank}房
-                        </>
-                      )}
-                    </span>
-                  </div>
-                  <p className="text-indigo-900 font-bold text-base md:text-lg mb-2 flex items-center flex-wrap gap-2">
-                    TA 将称呼您为：
-                    <motion.span
-                      key={relationship + lineageSide}
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      className={cn(
-                        "text-2xl mx-1 bg-white px-3 py-0.5 rounded-lg shadow-sm border font-black",
-                        lineageSide === 'maternal' ? "text-purple-600 border-purple-100" : "text-[#eab308] border-amber-100"
-                      )}
-                    >
-                      {getReverseKinship(relationship === '其他' ? customRelationship : relationship, lineageSide as 'paternal' | 'maternal', connectorNode as string, meGender)}
-                    </motion.span>
-                  </p>
-                  <p className="text-xs text-indigo-400/80 font-mono font-bold uppercase border-t border-indigo-100/50 pt-2 mt-2 flex items-center gap-2">
-                    <span className="size-1.5 bg-indigo-400 rounded-full animate-pulse" />
-                    Logic_Coordinate: {logicTag || getLogicTag(lineageSide as 'paternal' | 'maternal', connectorNode as string, selectedRank || '', mySurname !== "" && targetSurname !== "" && mySurname === targetSurname)}
-                  </p>
+              <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-[2.5rem] space-y-3 shadow-inner mt-8">
+                <div className="flex items-center gap-2">
+                  <div className="size-2 bg-indigo-500 rounded-full animate-pulse" />
+                  <h4 className="font-black text-indigo-900 text-[10px] tracking-widest uppercase">互称逻辑预览</h4>
                 </div>
+                <p className="text-indigo-900 font-bold text-lg leading-relaxed">
+                  关系校验成功。TA 会称呼您为：
+                  <span className="text-white bg-indigo-600 px-3 py-1 rounded-lg ml-2 shadow-sm whitespace-nowrap">
+                    {getReverseKinship(relationship === '其他' ? customRelationship : relationship, lineageSide as 'paternal' | 'maternal', connectorNode as string, meGender)}
+                  </span>
+                </p>
               </div>
             </div>
 
             <div className="flex gap-4">
-              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => {
-                const isCore = ['father', 'mother', 'sibling', 'child_p'].includes(connectorNode as string);
-                setWizardStep(isCore ? 3 : 4);
-              }}>
-                上一步
-              </Button>
-              <Button disabled={isSubmitting} className="flex-1 h-14 bg-black text-[#eab308] hover:bg-slate-800 font-bold" onClick={handleAdd}>
-                建立专属档案
+              <Button variant="outline" className="flex-1 h-14 font-bold rounded-2xl" onClick={() => setWizardStep(4)}>上一步</Button>
+              <Button
+                className="flex-1 h-14 bg-black text-[#eab308] font-bold rounded-2xl shadow-lg shadow-black/20 transition-all active:scale-95"
+                onClick={() => setWizardStep(6)}
+              >
+                下一步填写姓名
               </Button>
             </div>
           </motion.div>
         )}
 
+        {/* 第 6 步：基本信息填入 */}
+        {wizardStep === 6 && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-8">
+            <div className="text-center space-y-4">
+              <h2 className="text-3xl font-bold text-slate-800">最后完善姓名</h2>
+              <p className="text-slate-500 italic text-base">第 6 步：为这位家人档案注入生命</p>
+            </div>
+
+            <div className="space-y-6">
+              <div className="flex justify-center mb-6">
+                <div className="relative group">
+                  <div className="size-32 rounded-[2.5rem] overflow-hidden border-4 border-white shadow-xl bg-slate-100 flex items-center justify-center">
+                    {avatar ? <img src={avatar} className="w-full h-full object-cover" alt="Avatar" /> : <Landmark className="text-slate-300" size={48} />}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <label className="text-sm font-black text-slate-400 px-1 uppercase tracking-widest">称呼或真实姓名</label>
+                  <input
+                    type="text"
+                    className="w-full h-16 px-6 rounded-2xl bg-white shadow-md text-xl font-bold border-none text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
+                    placeholder="请输入姓名"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-black text-slate-400 px-1 uppercase tracking-widest">确认性别</label>
+                  <div className="flex gap-3">
+                    {['male', 'female'].map(g => (
+                      <button
+                        key={g}
+                        onClick={() => setGender(g as any)}
+                        className={cn(
+                          "flex-1 h-16 rounded-2xl font-bold transition-all border-2",
+                          gender === g ? "bg-black text-[#eab308] border-black scale-105 shadow-md" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
+                        )}
+                      >
+                        {g === 'male' ? '男 (♂)' : '女 (♀)'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    input.onchange = (e: any) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setAvatar(ev.target?.result as string);
+                          setTempImage(ev.target?.result as string);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    };
+                    input.click();
+                  }}
+                  className="w-full h-14 bg-slate-50 text-slate-600 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-slate-100 transition-all border border-slate-100"
+                >
+                  <Camera size={20} className="text-[#eab308]" />
+                  {avatar ? '更换照片' : '上传照片记录 TA'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <Button variant="outline" className="flex-1 h-14 font-bold rounded-2xl" onClick={() => setWizardStep(5)}>上一步</Button>
+              <Button
+                disabled={isSubmitting}
+                className="flex-1 h-14 bg-black text-[#eab308] hover:bg-slate-800 font-bold rounded-2xl shadow-lg shadow-black/20 transition-all active:scale-95"
+                onClick={handleAdd}
+              >
+                {isSubmitting ? '正在绘制家谱...' : '建立档案并收录'}
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* 对于好友或宠物的简化流程 */}
+        {wizardStep === 2 && (memberType === 'pet' || kinshipType === 'social') && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-8">
+            <div className="text-center space-y-4">
+              <h2 className="text-3xl font-bold text-slate-800">{memberType === 'pet' ? '伙伴基础信息' : '故友基础信息'}</h2>
+              <p className="text-slate-500 italic text-base">只需一步，为 TA 建立永久记忆</p>
+            </div>
+            <div className="space-y-6">
+              <input
+                type="text"
+                className="w-full h-16 px-6 rounded-2xl bg-white shadow-xl text-xl font-bold border-none text-slate-800"
+                placeholder="输入名称"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <div className="flex gap-3">
+                {['male', 'female'].map(g => (
+                  <button
+                    key={g}
+                    onClick={() => setGender(g as any)}
+                    className={cn(
+                      "flex-1 h-14 rounded-2xl font-bold transition-all border-2",
+                      gender === g ? "bg-black text-[#eab308] border-black" : "bg-white border-slate-100 text-slate-400"
+                    )}
+                  >
+                    {g === 'male' ? (memberType === 'human' ? '男' : '公') : (memberType === 'human' ? '女' : '母')}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
+                className="w-full h-16 px-6 rounded-2xl bg-white shadow-md text-xl font-bold border-none text-slate-800"
+                placeholder={memberType === 'pet' ? "品种 (如: 金毛)" : "描述关系 (如: 战友, 老同学)"}
+                value={customRelationship || relationship}
+                onChange={(e) => setCustomRelationship(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-4">
+              <Button variant="outline" className="flex-1 h-14 font-bold rounded-2xl" onClick={() => setWizardStep(1)}>上一步</Button>
+              <Button className="flex-1 h-14 bg-black text-[#eab308] font-bold rounded-2xl shadow-lg active:scale-95" onClick={handleAdd}>创建档案</Button>
+            </div>
+          </motion.div>
+        )}
       </main>
     </div >
   );

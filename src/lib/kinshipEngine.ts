@@ -8,16 +8,19 @@ import { normalizeGender } from "./utils";
 // 基于衔接点的快捷建议表
 export const CONNECTOR_SUGGESTIONS: Record<string, string[]> = {
     'father': ['叔叔', '伯伯', '姑姑'],
-    'grandfather': ['伯公', '叔公', '姑婆', '婶婆', '伯婆', '外公', '外叔公'],
+    'grandfather': ['伯公', '叔公', '姑婆', '婶婆', '伯婆'],
+    'g_grandfather': ['太爷爷', '老祖公', '太奶', '曾祖父', '曾祖母'],
     'grandmother': ['舅公', '姨婆', '堂舅公', '堂姨婆', '姨外婆'],
     'sibling': ['哥哥', '弟弟', '姐姐', '妹妹'], // 亲兄弟姐妹
-    'self_p': ['堂哥', '堂弟', '堂姐', '堂妹', '再从兄', '再从弟', '三从兄'], // 父系宗亲
-    'child_p': ['儿子', '女儿', '侄子', '侄女', '孙子', '孙女'],
+    'self_p': ['堂哥', '堂弟', '堂姐', '堂妹'], // 父系宗亲
+    'child_p': ['儿子', '女儿', '侄子', '侄女'],
+    'grandchild_p': ['孙子', '孙女', '外孙', '外孙女', '曾孙', '曾孙女'],
     'mother': ['舅舅', '阿姨'],
-    'm_grandfather': ['堂舅', '堂姨', '表舅', '外舅公', '外公', '姑婆', '表叔', '表姑'],
+    'm_grandfather': ['堂舅', '堂姨', '表舅', '外舅公', '外公', '姑婆', '表叔'],
+    'm_g_grandfather': ['外太公', '外太婆', '曾外祖'],
     'm_grandmother': ['姨姥', '表姨', '姨外婆', '外婆'],
-    'self_m': ['表哥', '表弟', '表姐', '表妹', '再从表哥', '再从表弟'], // 母系外戚
-    'child_m': ['外甥', '外甥女', '外孙', '外孙女'],
+    'self_m': ['表哥', '表弟', '表姐', '表妹'], // 母系外戚
+    'child_m': ['外甥', '外甥女'],
 };
 
 // 房头配色方案：采用低饱和度、高明度的中国传统色，确保不干扰头像显示
@@ -48,10 +51,10 @@ export function getLogicTag(side: 'paternal' | 'maternal', connector: string, ra
     // 如果同姓但在母系，增加标记位 '!S' (Same Surname)
     const suffix = (side === 'maternal' && isSameSurname) ? '!S' : '';
     const paths: Record<string, string> = {
-        father: 'f', grandfather: 'f,f', grandmother: 'f,m',
-        mother: 'm', m_grandfather: 'm,f', m_grandmother: 'm,m',
-        sibling: 'sib', // 亲兄弟姐妹独享路径码 (mumuy风格)
-        self_p: 'x', child_p: 's', self_m: 'x,m', child_m: 's,m'
+        father: 'f', grandfather: 'f,f', grandmother: 'f,m', g_grandfather: 'f,f,f',
+        mother: 'm', m_grandfather: 'm,f', m_grandmother: 'm,m', m_g_grandfather: 'm,f,f',
+        sibling: 'sib', self_p: 'x', self_m: 'x,m',
+        child_p: 's', child_m: 's,m', grandchild_p: 's,s'
     };
     const path = paths[connector] || 'unknown';
     const r = rank && rank !== '不知道' ? `-o${rank}` : '';
@@ -174,11 +177,20 @@ export function getReverseKinship(
     // =====================================================================
     // --- 🌟 Fallback: 启发式内置规则 (用于只有文本标签的场景) ---
     // =====================================================================
-    if (connector === 'grandfather' || connector === 'grandmother' || connector === 'm_grandfather' || connector === 'm_grandmother') {
-        if (/^(爷爷|奶奶|外公|外婆|阿公|阿嬷|姥姥|姥爷)$/.test(coreRel)) {
-            if (side === 'paternal') return isMale ? '孙子' : '孙女';
+    if (['grandfather', 'grandmother', 'm_grandfather', 'm_grandmother', 'g_grandfather', 'm_g_grandfather'].includes(connector)) {
+        if (/^(爷爷|奶奶|外公|外婆|曾祖|太爷|太奶|外太公|外太婆)$/.test(coreRel)) {
+            if (side === 'paternal') {
+                if (coreRel.includes('曾') || coreRel.includes('太')) return isMale ? '曾孙' : '曾孙女';
+                return isMale ? '孙子' : '孙女';
+            }
+            if (coreRel.includes('曾') || coreRel.includes('太')) return isMale ? '外曾孙' : '外曾孙女';
             return isMale ? '外孙' : '外孙女';
         }
+    }
+
+    if (connector === 'grandchild_p') {
+        if (coreRel.includes('曾')) return isMale ? '曾祖父' : '曾祖母';
+        return isMale ? '爷爷' : '奶奶';
     }
 
     if (/叔|伯/.test(coreRel)) return prefix + (isMale ? '侄子' : '侄女');
@@ -260,9 +272,11 @@ export function generateSmartLayout(rawMembers: any[]) {
     // 内部帮助函数：提取代际
     const getGenLevel = (tag: string) => {
         if (!tag) return 99; // 未指定，放最后
-        if (tag.includes('f,f') || tag.includes('m,m') || tag.includes('m,f') || tag.includes('f,m')) return -1; // 爷爷辈
-        if (tag.includes('-f') || tag.includes('-m')) return 0; // 父母辈
+        if (tag.includes('f,f,f') || tag.includes('m,f,f')) return -2; // 曾祖
+        if (tag.includes('f,f') || tag.includes('m,m') || tag.includes('m,f') || tag.includes('f,m')) return -1; // 爷爷
+        if (tag.includes('-f') || tag.includes('-m')) return 0; // 父母
         if (tag.includes('-sib') || tag.includes('-x') || tag.includes('self')) return 1; // 同辈
+        if (tag.includes('-s,s')) return 3; // 孙辈/曾孙辈
         if (tag.includes('-s') || tag.includes('child')) return 2; // 晚辈
         return 99;
     };
