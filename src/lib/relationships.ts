@@ -148,7 +148,11 @@ export function deduceRole(relationship: string): string {
         "高祖父": "great_great_grandfather", "高祖母": "great_great_grandmother",
         "曾祖父": "great_grandfather", "曾祖母": "great_grandmother",
         "爷爷": "grandfather_paternal", "奶奶": "grandmother_paternal",
-        "外公": "grandfather_maternal", "外婆": "grandmother_maternal", "阿哥": "brother", "阿弟": "brother",
+        "外公": "grandfather_maternal", "外婆": "grandmother_maternal",
+        "公": "grandfather_maternal", "婆": "grandmother_maternal",
+        "姨外婆": "grandmother_maternal", "姑婆": "grandmother_paternal",
+        "舅公": "grandfather_maternal", "姨婆": "grandmother_maternal",
+        "阿哥": "brother", "阿弟": "brother",
         "阿姐": "sister", "阿妹": "sister", "哥哥": "brother", "弟弟": "brother", "姐姐": "sister", "妹妹": "sister",
         "侄子": "nephew", "外甥": "nephew", "侄女": "niece", "外甥女": "niece", "儿子": "son", "女儿": "daughter",
         "孙子": "grandson", "孙女": "granddaughter"

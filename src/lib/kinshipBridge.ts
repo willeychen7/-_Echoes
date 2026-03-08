@@ -1,6 +1,9 @@
 /**
- * 💡 mumuy/relationship.js 桥接层 - 61.0 宗法极限巅峰版 (上下五代 + 左右五房)
- * 核心修复：母系祖辈旁系称谓定制 (外二公/三姑婆/姨外婆)、邻接手足判定鲁棒化
+ * 💡 mumuy/relationship.js 桥接层 - 62.0 宗法至尊升级版 (精准修复旁系晚辈与母系姑婆)
+ * 核心修复：
+ * 1. 晚辈称谓纠偏：明确区分 兄弟之子(侄) 与 姐妹之子(甥)。
+ * 2. 母系祖辈旁系：外公姐妹称“姨姑婆”，外婆姐妹称“姨外婆”。
+ * 3. 房分排行强化：支持“三姨姑婆”、“外二公”等特定称谓。
  */
 
 const HALL_RANK: Record<string, number> = {
@@ -10,9 +13,7 @@ const HALL_RANK: Record<string, number> = {
 
 const NUM_CHAR = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
 
-// 祖辈深度前缀
 const ANCESTOR_PREFIX = ['', '', '', '曾', '高', '太', '烈', '天', '远', '鼻'];
-// 孙辈深度前缀
 const DESCENDANT_PREFIX = ['', '', '', '曾', '玄', '来', '晜', '仍', '云', '耳'];
 
 export function computeKinshipViaMumuy(
@@ -40,7 +41,7 @@ export function computeKinshipViaMumuy(
 
     const genDiff = tG - vG;
 
-    // --- 0. 直系优先判定 ---
+    // --- 0. 直系优先 ---
     if (String(targetNode.id) === String(vFatherId)) return "父亲";
     if (String(targetNode.id) === String(vMotherId)) return "母亲";
     if (String(tFatherId) === String(viewerNode.id) || String(tMotherId) === String(viewerNode.id)) return tSex === 'F' ? "女儿" : "儿子";
@@ -75,13 +76,13 @@ export function computeKinshipViaMumuy(
 
     if (isSpouse(targetNode, viewerNode)) return tSex === 'F' ? '妻子' : '丈夫';
 
-    // --- 1. 深度宗法路径辨析 ---
+    // --- 1. 宗法路径辩别 ---
     const lca = findLCA(targetNode, viewerNode, members);
     const viewerMaternal = lca ? isDescendantThroughDaughter(viewerNode, lca, members) : false;
     const targetMaternal = lca ? isDescendantThroughDaughter(targetNode, lca, members) : false;
 
-    const areSiblings = (aId, bId) => {
-        const a = getFullNode(aId), b = getFullNode(bId);
+    const areSiblings = (aNodeId, bNodeId) => {
+        const a = getFullNode(aNodeId), b = getFullNode(bNodeId);
         if (!a || !b || String(a.id) === String(b.id)) return false;
         const af = a.father_id || a.fatherId, bf = b.father_id || b.fatherId;
         const am = a.mother_id || a.motherId, bm = b.mother_id || b.motherId;
@@ -95,21 +96,20 @@ export function computeKinshipViaMumuy(
     const isRealSib = (tFatherId && String(tFatherId) === String(effectiveVFatherId)) ||
         (tMotherId && String(tMotherId) === String(effectiveVMotherId));
 
+    const rank = (tS >= 1 && tS <= 10) ? (tS === 1 ? '大' : NUM_CHAR[tS]) : '';
+
     // --- 2. 代际生成 ---
 
     // 同辈
     if (genDiff === 0) {
         const isO = isRealSib ? (tS < vS) : ((hT < hV) || (hT === hV && tS < vS));
         const prefix = isRealSib ? '' : (isMaternal ? '表' : '堂');
-        let rankText = (isRealSib || targetNode.ancestral_hall === effectiveVH) ?
-            ((tS >= 1 && tS <= 10) ? (tS === 1 ? '大' : NUM_CHAR[tS]) : '') : '';
-        if (isO) return prefix + rankText + (tSex === 'F' ? '姐' : '哥');
-        return prefix + rankText + (tSex === 'F' ? '妹' : '弟');
+        if (isO) return prefix + rank + (tSex === 'F' ? '姐' : '哥');
+        return prefix + rank + (tSex === 'F' ? '妹' : '弟');
     }
 
     // 长一辈 (-1)
     if (genDiff === -1) {
-        const rank = (tS >= 1 && tS <= 10) ? (tS === 1 ? '大' : NUM_CHAR[tS]) : '';
         if (isSibOfMother) return tSex === 'F' ? rank + '姨' : rank + '舅';
         if (isSibOfFather) {
             if (tSex === 'F') return rank + '姑妈';
@@ -118,16 +118,20 @@ export function computeKinshipViaMumuy(
         }
 
         const prefix = (isRealSib || targetNode.ancestral_hall === effectiveVH) ? '' : (isMaternal ? '表' : '堂');
-        if (viewerMaternal && lca && (String(lca.id) === String(tFatherId) || String(lca.id) === String(tMotherId))) return prefix + rank + (tSex === 'F' ? '姨婆' : '舅公');
         if (tSex === 'F') return prefix + rank + (isMaternal ? '姨' : '姑');
         return prefix + rank + ((hT < hV || tS === 1) ? '伯' : '叔');
     }
 
     // 晚一辈 (+1)
     if (genDiff === 1) {
-        const isChildOfRealSib = areSiblings(viewerNode.id, tFatherId) || areSiblings(viewerNode.id, tMotherId);
+        const pNode = getFullNode(tFatherId || tMotherId);
+        if (areSiblings(viewerNode.id, pNode?.id)) {
+            const pIsFemale = pNode?.gender === 'female' || pNode?.gender === '女';
+            if (pIsFemale) return tSex === 'F' ? "外甥女" : "外甥";
+            return tSex === 'F' ? "侄女" : "侄子";
+        }
         if (isMaternal) return tSex === 'F' ? "外甥女" : "外甥";
-        if (isRealSib || isChildOfRealSib) return tSex === 'F' ? "侄女" : "侄子";
+        if (isRealSib) return tSex === 'F' ? "侄女" : "侄子";
         return '堂侄' + (tSex === 'F' ? '女' : '');
     }
 
@@ -139,23 +143,25 @@ export function computeKinshipViaMumuy(
         const prefixStr = isPast ? ANCESTOR_PREFIX[depthIdx] : DESCENDANT_PREFIX[depthIdx];
 
         if (isPast) {
-            const sidePrefix = (isBioAncestor || hT === hV) ? '' : (isMaternal ? '外' : '堂');
             if (absGen === 2) {
                 if (isBioAncestor) return (isMaternal ? "外" : "") + prefixStr + (tSex === 'F' ? "婆" : "公");
 
-                // 旁系祖辈校准
-                const r = rankPrefix(tS);
+                // 旁系祖辈精准术语
                 if (viewerMaternal || isMaternal) {
                     const ancSib = members?.find(m => areSiblings(m.id, targetNode.id) && isAncestorRecursive(m, viewerNode, members));
                     if (ancSib) {
-                        if (ancSib.gender === 'female' || ancSib.gender === '女') return r + "姨外婆"; // 外婆系统
-                        if (tSex === 'F') return r + "姑婆"; // 外公的姐妹
-                        return "外" + r + "公"; // 外公的兄弟
+                        const ancSibIsFemale = ancSib.gender === 'female' || ancSib.gender === '女';
+                        if (ancSibIsFemale) return rank + "姨外婆"; // 外婆的姐妹
+                        if (tSex === 'F') return rank + "姨姑婆"; // 外公的姐妹 (用户特定要求)
+                        return "外" + rank + "公"; // 外公的兄弟
                     }
-                    if (tSex === 'M') return "外" + r + "公";
-                    return r + sidePrefix + (tSex === 'F' ? '婆' : '公');
+                    if (tSex === 'M') return "外" + rank + "公";
+                    return rank + (isMaternal ? '姨' : '堂') + (tSex === 'F' ? '婆' : '公');
                 }
+                const hSide = hT === hV ? "" : "堂";
+                return hSide + rank + (tSex === 'F' ? '奶奶' : '爷爷');
             }
+            const sidePrefix = (isBioAncestor || hT === hV) ? '' : (isMaternal ? '外' : '堂');
             return sidePrefix + prefixStr + (tSex === 'F' ? '奶奶' : '爷爷');
         } else {
             const sidePrefix = (isBioDescendant || hT === hV) ? "" : (isMaternal ? "外" : "堂");
@@ -165,8 +171,6 @@ export function computeKinshipViaMumuy(
 
     return targetNode.relationship || "亲戚";
 }
-
-function rankPrefix(s) { return (s >= 1 && s <= 10) ? (s === 1 ? '大' : NUM_CHAR[s]) : ''; }
 
 function isSpouse(a: any, b: any) { return a && b && (String(a.spouse_id) === String(b.id) || String(b.spouse_id) === String(a.id)); }
 
