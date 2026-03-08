@@ -74,8 +74,17 @@ export function computeKinshipViaMumuy(
     if (String(tFatherId) === String(viewerNode.id) || String(tMotherId) === String(viewerNode.id)) return tSex === 'F' ? "女儿" : "儿子";
 
     // --- 姻亲识别 ---
-    const vChildren = members?.filter(m => (String(m.father_id) === String(viewerNode.id) || String(m.mother_id) === String(viewerNode.id)));
-    if (vChildren?.some(c => String(c.spouse_id) === String(targetNode.id))) return tSex === 'F' ? "儿媳" : "女婿";
+    // 检查 target 是否直接是 viewer 的配偶的儿媳/女婿
+    const vChildren = members?.filter(m => (String(getVal(m, ['father_id', 'fatherId'])) === String(viewerNode.id) || String(getVal(m, ['mother_id', 'motherId'])) === String(viewerNode.id)));
+    if (vChildren?.some(c => String(getVal(c, ['spouse_id', 'spouseId'])) === String(targetNode.id))) return tSex === 'F' ? "儿媳" : "女婿";
+    // 检查 target 是否是某个孩子的父母的配偶 (儿媳/女婿 - 从目标角度)
+    if (vChildren?.some(c => {
+        const cSpouseId = getVal(c, ['spouse_id', 'spouseId']);
+        return cSpouseId && String(cSpouseId) === String(targetNode.id);
+    })) return tSex === 'F' ? "儿媳" : "女婿";
+    // 检查 target 是否与 viewer 的某个孩子是配偶关系（反向）
+    const targetSpouseId = getVal(targetNode, ['spouse_id', 'spouseId']);
+    if (targetSpouseId && vChildren?.some(c => String(c.id) === String(targetSpouseId))) return tSex === 'F' ? "儿媳" : "女婿";
 
     const vSpouseNode = getFullNode(vSpouseId);
     if (vSpouseNode && (String(targetNode.id) === String(getVal(vSpouseNode, ['father_id', 'fatherId'])) || String(targetNode.id) === String(getVal(vSpouseNode, ['mother_id', 'motherId'])))) {
@@ -120,9 +129,22 @@ export function computeKinshipViaMumuy(
     const isSibOfFather = areSiblings(targetNode.id, vFatherId);
 
     let isMaternal = viewerMaternal || targetMaternal || isSibOfMother;
-    const isRealSib = (tFatherId && String(tFatherId) === String(effectiveVFatherId)) ||
-        (tMotherId && String(tMotherId) === String(effectiveVMotherId)) ||
-        (targetHall && targetHall === effectiveVH);
+    // NOTE: 亲兄弟姐妹判断必须使用「原始」父母ID，而非经配偶代理的 effectiveVFatherId
+    // 否则已婚女性的亲兄妹会被误判为堂亲
+    const isRealSib = (tFatherId && String(tFatherId) === String(vFatherId)) ||
+        (tMotherId && String(tMotherId) === String(vMotherId)) ||
+        (targetHall && effectiveVH && targetHall === effectiveVH && !vSpouseId);
+
+    // 补充：如果 viewer 已婚，且 target 是配偶的亲兄弟/姐妹 → 先行处理
+    // 例：奶奶视角，爷爷的兄弟 → 应叫「大伯/叔」，不应叫「堂哥」
+    if (vSpouseId && vSpouseNode && genDiff === 0) {
+        if (areSiblings(targetNode.id, vSpouseNode.id)) {
+            const spouseOrder = getExplicitOrder(vSpouseNode);
+            const earlyRank = (tS >= 1 && tS <= 20) ? (tS === 1 ? '大' : NUM_CHAR[tS] || '') : '';
+            if (tSex === 'F') return (tS < spouseOrder ? earlyRank + '大姑' : earlyRank + '小姑');
+            return (tS < spouseOrder ? earlyRank + '大伯' : earlyRank + '叔');
+        }
+    }
 
     // 🚀 核心：亲手足生日排序诱导排行 (针对未明确设置排行的情况)
     let finalTS = tS;
@@ -176,9 +198,30 @@ export function computeKinshipViaMumuy(
             }
         }
 
-        const prefix = isRealSib ? '' : (isMaternal ? '表' : '堂');
-        if (isO) return prefix + rank + (tSex === 'F' ? '姐' : '哥');
-        return prefix + rank + (tSex === 'F' ? '妹' : '弟');
+        // 表堂辨析：
+        // - 亲兄妹 → 无前缀
+        // - 通过姑姑（父之姐妹）的孩子 → 表亲（母系走向）
+        // - 通过叔伯（父之兄弟）的孩子 → 堂亲（父系走向）
+        // - 通过舅/阿姨（母亲兄妹）的孩子 → 表亲
+        let cousinPrefix = isRealSib ? '' : (isMaternal ? '表' : '堂');
+        // 精准修正：如果 target 的父母是女性，且该女性是 viewer 父亲的姐妹（姑姑）→ 表亲
+        if (!isRealSib) {
+            const tParentFId = tFatherId ? getFullNode(tFatherId) : null;
+            const tParentMId = tMotherId ? getFullNode(tMotherId) : null;
+            const tParentFromFather = tParentFId && !tParentMId ? tParentFId : null; // 只有父亲
+            const hasMotherAsParent = !!tParentMId; // target 有母亲记录
+            // 如果 target 的直系父母中有女性，且该女性是 viewer 的亲属（姑姑方向），则是表亲
+            const tMother = tMotherId ? getFullNode(tMotherId) : null;
+            const tFather = tFatherId ? getFullNode(tFatherId) : null;
+            const parentIsAunt = (tMother && isSibOfFather && areSiblings(tMother.id, vFatherId)) ||
+                (tMother && areSiblings(tMother.id, vFatherId)) ||
+                (tFather && areSiblings(tFather.id, vMotherId));
+            if (parentIsAunt) cousinPrefix = '表';
+            // 如果 target 的直接母亲是 viewer 父亲的姐妹（姑姑）→ 表亲
+            if (tMother && vFatherId && areSiblings(tMother.id, vFatherId)) cousinPrefix = '表';
+        }
+        if (isO) return cousinPrefix + rank + (tSex === 'F' ? '姐' : '哥');
+        return cousinPrefix + rank + (tSex === 'F' ? '妹' : '弟');
     }
 
     // 长一辈 (-1)
@@ -187,7 +230,8 @@ export function computeKinshipViaMumuy(
         if (isSibOfFather) {
             if (tSex === 'F') return rank + '姑妈';
             const fNode = getFullNode(vFatherId);
-            return (tS < (fNode?.sibling_order || 99)) ? (rank + '伯') : (rank + '叔');
+            const fOrder = getExplicitOrder(fNode);
+            return (tS < fOrder) ? (rank + '伯') : (rank + '叔');
         }
 
         const prefix = (isRealSib || targetNode.ancestral_hall === effectiveVH) ? '' : (isMaternal ? '表' : '堂');
@@ -217,7 +261,14 @@ export function computeKinshipViaMumuy(
 
         if (isPast) {
             if (absGen === 2) {
-                if (isBioAncestor) return (isMaternal ? "外" : "") + prefixStr + (tSex === 'F' ? "婆" : "公");
+                if (isBioAncestor) {
+                    // 精准判断祖父母方向：通过父亲一侧 → 爷爷/奶奶，通过母亲一侧 → 外公/外婆
+                    // 直接检查：viewer 的父亲是否是 target 的后代（即 target 是父系祖辈）
+                    const viewerFather = vFatherId ? members?.find(m => String(m.id) === String(vFatherId)) : null;
+                    const throughFather = viewerFather ? isDescendantRecursive(viewerFather, targetNode, members) || isAncestorRecursive(targetNode, viewerFather, members) : false;
+                    if (throughFather) return (tSex === 'F' ? "奶奶" : "爷爷");
+                    return (tSex === 'F' ? "外婆" : "外公");
+                }
 
                 // 旁系祖辈精准术语
                 if (viewerMaternal || isMaternal) {
@@ -245,7 +296,14 @@ export function computeKinshipViaMumuy(
     return targetNode.relationship || "亲戚";
 }
 
-function isSpouse(a: any, b: any) { return a && b && (String(a.spouse_id) === String(b.id) || String(b.spouse_id) === String(a.id)); }
+function isSpouse(a: any, b: any) {
+    if (!a || !b) return false;
+    const aSpouseId = String(a.spouse_id || a.spouseId || "");
+    const bSpouseId = String(b.spouse_id || b.spouseId || "");
+    const aId = String(a.id);
+    const bId = String(b.id);
+    return (aSpouseId === bId || bSpouseId === aId);
+}
 
 function isAncestorRecursive(target, start, members) {
     if (!start || !target) return false;
@@ -294,28 +352,47 @@ function findLCA(a, b, members) {
 
 function isDescendantThroughDaughter(target, ancestor, members) {
     if (!target || !ancestor || String(target.id) === String(ancestor.id)) return false;
-    let node = target;
+
+    // 溯源：从 target 向上找 ancestor，看第一步离开 ancestor 的链路是否为女性
+    let current = target;
     const visited = new Set();
-    while (node && !visited.has(String(node.id)) && String(node.id) !== String(ancestor.id)) {
-        visited.add(String(node.id));
-        const mId = node.mother_id || node.motherId;
-        const fId = node.father_id || node.fatherId;
-        if (mId) {
-            const m = members.find(m => String(m.id) === String(mId));
-            if (String(mId) === String(ancestor.id)) return true;
-            if (isAncestorRecursive(ancestor, m, members)) return true;
+    const path: any[] = [];
+
+    while (current && !visited.has(String(current.id)) && String(current.id) !== String(ancestor.id)) {
+        visited.add(String(current.id));
+        path.unshift(current);
+        const fId = getVal(current, ['father_id', 'fatherId']);
+        const mId = getVal(current, ['mother_id', 'motherId']);
+
+        let parentNode = null;
+        if (fId && isAncestorRecursive(ancestor, getFullNode(fId, members), members)) {
+            parentNode = getFullNode(fId, members);
+        } else if (mId && isAncestorRecursive(ancestor, getFullNode(mId, members), members)) {
+            parentNode = getFullNode(mId, members);
         }
-        if (fId) {
-            const f = members.find(m => String(m.id) === String(fId));
-            if (String(fId) === String(ancestor.id)) return false;
-            if (isAncestorRecursive(ancestor, f, members)) {
-                node = f;
-                continue;
-            }
-        }
-        break;
+
+        if (!parentNode) break;
+        current = parentNode;
     }
+
+    if (String(current.id) === String(ancestor.id) && path.length > 0) {
+        // 第一跳节点的母亲是否为 ancestor
+        const firstNode = path[0];
+        const mId = getVal(firstNode, ['mother_id', 'motherId']);
+        return String(mId) === String(ancestor.id);
+    }
+
     return false;
+}
+
+function getVal(node: any, keys: string[]) {
+    if (!node) return undefined;
+    for (const k of keys) if (node[k] !== undefined) return node[k];
+    return undefined;
+}
+
+function getFullNode(id: any, members: any[]) {
+    return id ? members?.find(m => String(m.id) === String(id)) : null;
 }
 
 export function computeReverseViaMumuy(m: string, s: 'male' | 'female'): string | null { return null; }
