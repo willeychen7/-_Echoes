@@ -121,13 +121,18 @@ export function computeKinshipViaMumuy(
         // 如果 viewer 没有排行 (99)，而 target 有排行，且 target 关系曾经是“弟/妹”或“姐/哥”，我们应该尊重原倾向
         // 这里采用更稳健的逻辑：如果 viewer 是 99，不要轻易判定 target 为 "哥/姐"
         let isO = isRealSib ? (tS < vS) : ((hT < hV) || (hT === hV && tS < vS));
+
         if (vS === 99 && tS !== 99) {
-            // 启发式：如果 viewer 没有排行，默认假设 viewer 是老大 (如果是主账户的话)
-            // 或者检查 target 的 node 里的 relationship 是否含有弟/妹关键字
             const oldRel = targetNode.relationship || "";
-            if (oldRel.includes("弟") || oldRel.includes("妹")) isO = false;
-            else if (oldRel.includes("哥") || oldRel.includes("姐")) isO = true;
-            else isO = (tS < 1); // 默认假设比我小，除非他是老大
+            if (oldRel.includes("弟") || oldRel.includes("妹")) {
+                isO = false;
+            } else if (oldRel.includes("哥") || oldRel.includes("姐")) {
+                isO = true;
+            } else {
+                // 如果没有明确称谓背景，且主账号未设排行：1 为长；>1 为幼
+                isO = (tS === 1);
+                if (tS > 1) isO = false;
+            }
         }
 
         const prefix = isRealSib ? '' : (isMaternal ? '表' : '堂');
