@@ -252,23 +252,20 @@ function computeRigorousRelationship(viewer: any, target: any, members: any[], d
         const isPet = tNode.memberType === 'pet' || tNode.type === 'pet' || tNode.standardRole === 'pet';
         if (isPet) return tNode.name || "宠物";
 
-        const isFem = isFemale(tNode);
-        const prefix = getRankPrefix(tNode, members);
-
-        // --- 🌟 STEP M: mumuy 引擎全量接管 ---
+        // --- 🌟 STEP M:至高智慧族谱引擎 55.0 精准接管 ---
         try {
-            const mumuyResult = computeKinshipViaMumuy(tNode, vNode, members, false);
-            if (mumuyResult && !['本人', '亲属', '其他', '亲戚'].includes(mumuyResult)) {
-                const cleanMumuy = mumuyResult.replace(/^(大|二|三|四|五|六|七|八|九|十|小|老)/, '');
-                return prefix ? `${prefix}${cleanMumuy}` : mumuyResult;
+            const mumuyResult = computeKinshipViaMumuy(tNode, vNode, members);
+            // 55.0 引擎已内置排行、亲/堂/表辨析及曾代前缀，直接返回权威结果
+            if (mumuyResult && !['亲属', '其他', '亲戚'].includes(mumuyResult)) {
+                return mumuyResult;
             }
         } catch (err) { }
 
-        // --- 4. 传统 ID 链接逻辑 (Fallback) ---
-        const eq = (a: any, b: any) => a && b && Number(a) === Number(b);
-        if (eq(tId, vNode.fatherId)) return "爸爸";
-        if (eq(tId, vNode.motherId)) return "妈妈";
-        if (eq(vId, tNode.fatherId) || eq(vId, tNode.motherId)) return isFem ? "女儿" : "儿子";
+        // --- 🛡️ Fallback: 基础直系链接 ---
+        const eq = (a: any, b: any) => a != null && b != null && String(a) === String(b);
+        if (eq(tId, vNode.fatherId)) return "父亲";
+        if (eq(tId, vNode.motherId)) return "母亲";
+        if (eq(vId, tNode.fatherId) || eq(vId, tNode.motherId)) return isFemale(tNode) ? "女儿" : "儿子";
 
         return tNode.relationship || "亲戚";
     } catch (e) {

@@ -596,7 +596,9 @@ export const ProfilePage: React.FC = () => {
           mode: mode || "direct",
           targetSiblingOrder: inviteData.targetSiblingOrder,
           inviterAncestralHall: suggestedInviterHall,
-          inviterGenerationNum: suggestedInviterGen
+          inviterGenerationNum: suggestedInviterGen,
+          birthDate: user.birthday,
+          gender: user.gender // 补齐性别字段，确保后端礼法校验闭环
         })
       });
 
