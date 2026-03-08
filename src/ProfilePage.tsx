@@ -496,7 +496,15 @@ export const ProfilePage: React.FC = () => {
   const handleAcceptInvite = async (overrideRole?: string, overrideStdRole?: string, overrideInviteData?: any, overrideName?: string, overrideAvatar?: string, mode?: string) => {
     const finalInviteData = overrideInviteData || inviteData;
     const finalRole = overrideRole || selectedRel;
-    const finalStdRole = overrideStdRole || relationships.find(r => r.label === finalRole)?.value || "other";
+    let finalStdRole = overrideStdRole || relationships.find(r => r.label === finalRole)?.value || "other";
+
+    // 🚀 核心优化：动态识别“堂/表”称谓并映射为标准 cousin 角色
+    if (finalStdRole === "other") {
+      if (finalRole.includes("堂") || finalRole.includes("表")) finalStdRole = "cousin";
+      else if (finalRole.includes("侄") || finalRole.includes("外甥")) finalStdRole = "nephew";
+      else if (finalRole.includes("叔") || finalRole.includes("伯") || finalRole.includes("舅") || finalRole.includes("姨")) finalStdRole = "uncle";
+    }
+
     const finalName = overrideName || tempName;
     const finalAvatar = overrideAvatar || tempAvatar;
 

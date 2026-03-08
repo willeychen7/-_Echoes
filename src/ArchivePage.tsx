@@ -1131,8 +1131,7 @@ export const ArchivePage: React.FC = () => {
               const typeInfo = getMsgTypeInfo(msg.type);
               const isAuthor = currentUser && (
                 (msg.authorId && currentUser.memberId && String(msg.authorId) === String(currentUser.memberId)) ||
-                (msg.familyMemberId && currentUser.memberId && String(msg.familyMemberId) === String(currentUser.memberId)) ||
-                (String(msg.authorName) === String(currentUser.name))
+                (!msg.authorId && String(msg.authorName) === String(currentUser.name))
               );
               return (
                 <motion.div
@@ -1151,7 +1150,15 @@ export const ArchivePage: React.FC = () => {
                       />
                     </div>
                     <span className="px-3 py-1 rounded-full bg-[#eab308]/10 text-[#eab308] text-[10px] font-black">
-                      {isAuthor ? "我" : (msg.familyMemberId === Number(id) && msg.authorName === member?.name ? "原作者" : msg.authorRole)}
+                      {isAuthor ? "我" : (() => {
+                        if (msg.familyMemberId === Number(id) && msg.authorName === member?.name) return "原作者";
+                        const authorNode = members.find(m => Number(m.id) === Number(msg.authorId));
+                        if (authorNode && member) {
+                          const rel = getRigorousRelationship(member, authorNode, members);
+                          if (rel && !['本人', '亲戚', '其他', '家人'].includes(rel)) return rel;
+                        }
+                        return msg.authorRole || "家人";
+                      })()}
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">

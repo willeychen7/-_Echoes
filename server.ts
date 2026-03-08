@@ -1150,6 +1150,23 @@ export async function createApp() {
               updateData[inviter.gender === 'male' ? 'father_id' : 'mother_id'] = finalSibling.id;
             }
             updateData.gender = role === "nephew" ? "male" : "female";
+          } else if (role === "cousin") {
+            // 堂/表亲逻辑：需要一个共同的祖父/祖母
+            // 1. 确保邀请人的父辈节点
+            const pId = await ensureParent(inviter.id, 'male');
+            // 2. 确保邀请人的祖辈节点
+            const gpId = await ensureParent(pId, 'male');
+            // 3. 创建父辈的虚拟手足（堂/表亲的父母）
+            const { data: vSib } = await supabase.from("family_members").insert({
+              family_id: inviter.family_id,
+              name: `${inviter.name}的伯叔`,
+              is_registered: false,
+              member_type: 'virtual',
+              father_id: gpId
+            }).select().single();
+            if (vSib) {
+              updateData.father_id = vSib.id;
+            }
           }
 
           return { updateData, invUpdate };
