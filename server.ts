@@ -1229,6 +1229,58 @@ export async function createApp() {
             }
             await supabase.from("families").delete().eq("id", currentUser.family_id);
           }
+
+          // === 房分对齐（Branch Reconcile）===
+          // 迁移后，被带来的成员（如堂哥）的 father_id 仍指向旧家族的虚拟父节点。
+          // 通过 ancestral_hall + generation_num，将虚拟节点与主家族里对应的真实成员对齐。
+          // 例如：堂哥.father_id → 虚拟"大房"节点 → 识别并对齐为 大伯（主家族里的真实大房成员）
+          const reconcileByBranch = async (familyId: number) => {
+            try {
+              const { data: allMembers } = await supabase
+                .from("family_members")
+                .select("id, name, ancestral_hall, generation_num, is_placeholder, member_type, father_id, mother_id, is_registered")
+                .eq("family_id", familyId);
+              if (!allMembers || allMembers.length === 0) return;
+
+              // 虚拟占位节点 = 迁移过来的旧家族的虚拟父级，需要被真实节点替代
+              const virtualNodes = allMembers.filter((m: any) =>
+                (m.is_placeholder || m.member_type === 'virtual') && m.ancestral_hall
+              );
+              // 真实成员 = 正式录入的、已注册的，或明确有代数信息的成员
+              const realNodes = allMembers.filter((m: any) =>
+                !m.is_placeholder && m.member_type !== 'virtual' && m.ancestral_hall
+              );
+
+              for (const vNode of virtualNodes) {
+                const hall = vNode.ancestral_hall;
+                const gen = vNode.generation_num;
+                if (!hall) continue;
+
+                // 查找同房、同代的真实成员（精确匹配）
+                const matches = realNodes.filter((r: any) =>
+                  r.ancestral_hall === hall &&
+                  (gen == null || r.generation_num == null || Number(r.generation_num) === Number(gen))
+                );
+
+                if (matches.length === 1) {
+                  const realNode = matches[0];
+                  console.log(`[RECONCILE] 虚拟节点 ${vNode.id}（${vNode.name}/${hall}）→ 对齐到真实节点 ${realNode.id}（${realNode.name}）`);
+
+                  // 把所有把 vNode 当爸/妈的成员，改指向 realNode
+                  await supabase.from("family_members").update({ father_id: realNode.id }).eq("father_id", vNode.id);
+                  await supabase.from("family_members").update({ mother_id: realNode.id }).eq("mother_id", vNode.id);
+                  // 删除虚拟节点
+                  await supabase.from("family_members").delete().eq("id", vNode.id);
+                } else if (matches.length > 1) {
+                  console.log(`[RECONCILE] 虚拟节点 ${vNode.id}（${hall}）找到多个候选（${matches.map((m: any) => m.name).join('，')}），跳过自动合并，需人工确认`);
+                }
+                // matches.length === 0 → 没有对应真实节点，保留虚拟节点
+              }
+            } catch (err: any) {
+              console.warn("[RECONCILE] 房分对齐出错（非致命）:", err.message);
+            }
+          };
+          await reconcileByBranch(inviter.family_id);
         }
 
         // MIGRATION: Check if THIS user had a DIFFERENT legacy record (ID 123) in this family
