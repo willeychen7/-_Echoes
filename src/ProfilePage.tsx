@@ -29,7 +29,7 @@ const getRelativeTime = (dateStr: string) => {
 
 /** 核心功能：基于双方 DNA (房分/排行/代数) 自动计算称谓推荐 */
 const getIdentityRecommendation = (data: any) => {
-  if (!data || !data.inviterAncestralHall || !data.targetAncestralHall) return null;
+  if (!data || !data.inviterId) return null;
 
   const iH = data.inviterAncestralHall;
   const tH = data.targetAncestralHall;
@@ -38,6 +38,9 @@ const getIdentityRecommendation = (data: any) => {
   const iS = data.inviterSiblingOrder;
   const tS = data.targetSiblingOrder;
   const iSex = data.inviterGender === 'female' || data.inviterGender === '女' ? 'F' : 'M';
+
+  // 🚀 核心新增：亲手足判定 (通过父辈 ID 判定)
+  const isRealSibling = data.inviterFatherId && data.targetFatherId && data.inviterFatherId === data.targetFatherId;
 
   const hallMap: any = { '大房': 1, '二房': 2, '三房': 3, '四房': 4, '五房': 5, '六房': 6, '七房': 7, '八房': 8, '九房': 9, '十房': 10 };
   const hI = hallMap[iH] || 99;
@@ -49,13 +52,23 @@ const getIdentityRecommendation = (data: any) => {
   if (genDiff === 0) {
     // 同辈：比房分或排行
     let isOlder = false;
-    if (hI < hT) isOlder = true; // 房分在前为长
-    else if (hI === hT && Number(iS) < Number(tS)) isOlder = true; // 同房排行在前为长
+    if (hI < hT) isOlder = true;
+    else if (hI === hT && Number(iS) < Number(tS)) isOlder = true;
 
-    const rel = isOlder ? (iSex === 'F' ? '堂姐' : '堂哥') : (iSex === 'F' ? '堂妹' : '堂弟');
-    const reason = hI < hT ? `邀请人在${iH}，您在${tH}，对方所属支脉更长，故称${rel}。` :
-      hI === hT ? `同属${iH}，但邀请人排行更前，故称${rel}。` :
+    // 如果是亲手足或是同房，去掉“堂”字称谓
+    const isSameHouse = hI === hT;
+    const prefix = isRealSibling || isSameHouse ? "" : "堂";
+    const rel = isOlder ? (iSex === 'F' ? `${prefix}姐` : `${prefix}哥`) : (iSex === 'F' ? `${prefix}妹` : `${prefix}弟`);
+
+    let reason = "";
+    if (isRealSibling) {
+      reason = `系统检测到您与邀请人同父同母，属于最亲近的胞亲，故称${rel}。`;
+    } else if (isSameHouse) {
+      reason = `同属${iH}且代际相同，因对方排行更${isOlder ? '长' : '幼'}，故称${rel}。`;
+    } else {
+      reason = hI < hT ? `邀请人在${iH}，您在${tH}，对方所属支脉更长，故称${rel}。` :
         `邀请人在${iH}，您在${tH}，您所属支脉更长，故称${rel}。`;
+    }
 
     return { title: rel, reason };
   } else if (genDiff === 1) {
@@ -1308,7 +1321,13 @@ export const ProfilePage: React.FC = () => {
                           <div>
                             <h4 className="text-xs font-black opacity-80 uppercase tracking-widest">系统智能血脉定位</h4>
                             <div className="text-lg font-black flex items-center gap-2">
-                              {inviteData.inviterAncestralHall} <ChevronRight size={14} className="opacity-50" /> {inviteData.targetAncestralHall || "未定"}
+                              {inviteData.inviterAncestralHall === inviteData.targetAncestralHall ? (
+                                <span>同属 {inviteData.inviterAncestralHall || "家族支脉"}</span>
+                              ) : (
+                                <>
+                                  {inviteData.inviterAncestralHall} <ChevronRight size={14} className="opacity-50" /> {inviteData.targetAncestralHall || "未定"}
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>

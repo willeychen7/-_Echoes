@@ -346,31 +346,70 @@ export async function createApp() {
       }
     });
 
+    // 学习逻辑：如果输入的是常用标准称呼，自动同步 standard_role
+    const COMMON_MAPPINGS: Record<string, string> = {
+      // 核心直系
+      "本人": "self", "自己": "self",
+      "爸爸": "father", "父亲": "father", "爸": "father", "爹": "father", "老爸": "father",
+      "妈妈": "mother", "母亲": "mother", "妈": "mother", "娘": "mother", "老妈": "mother",
+      "儿子": "son", "女儿": "daughter",
+      "老弟": "brother", "弟弟": "brother", "哥哥": "brother", "老哥": "brother", "兄": "brother", "弟": "brother",
+      "姐姐": "sister", "妹妹": "sister", "姊": "sister", "妹": "sister",
+      "老婆": "spouse", "老公": "spouse", "妻子": "spouse", "丈夫": "spouse", "爱人": "spouse", "媳妇": "spouse",
+
+      // 祖辈/父系
+      "爷爷": "grandfather_paternal", "祖父": "grandfather_paternal",
+      "奶奶": "grandmother_paternal", "祖母": "grandmother_paternal",
+      "伯伯": "uncle_paternal", "叔叔": "uncle_paternal", "伯父": "uncle_paternal", "叔父": "uncle_paternal",
+      "姑姑": "aunt_paternal", "姑妈": "aunt_paternal", "姑娘": "aunt_paternal",
+
+      // 祖辈/母系
+      "外公": "grandfather_maternal", "姥爷": "grandfather_maternal",
+      "外婆": "grandmother_maternal", "姥姥": "grandmother_maternal",
+      "舅舅": "uncle_maternal", "阿舅": "uncle_maternal",
+      "阿姨": "aunt_maternal", "姨妈": "aunt_maternal", "姨娘": "aunt_maternal",
+
+      // 晚辈
+      "孙子": "grandson", "孙女": "granddaughter", "外孙": "grandson", "外孙女": "granddaughter",
+      "侄子": "nephew", "外甥": "nephew", "侄女": "niece", "外甥女": "niece",
+
+      // 姻亲与扩展
+      "舅妈": "aunt_maternal", "婶婶": "aunt_paternal", "伯母": "aunt_paternal", "姨父": "uncle_maternal", "姑父": "uncle_paternal",
+      "公公": "father", "婆婆": "mother", "岳父": "father", "岳母": "mother",
+      "大伯子": "brother", "小叔子": "brother", "大姑子": "sister", "小姑子": "sister",
+      "大舅子": "brother", "小舅子": "brother", "大姨子": "sister", "小姨子": "sister"
+    };
+
+    /** 核心辅助：智能映射基准角色 */
+    const getStandardRole = (rel: string): string | null => {
+      if (!rel) return null;
+      if (COMMON_MAPPINGS[rel]) return COMMON_MAPPINGS[rel];
+
+      // 去除排行前缀再试一次 (例如: 大伯 -> 伯伯 -> uncle_paternal)
+      const cleanRel = rel.replace(/^[大二三四五六七八九十小]+/, "");
+      if (COMMON_MAPPINGS[cleanRel]) return COMMON_MAPPINGS[cleanRel];
+
+      // 处理后缀，例如 "二舅" -> "他是一个舅" -> "uncle_maternal"
+      if (rel.endsWith("舅")) return COMMON_MAPPINGS["舅舅"];
+      if (rel.endsWith("姨")) return COMMON_MAPPINGS["阿姨"];
+      if (rel.endsWith("哥")) return COMMON_MAPPINGS["哥哥"];
+      if (rel.endsWith("姐")) return COMMON_MAPPINGS["姐姐"];
+      if (rel.endsWith("弟")) return COMMON_MAPPINGS["弟弟"];
+      if (rel.endsWith("妹")) return COMMON_MAPPINGS["妹妹"];
+
+      return null;
+    };
+
     // 新增：手动修正关系称谓，帮助系统学习
     app.post("/api/family-members/:id/relationship", async (req, res) => {
       const { id } = req.params;
       const { relationship } = req.body;
       if (!relationship) return res.status(400).json({ error: "关系称谓不能为空" });
 
-      // 学习逻辑：如果输入的是常用标准称呼，自动同步 standard_role
-      const commonMappings: Record<string, string> = {
-        "爸爸": "father", "父亲": "father", "爸": "father",
-        "妈妈": "mother", "母亲": "mother", "妈": "mother",
-        "儿子": "son", "女儿": "daughter",
-        "哥哥": "brother", "弟弟": "brother", "兄": "brother", "弟": "brother",
-        "姐姐": "sister", "妹妹": "sister", "姊": "sister", "妹": "sister",
-        "老婆": "spouse", "老公": "spouse", "妻子": "spouse", "丈夫": "spouse", "爱人": "spouse",
-        "爷爷": "grandfather", "外公": "grandfather", "姥爷": "grandfather",
-        "奶奶": "grandmother", "外婆": "grandmother", "姥姥": "grandmother",
-        "孙子": "grandson", "孙女": "granddaughter", "外孙": "grandson", "外孙女": "granddaughter",
-        "舅舅": "uncle", "阿姨": "aunt", "叔叔": "uncle", "伯伯": "uncle", "姑姑": "aunt",
-        "侄子": "nephew", "外甥": "nephew", "侄女": "niece", "外甥女": "niece",
-        "舅妈": "aunt", "婶婶": "aunt", "伯母": "aunt", "姨妈": "aunt", "姑父": "uncle", "姨父": "uncle"
-      };
-
       const updatePayload: any = { relationship };
-      if (commonMappings[relationship]) {
-        updatePayload.standard_role = commonMappings[relationship];
+      const role = getStandardRole(relationship);
+      if (role) {
+        updatePayload.standard_role = role;
       }
 
       const { data, error } = await supabase
@@ -685,6 +724,8 @@ export async function createApp() {
           inviterGender: inviter.gender,
           inviterAncestralHall: suggestedInviterHall,
           inviterGenerationNum: suggestedInviterGen,
+          inviterFatherId: inviter.father_id,
+          inviterMotherId: inviter.mother_id,
           birthDate: user?.birthday,
           gender: user?.gender, // 补齐性别字段，确保后端礼法校验闭环
           inviterSiblingOrder: inviter.sibling_order,
@@ -695,6 +736,8 @@ export async function createApp() {
           targetAvatar: target.avatar_url,
           targetAncestralHall: target.ancestral_hall,
           targetGenerationNum: target.generation_num,
+          targetFatherId: target.father_id,
+          targetMotherId: target.mother_id,
           targetSiblingOrder: target.sibling_order,
           inviterFamilyId: inviter.family_id
         });
@@ -778,11 +821,20 @@ export async function createApp() {
         "堂姐": g === '女' ? "堂妹" : "堂弟", "堂哥": g === '女' ? "堂妹" : "堂弟",
         "表姐": g === '女' ? "表妹" : "表弟", "表哥": g === '女' ? "表妹" : "表弟",
         "姐姐": g === '女' ? "妹妹" : "弟弟", "哥哥": g === '女' ? "妹妹" : "弟弟",
-        "叔叔": g === '女' ? "侄女" : "侄子", "伯伯": g === '女' ? "侄女" : "侄子", "舅舅": g === '女' ? "外甥女" : "外甥",
-        "姑姑": g === '女' ? "内侄女" : "内侄", "姨妈": g === '女' ? "姨甥女" : "姨甥",
+        "叔叔": g === '女' ? "侄女" : "侄子", "伯伯": g === '女' ? "侄女" : "侄子",
+        "大伯": g === '女' ? "侄女" : "侄子", "二伯": g === '女' ? "侄女" : "侄子",
+        "舅舅": g === '女' ? "外甥女" : "外甥", "大舅": g === '女' ? "外甥女" : "外甥",
+        "姑姑": g === '女' ? "侄女" : "侄子", "姑妈": g === '女' ? "侄女" : "侄子",
+        "姨妈": g === '女' ? "外甥女" : "外甥", "阿姨": g === '女' ? "外甥女" : "外甥",
         "儿子": g === '女' ? "母亲" : "父亲", "女儿": g === '女' ? "母亲" : "父亲"
       };
-      return invMap[relText] || relText;
+      // Handle terms with rank prefix
+      let result = invMap[relText];
+      if (!result) {
+        const cleanRel = relText.replace(/^[大二三四五六七八九十]+/, "");
+        if (invMap[cleanRel]) result = invMap[cleanRel];
+      }
+      return result || relText;
     };
 
     // --- Helper: Kinship Gender Guard ---
@@ -1217,22 +1269,20 @@ export async function createApp() {
 
     app.post("/api/accept-invite", async (req, res) => {
       try {
-        // NOTE: 优先使用 userId（UUID）识别用户，不再依赖容易丢失的 phone 字段
         const { userId, phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl, mode, targetSiblingOrder, inviterAncestralHall, inviterGenerationNum, birthDate, gender } = req.body;
-        // mode: "migrate" 迁移内容 | "clear" 清空内容 | "direct" 默认直接加入
         let effectiveMode: string = mode || "direct";
 
-        // --- 🚨 礼法防火墙：前置强校验 ---
-        // 在进行任何数据库操作前，先验证称谓与性别逻辑
-        const inverseRel = await getInverseLabel(relationshipToInviter, gender);
-        if (gender && checkGenderConflict(inverseRel, gender)) {
-          return res.status(400).json({ error: `礼法冲突：根据您的称谓，受邀者的身份应当是“${inverseRel}”，这与您选择的性别（${gender === 'male' ? '男' : '女'}）不符。` });
-        }
-
         if ((!userId && !phone) || !inviteCode) {
-          console.error("[ACCEPT:ERROR] Missing fields:", { userId: !!userId, phone: !!phone, inviteCode: !!inviteCode });
           return res.status(400).json({ error: "Required fields missing" });
         }
+
+        // 1. Fetch User and Inviter/Target Info
+        const userQuery = userId
+          ? supabase.from("users").select("id, name, avatar_url, family_id, member_id, gender").eq("id", userId).maybeSingle()
+          : supabase.from("users").select("id, name, avatar_url, family_id, member_id, gender").eq("phone_or_email", phone).maybeSingle();
+        const { data: currentUser, error: userErr } = await userQuery;
+        if (userErr) throw userErr;
+        if (!currentUser) return res.status(404).json({ error: "用户未在系统注册" });
 
         let targetId: number | null = null;
         let inviterId: number | null = null;
@@ -1242,271 +1292,100 @@ export async function createApp() {
           targetId = parseInt(parts[1]);
           inviterId = parseInt(parts[2]);
         } else {
-          // Fallback: lookup by invite_code (Legacy FA- format)
           const { data: legacyTarget } = await supabase.from("family_members").select("*").eq("invite_code", inviteCode).single();
-          if (!legacyTarget) return res.status(400).json({ error: "邀请码无效或格式不匹配" });
-
+          if (!legacyTarget) return res.status(400).json({ error: "邀请码无效" });
           targetId = legacyTarget.id;
-          // Find who created this profile
           const { data: creatorLink } = await supabase.from("archive_memory_creators").select("creator_member_id").eq("member_id", targetId).maybeSingle();
           inviterId = creatorLink ? creatorLink.creator_member_id : targetId;
         }
 
-        // 1. Get inviter and target
         const { data: inviter } = await supabase.from("family_members").select("*").eq("id", inviterId).single();
         const { data: target } = await supabase.from("family_members").select("*").eq("id", targetId).single();
+        if (!inviter || !target) return res.status(404).json({ error: "档案不存在" });
 
-        if (!inviter || !target) return res.status(404).json({ error: "Invitation record not found" });
-
-        // 2. Resolve Relationship
-        let { updateData, invUpdate } = await resolveRigorousRel(standardRole, inviter, target.id);
-
-        // 1.5 IDENTITY GUARD & DATA MIGRATION
-        // NOTE: 优先用 userId（UUID）查询，不再依赖 phone——UUID 是最稳定的用户唯一标识
-        const userQuery = userId
-          ? supabase.from("users").select("id, name, avatar_url, family_id, member_id").eq("id", userId).maybeSingle()
-          : supabase.from("users").select("id, name, avatar_url, family_id, member_id").eq("phone_or_email", phone).maybeSingle();
-        const { data: currentUser, error: userErr } = await userQuery;
-        if (userErr) console.error("[ACCEPT-INVITE] fetch user error:", userErr);
-        if (!currentUser) throw new Error("用户未在系统注册（userId: " + userId + "，phone: " + phone + "）");
-
-        // SECURITY: Check if the profile (target.id) is already "owned" by someone else
-        if (target.user_id && target.user_id !== currentUser.id) {
-          return res.status(403).json({
-            error: "身份不匹配：该档案曾属于另一位用户，您无法认领此档案。",
-            code: "IDENTITY_MISMATCH"
-          });
+        // 2. Gender & Relationship Guard
+        const effectiveGender = gender || currentUser.gender || target.gender;
+        const finalInverseRelLabel = await getInverseLabel(relationshipToInviter, effectiveGender);
+        if (effectiveGender && checkGenderConflict(finalInverseRelLabel, effectiveGender)) {
+          return res.status(400).json({ error: `礼法冲突：根据您的称谓，您的身份应当是“${finalInverseRelLabel}”，这与您的性别（${effectiveGender === 'male' ? '男' : '女'}）不符。` });
         }
 
-        // --- 🚨 礼法防火墙：实时身份校验 ---
-        // 结合请求提供的 gender 与用户档案中的 gender 进行最后检查
-        const effectiveGender = gender || currentUser.gender;
-        if (effectiveGender && checkGenderConflict(relationshipToInviter, effectiveGender)) {
-          return res.status(400).json({ error: `礼法冲突：您的性别信息与称谓“${relationshipToInviter}”不符，无法完成认领。` });
-        }
+        // 3. Resolve Relationship
+        const inverseStandardRole = getStandardRole(finalInverseRelLabel) || standardRole;
 
-        // --- 🚨 物理迁移计划准备 ---
-        // 我们在此处预判是否需要迁移或清理旧家，但【绝不】在此刻执行任何 update/delete。
-        // 等待下方 finalMember 更新成功后，我们再根据此计划执行物理搬迁。
-        let migrationPlan: any = null;
+        // Synchronize some inviter metadata if provided
+        if (inviterAncestralHall && !inviter.ancestral_hall) inviter.ancestral_hall = inviterAncestralHall;
+        if (inviterGenerationNum && !inviter.generation_num) inviter.generation_num = inviterGenerationNum;
 
+        let { updateData, invUpdate } = await resolveRigorousRel(inverseStandardRole, inviter, target.id);
+
+        // 4. Migration Plan Check
         if (currentUser.family_id && currentUser.family_id !== inviter.family_id) {
-          const { data: oldMembers } = await supabase.from("family_members").select("id, name, is_registered, user_id").eq("family_id", currentUser.family_id);
-          const registeredOthers = (oldMembers || []).filter((m: any) => m.is_registered && m.user_id && m.user_id !== currentUser.id).length;
+          const { data: oldMembers } = await supabase.from("family_members").select("id").eq("family_id", currentUser.family_id).eq("is_registered", true).neq("user_id", currentUser.id);
+          const registeredOthers = oldMembers?.length || 0;
 
           if (!mode || mode === "direct") {
             if (registeredOthers > 0) {
-              return res.status(409).json({ error: `您已经属于另一个有 ${registeredOthers} 位注册用户的家族，无法直接切换。`, code: "ALREADY_IN_FAMILY" });
+              return res.status(409).json({ error: `您已属于另一个家族，无法直接加入。`, code: "ALREADY_IN_FAMILY" });
             }
             effectiveMode = "clear";
           }
-
-          migrationPlan = {
-            oldFamilyId: currentUser.family_id,
-            oldMemberId: currentUser.member_id,
-            mode: effectiveMode,
-            shouldCleanupFamily: (registeredOthers === 0)
-          };
-          console.log(`[ACCEPT-INVITE] 已锁定迁移计划: ${effectiveMode}, 是否销毁旧家: ${migrationPlan.shouldCleanupFamily}`);
         }
 
-        // MIGRATION: Check if THIS user had a DIFFERENT legacy record (ID 123) in this family
-        const { data: legacyRecord } = await supabase
-          .from("family_members")
-          .select("id")
-          .eq("family_id", inviter.family_id)
-          .eq("user_id", currentUser.id)
-          .neq("id", target.id) // Must be a different record
-          .maybeSingle();
-
-        if (legacyRecord) {
-          console.log(`[MIGRATION] Transferring all assets from OLD ID ${legacyRecord.id} to NEW ID ${target.id}`);
-
-          // 1. Move memories (as owner and author)
-          await supabase.from("memories").update({ member_id: target.id }).eq("member_id", legacyRecord.id);
-          await supabase.from("memories").update({ author_id: target.id }).eq("author_id", legacyRecord.id);
-
-          // 2. Move messages
-          await supabase.from("messages").update({ family_member_id: target.id }).eq("family_member_id", legacyRecord.id);
-
-          // 3. Move notifications
-          await supabase.from("notifications").update({ member_id: target.id }).eq("member_id", legacyRecord.id);
-
-          // 4. Move ownership records
-          await supabase.from("archive_memory_creators").update({ member_id: target.id }).eq("member_id", legacyRecord.id);
-          await supabase.from("archive_memory_creators").update({ creator_member_id: target.id }).eq("creator_member_id", legacyRecord.id);
-
-          // 5. Move Events Participation
-          await supabase.from("events").update({ member_id: target.id }).eq("member_id", legacyRecord.id);
-
-          // 6. KINSHIP REPAIR: If anyone had legacyRecord as their relative, update to target.id
-          await supabase.from("family_members").update({ father_id: target.id }).eq("father_id", legacyRecord.id);
-          await supabase.from("family_members").update({ mother_id: target.id }).eq("mother_id", legacyRecord.id);
-          await supabase.from("family_members").update({ spouse_id: target.id }).eq("spouse_id", legacyRecord.id);
-
-          // FINALLY: Delete the legacy skeleton record (ID 123 is now fully drained of value)
-          await supabase.from("family_members").delete().eq("id", legacyRecord.id);
+        // 5. Kinship Repair (Merging profiles IF the user already had a shadow record here)
+        const { data: legacyShadow } = await supabase.from("family_members").select("id").eq("family_id", inviter.family_id).eq("user_id", currentUser.id).neq("id", target.id).maybeSingle();
+        if (legacyShadow) {
+          console.log(`[MERGE] Merging assets from shadow ID ${legacyShadow.id} to new ID ${target.id}`);
+          await supabase.from("memories").update({ member_id: target.id }).eq("member_id", legacyShadow.id);
+          await supabase.from("memories").update({ author_id: target.id }).eq("author_id", legacyShadow.id);
+          await supabase.from("messages").update({ family_member_id: target.id }).eq("family_member_id", legacyShadow.id);
+          await supabase.from("family_members").update({ father_id: target.id }).eq("father_id", legacyShadow.id);
+          await supabase.from("family_members").update({ mother_id: target.id }).eq("mother_id", legacyShadow.id);
+          await supabase.from("family_members").update({ spouse_id: target.id }).eq("spouse_id", legacyShadow.id);
+          await supabase.from("family_members").delete().eq("id", legacyShadow.id);
         }
 
-        const finalTargetId = target.id;
-        const finalGender = gender || target.gender;
-
-        // --- Kinship Firewall: (Removed from here, moved to the top) ---
-
-        // 1.9 Pre-sync inviter info from request to influence final resolution
-        if (inviterAncestralHall && !inviter.ancestral_hall) {
-          inviter.ancestral_hall = inviterAncestralHall;
-          invUpdate.ancestral_hall = inviterAncestralHall;
-        }
-        if (inviterGenerationNum && !inviter.generation_num) {
-          inviter.generation_num = inviterGenerationNum;
-          invUpdate.generation_num = inviterGenerationNum;
-        }
-
-        // 2. Perform rigorous relationship calculation
-        const resolved = await resolveRigorousRel(standardRole, inviter, finalTargetId);
-        updateData = resolved.updateData;
-        // Merge derived invUpdate from resolver
-        invUpdate = { ...invUpdate, ...resolved.invUpdate };
-
-        const finalTargetData: any = {
+        // 6. Update Final Member
+        const finalPayload: any = {
           ...updateData,
           is_registered: true,
           user_id: currentUser.id,
-          relationship: await getInverseLabel(relationshipToInviter, updateData.gender || target.gender) // 关键：反转称谓视角，存入受邀者档案
+          relationship: finalInverseRelLabel,
+          name: name || currentUser.name || target.name,
+          avatar_url: avatarUrl || currentUser.avatar_url || target.avatar_url,
+          birth_date: birthDate || null,
+          sibling_order: targetSiblingOrder || target.sibling_order
         };
-        // 核心逻辑：如果前端传了确认/修改后的姓名和头像，优先使用；否则保留用户当前资料
-        finalTargetData.name = name || currentUser.name || target.name;
-        finalTargetData.avatar_url = avatarUrl || currentUser.avatar_url || target.avatar_url;
-        finalTargetData.birth_date = birthDate || null;
 
-        // 3. Update active family member (ID 456)
-        if (targetSiblingOrder != null) {
-          finalTargetData.sibling_order = targetSiblingOrder;
-        }
-
-        const { data: finalMember, error: mErr } = await supabase.from("family_members").update(finalTargetData).eq("id", finalTargetId).select().single();
+        const { data: finalMember, error: mErr } = await supabase.from("family_members").update(finalPayload).eq("id", target.id).select().single();
         if (mErr) throw mErr;
 
-        // 4. Update inviter back-link
-        if ((inviterAncestralHall && !inviter.ancestral_hall) || (inviterGenerationNum && !inviter.generation_num)) {
-          if (inviterAncestralHall && !inviter.ancestral_hall) invUpdate.ancestral_hall = inviterAncestralHall;
-          if (inviterGenerationNum && !inviter.generation_num) invUpdate.generation_num = inviterGenerationNum;
-          // Only guard ancestral_hall in self-update loop, but allow properties set by user
-          if (inviter.id === target.id && !inviterAncestralHall) delete invUpdate.ancestral_hall;
-
-          // === 核心新增：发送协作确认通知给邀请人 ===
-          try {
-            const relMap: any = { "大伯": "大房", "二伯": "二房", "三伯": "三房", "爸爸": "同房" };
-            // 找到 B 对 A 父亲的原始称呼（逆推）
-            const elderRelName = Object.keys(relMap).find(key => relMap[key] === inviterAncestralHall) || "长辈";
-
-            await supabase.from("notifications").insert({
-              member_id: inviter.id,
-              sender_name: name || target.name,
-              sender_avatar: avatarUrl || target.avatar_url,
-              type: "identity_update",
-              content: `已根据受邀者的反馈，协助补全了您的支脉信息（${inviterAncestralHall || ''} 第${inviterGenerationNum || ''}代），这有助于完善家族树排位。若不准请点击修正。`,
-              link_url: "/profile",
-              is_read: false
-            });
-          } catch (notifErr) {
-            console.error("[ACCEPT-INVITE] Failed to send id-update notif:", notifErr);
-          }
-        }
-
-        if (Object.keys(invUpdate).length > 1) {
-          const { id, ...rest } = invUpdate;
-          await supabase.from("family_members").update(rest).eq("id", id);
-        }
-
-        // 5. Update the User record and synchronize (先占领新家)
+        // 7. Update User Profile sync
         await supabase.from("users").update({
-          relationship: relationshipToInviter,
           family_id: inviter.family_id,
           member_id: finalMember.id,
-          name: finalTargetData.name,
-          avatar_url: finalTargetData.avatar_url
+          gender: effectiveGender
         }).eq("id", currentUser.id);
 
-        // 6. 执行物理资产搬迁 (此刻执行是物理隔离最安全的，因为新身份已坐实)
-        if (migrationPlan) {
-          const { oldFamilyId, oldMemberId, mode, shouldCleanupFamily } = migrationPlan;
-          if (mode === "migrate" && oldMemberId) {
-            console.log(`[ACCEPT-INVITE:EXECUTE] 正在将资产从成员 ${oldMemberId} 迁移到 ${finalMember.id}`);
-            // 迁移主资产
-            await supabase.from("memories").update({ member_id: finalMember.id }).eq("member_id", oldMemberId);
-            await supabase.from("memories").update({ author_id: finalMember.id }).eq("author_id", oldMemberId);
-            await supabase.from("messages").update({ family_member_id: finalMember.id }).eq("family_member_id", oldMemberId);
-            await supabase.from("notifications").update({ member_id: finalMember.id }).eq("member_id", oldMemberId);
-            await supabase.from("events").update({ member_id: finalMember.id }).eq("member_id", oldMemberId);
-            await supabase.from("archive_memory_creators").update({ member_id: finalMember.id }).eq("member_id", oldMemberId);
-            await supabase.from("archive_memory_creators").update({ creator_member_id: finalMember.id }).eq("creator_member_id", oldMemberId);
-
-            // 迁移用户录入的“随行亲戚”
-            await supabase.from("family_members").update({ family_id: inviter.family_id }).eq("family_id", oldFamilyId).neq("id", oldMemberId);
-            await supabase.from("events").update({ family_id: inviter.family_id }).eq("family_id", oldFamilyId);
-
-            // 修补归属关系
-            await supabase.from("family_members").update({ father_id: finalMember.id }).eq("father_id", oldMemberId);
-            await supabase.from("family_members").update({ mother_id: finalMember.id }).eq("mother_id", oldMemberId);
-            await supabase.from("family_members").update({ spouse_id: finalMember.id }).eq("spouse_id", oldMemberId);
-            await supabase.from("family_members").update({ added_by_member_id: finalMember.id }).eq("added_by_member_id", oldMemberId);
-
-            // === 房分对齐（Branch Reconcile）：迁入后自动合并虚拟节点 ===
-            try {
-              const { data: allM } = await supabase.from("family_members").select("*").eq("family_id", inviter.family_id);
-              const virtuals = (allM || []).filter((m: any) => (m.is_placeholder || m.member_type === 'virtual') && m.ancestral_hall);
-              const reals = (allM || []).filter((m: any) => !m.is_placeholder && m.member_type !== 'virtual' && m.ancestral_hall);
-              const affinalKws = ['妻', '婶', '伯母', '嫂', '婆', '妈', '娘', '奶', '舅妈'];
-
-              for (const v of virtuals) {
-                const matches = reals.filter((r: any) =>
-                  r.ancestral_hall === v.ancestral_hall &&
-                  Number(r.generation_num) === Number(v.generation_num) &&
-                  (v.sibling_order == null || Number(r.sibling_order) === Number(v.sibling_order))
-                ).filter(r => !affinalKws.some(k => (r.relationship || '').includes(k)));
-
-                if (matches.length === 1) {
-                  const real = matches[0];
-                  // 归并所有关系连线
-                  await supabase.from("family_members").update({ father_id: real.id }).eq("father_id", v.id);
-                  await supabase.from("family_members").update({ mother_id: real.id }).eq("mother_id", v.id);
-                  await supabase.from("family_members").update({ spouse_id: real.id }).eq("spouse_id", v.id);
-                  await supabase.from("family_members").update({ added_by_member_id: real.id }).eq("added_by_member_id", v.id);
-
-                  // 归并资产所有权（档案创建者记录等）
-                  await supabase.from("archive_memory_creators").update({ member_id: real.id }).eq("member_id", v.id);
-                  await supabase.from("archive_memory_creators").update({ creator_member_id: real.id }).eq("creator_member_id", v.id);
-
-                  await supabase.from("family_members").delete().eq("id", v.id);
-                }
-              }
-            } catch (reconErr) {
-              console.warn("[RECONCILE] 后置对齐出错:", reconErr);
-            }
-          } else if (mode === "clear" && oldMemberId) {
-            await supabase.from("memories").delete().eq("member_id", oldMemberId);
-            await supabase.from("messages").delete().eq("family_member_id", oldMemberId);
-          }
-
-          if (shouldCleanupFamily) {
-            console.log(`[ACCEPT-INVITE:CLEANUP] 正在销毁已迁移完的历史老家: ${oldFamilyId}`);
-            if (oldMemberId) await supabase.from("family_members").delete().eq("id", oldMemberId);
-            await supabase.from("families").delete().eq("id", oldFamilyId);
+        // 8. Execute Migration Logic (recursive)
+        if (currentUser.family_id && currentUser.family_id !== inviter.family_id) {
+          if (effectiveMode === "migrate") {
+            // Re-fetch all created memories and move them
+            await supabase.from("memories").update({ family_id: inviter.family_id }).eq("member_id", finalMember.id);
+            await supabase.from("messages").update({ family_id: inviter.family_id }).eq("family_member_id", finalMember.id);
+            // Recursive sync for any followers
+            await syncFamilyRecursive(finalMember.id, inviter.family_id);
           }
         }
 
-        // 7. Recursive Sync (归宗)
-        // 确保受邀者带入的所有子树和资产递归搬迁到大家族
-        await syncFamilyRecursive(finalMember.id, inviter.family_id);
-
-        res.json({ success: true, memberId: finalMember.id, familyId: inviter.family_id, userId: currentUser.id });
+        // 9. Return result
+        res.json({ success: true, memberId: finalMember.id, familyId: inviter.family_id });
       } catch (err: any) {
-        console.error("[ACCEPT-INVITE] Error:", err.message);
+        console.error("[ACCEPT-INVITE] error:", err.message);
         res.status(500).json({ error: err.message });
       }
     });
+
 
     // Generic registration (creates family for standalone user)
     app.post("/api/register-new", async (req, res) => {
