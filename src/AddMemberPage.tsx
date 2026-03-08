@@ -472,6 +472,8 @@ export const AddMemberPage: React.FC = () => {
           generation_num: targetGen,
           ancestralHall: (
             parent?.ancestralHall ||
+            parent?.ancestral_hall ||
+            (connectorNode === 'sibling' ? (currentUser.ancestralHall || currentUser.ancestral_hall) : null) ||
             (connectingRank && connectingRank !== '不知道' ? `${connectingRank}房` : null) ||
             (selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : null)
           ),

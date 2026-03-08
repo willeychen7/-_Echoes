@@ -38,6 +38,7 @@ const getIdentityRecommendation = (data: any) => {
   const iS = data.inviterSiblingOrder;
   const tS = data.targetSiblingOrder;
   const iSex = data.inviterGender === 'female' || data.inviterGender === '女' ? 'F' : 'M';
+  const tSex = data.gender === 'female' || data.gender === '女' ? 'F' : 'M';
 
   // 🚀 核心新增：亲手足判定 (通过父辈 ID 判定)
   const isRealSibling = data.inviterFatherId && data.targetFatherId && data.inviterFatherId === data.targetFatherId;
@@ -51,31 +52,41 @@ const getIdentityRecommendation = (data: any) => {
 
   if (genDiff === 0) {
     // 同辈：比房分或排行
-    let isOlder = false;
-    if (hI < hT) isOlder = true;
-    else if (hI === hT && Number(iS) < Number(tS)) isOlder = true;
+    let inviterIsOlder = false;
+    if (hI < hT) inviterIsOlder = true;
+    else if (hI === hT && Number(iS) < Number(tS)) inviterIsOlder = true;
 
     // 如果是亲手足或是同房，去掉“堂”字称谓
     const isSameHouse = hI === hT;
     const prefix = isRealSibling || isSameHouse ? "" : "堂";
-    const rel = isOlder ? (iSex === 'F' ? `${prefix}姐` : `${prefix}哥`) : (iSex === 'F' ? `${prefix}妹` : `${prefix}弟`);
+
+    // 称呼：您如何称呼对方
+    const title = inviterIsOlder ? (iSex === 'F' ? `${prefix}姐` : `${prefix}哥`) : (iSex === 'F' ? `${prefix}妹` : `${prefix}弟`);
+
+    // 身份：您在家族中的身份定位
+    const rankWords = ["大", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+    const rankPrefix = (isRealSibling || isSameHouse) && tS && tS <= 10 ? rankWords[tS - 1] : "";
+    const identity = inviterIsOlder
+      ? (tSex === 'F' ? `${prefix}${rankPrefix}妹` : `${prefix}${rankPrefix}弟`)
+      : (tSex === 'F' ? `${prefix}${rankPrefix}姐` : `${prefix}${rankPrefix}哥`);
 
     let reason = "";
     if (isRealSibling) {
-      reason = `系统检测到您与邀请人同父同母，属于最亲近的胞亲，故称${rel}。`;
+      reason = `系统检测到您与邀请人同父同母，属于最亲近的胞亲。`;
     } else if (isSameHouse) {
-      reason = `同属${iH}且代际相同，因对方排行更${isOlder ? '长' : '幼'}，故称${rel}。`;
+      reason = `您与对方同属${iH}，基于您的排行（老${tS || '几'}），锁定为${inviterIsOlder ? '晚' : '长'}辈排行。`;
     } else {
-      reason = hI < hT ? `邀请人在${iH}，您在${tH}，对方所属支脉更长，故称${rel}。` :
-        `邀请人在${iH}，您在${tH}，您所属支脉更长，故称${rel}。`;
+      reason = hI < hT ? `邀请人在${iH}，您在${tH}，对方所属支脉更长，故称${title}。` :
+        `邀请人在${iH}，您在${tH}，您所属支脉更长，故称${title}。`;
     }
 
-    return { title: rel, reason };
+    return { title, identity, reason };
   } else if (genDiff === 1) {
-    const rel = iSex === 'F' ? '姑妈' : (hI === 1 ? '大伯' : '叔叔');
-    return { title: rel, reason: "系统检测到对方高您一辈，由于是父系同宗关系，锁定为长辈。" };
+    const title = iSex === 'F' ? '姑妈' : (hI === 1 ? '大伯' : '叔叔');
+    const identity = tSex === 'F' ? '侄女' : '侄子';
+    return { title, identity, reason: "系统检测到对方高您一辈，由于是父系同宗关系，锁定为长辈。" };
   } else if (genDiff === -1) {
-    return { title: "长辈", reason: "系统检测到您高对方一辈，对方应称呼您为长辈。" };
+    return { title: "长辈", identity: "长辈", reason: "系统检测到您高对方一辈，对方应称呼您为长辈。" };
   }
 
   return null;
@@ -497,7 +508,7 @@ export const ProfilePage: React.FC = () => {
       // === 核心逻辑修复：推导 B 对 A 的反向称呼 ===
       const recommendation = getIdentityRecommendation(data);
       if (recommendation) {
-        setSelectedRel(recommendation.title);
+        setSelectedRel(recommendation.identity || recommendation.title);
       } else {
         // 降级逻辑：如果无法智能推导，尝试通过 standard_role 进行简单的性别反转
         const inviterGender = data.inviterGender === 'female' || data.inviterGender === '女' ? 'female' : 'male';
