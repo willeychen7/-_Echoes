@@ -28,7 +28,7 @@ const getRelativeTime = (dateStr: string) => {
 };
 
 /** 核心功能：基于双方 DNA (房分/排行/代数) 自动计算称谓推荐 */
-const getIdentityRecommendation = (data: any) => {
+const getIdentityRecommendation = (data: any, currentUserGender?: string) => {
   if (!data || !data.inviterId) return null;
 
   const iH = data.inviterAncestralHall;
@@ -38,7 +38,9 @@ const getIdentityRecommendation = (data: any) => {
   const iS = data.inviterSiblingOrder;
   const tS = data.targetSiblingOrder;
   const iSex = data.inviterGender === 'female' || data.inviterGender === '女' ? 'F' : 'M';
-  const tSex = data.gender === 'female' || data.gender === '女' ? 'F' : 'M';
+  // ⚡️ 核心修复：优先使用当前登录用户的实际性别，而非档案中预设的性别
+  const effectiveGender = currentUserGender || data.gender || data.targetGender;
+  const tSex = effectiveGender === 'female' || effectiveGender === '女' ? 'F' : 'M';
 
   // 🚀 核心新增：亲手足判定 (通过父辈 ID 判定)
   const isRealSibling = data.inviterFatherId && data.targetFatherId && data.inviterFatherId === data.targetFatherId;
@@ -506,7 +508,7 @@ export const ProfilePage: React.FC = () => {
       setTempAvatar(data.targetAvatar || user.avatar);
 
       // === 核心逻辑修复：推导 B 对 A 的反向称呼 ===
-      const recommendation = getIdentityRecommendation(data);
+      const recommendation = getIdentityRecommendation(data, user.gender);
       if (recommendation) {
         setSelectedRel(recommendation.identity || recommendation.title);
       } else {
@@ -1326,7 +1328,7 @@ export const ProfilePage: React.FC = () => {
                     </div>
 
                     {/* === 🚀 核心新增：智能识别卡片 === */}
-                    {getIdentityRecommendation(inviteData) && (
+                    {getIdentityRecommendation(inviteData, user.gender) && (
                       <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-[2rem] p-5 text-white shadow-xl shadow-indigo-200/50 space-y-3 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
                           <Sparkles size={64} />
@@ -1361,10 +1363,10 @@ export const ProfilePage: React.FC = () => {
                         <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-md border border-white/10">
                           <p className="text-[10px] font-black opacity-70 mb-1">您应称呼邀请人为：</p>
                           <div className="flex items-baseline gap-2">
-                            <span className="text-3xl font-black">{getIdentityRecommendation(inviteData)?.title}</span>
+                            <span className="text-3xl font-black">{getIdentityRecommendation(inviteData, user.gender)?.title}</span>
                             <span className="text-[10px] font-bold opacity-60">自动锁定成功</span>
                           </div>
-                          <p className="text-[10px] mt-2 leading-relaxed opacity-80">{getIdentityRecommendation(inviteData)?.reason}</p>
+                          <p className="text-[10px] mt-2 leading-relaxed opacity-80">{getIdentityRecommendation(inviteData, user.gender)?.reason}</p>
                         </div>
                       </div>
                     )}
@@ -1458,7 +1460,7 @@ export const ProfilePage: React.FC = () => {
                                         setInviteData({ ...inviteData, inviterAncestralHall: mappedHall });
                                         // 自动更新选中的关系
                                         setTimeout(() => {
-                                          const newRecommendation = getIdentityRecommendation({ ...inviteData, inviterAncestralHall: mappedHall });
+                                          const newRecommendation = getIdentityRecommendation({ ...inviteData, inviterAncestralHall: mappedHall }, user.gender);
                                           if (newRecommendation) {
                                             setSelectedRel(newRecommendation.identity || newRecommendation.title);
                                           }
@@ -1640,7 +1642,7 @@ export const ProfilePage: React.FC = () => {
                             : "bg-slate-900 text-white shadow-slate-200"
                         )}
                       >
-                        {(!isManualRelMode && getIdentityRecommendation(inviteData))
+                        {(!isManualRelMode && getIdentityRecommendation(inviteData, user.gender))
                           ? `确认身份：${selectedRel}`
                           : "确认此身份进入档案"
                         }

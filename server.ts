@@ -727,7 +727,8 @@ export async function createApp() {
           inviterFatherId: inviter.father_id,
           inviterMotherId: inviter.mother_id,
           birthDate: user?.birthday,
-          gender: user?.gender, // 补齐性别字段，确保后端礼法校验闭环
+          gender: user?.gender || target.gender, // 增强：优先用注册性别，无则用建档性别
+          targetGender: target.gender,
           inviterSiblingOrder: inviter.sibling_order,
           targetName: target.name,
           targetId: target.id,
