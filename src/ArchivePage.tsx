@@ -7,7 +7,7 @@ import { Button } from "./components/Button";
 import { Card } from "./components/Card";
 import { getRelativeTime, cn } from "./lib/utils";
 import { useAvatarCache, resolveAvatar, updateAvatarCache } from "./lib/useAvatarCache";
-import { getRelativeRelationship, getRigorousRelationship, getRelationType, getKinshipLabel, getRelationshipChain } from "./lib/relationships";
+import { getRelativeRelationship, getRigorousRelationship, getRelationType, getKinshipLabel, getRelationshipChain, translateLogicTag } from "./lib/relationships";
 import confetti from "canvas-confetti";
 import { DEMO_MEMBERS, DEMO_EVENTS, isDemoMode } from "./demo-data";
 import { supabase } from "./lib/supabase";
@@ -656,6 +656,17 @@ export const ArchivePage: React.FC = () => {
     }
   };
 
+  // 🚀 核心纠偏：确定当前视角的“我”相对于目标成员的关系
+  const meNode = members.find(m =>
+    (m.userId && currentUser?.id && String(m.userId) === String(currentUser.id)) ||
+    (m.id && currentUser?.memberId && String(m.id) === String(currentUser.memberId))
+  ) || currentUser;
+
+  const rel = member ? getRigorousRelationship(meNode, member, members) : "";
+  const type = getRelationType(rel);
+  const isPet = member ? (member.memberType === 'pet' || member.member_type === 'pet') : false;
+  const isSocial = member ? (member.kinshipType === 'social' || member.kinship_type === 'social' || type === 'social') : false;
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#fdfbfd]">
@@ -767,15 +778,6 @@ export const ArchivePage: React.FC = () => {
             )}
           </div>
           {(() => {
-            // 🚀 核心纠偏：优先从档案列表中通过 userId 找到当前用户自己的完整节点，确保获取其 logicTag 坐标
-            const meNode = members.find(m =>
-              (m.userId && currentUser?.id && String(m.userId) === String(currentUser.id)) ||
-              (m.id && currentUser?.memberId && String(m.id) === String(currentUser.memberId))
-            ) || currentUser;
-
-            const rel = getRigorousRelationship(meNode, member, members);
-            const type = getRelationType(rel);
-
             return (
               <>
                 <h1 className={cn(
@@ -806,61 +808,76 @@ export const ArchivePage: React.FC = () => {
                     </button>
                   )}
                 </h1>
-                {!isMeMember && (
-                  <>
-                    <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
-                      <span className={cn(
-                        "text-sm font-bold px-3 py-1 rounded-full border tracking-widest flex items-center gap-1.5 transition-colors",
-                        type === 'blood' ? "text-[#eab308] bg-[#eab308]/5 border-[#eab308]/10" :
-                          type === 'affinal' ? "text-[#8b5e34] bg-[#8b5e34]/5 border-[#8b5e34]/10" :
-                            "text-slate-300 bg-slate-50 border-slate-100"
-                      )}>
-                        <Sparkles size={12} fill="currentColor" /> {rel}
-                        {getKinshipLabel(meNode, member, members) && (
-                          <span className="opacity-50 text-[10px] ml-1">· {getKinshipLabel(meNode, member, members)?.replace(/【|】/g, '')}</span>
-                        )}
-                      </span>
-                      {(member.logicTag || member.logic_tag) && (
-                        <button
-                          onClick={() => navigate('/square#archive-map')}
-                          className="text-[10px] font-mono font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-400 hover:bg-[#eab308]/10 hover:text-[#eab308] cursor-pointer transition-colors active:scale-95 flex items-center gap-1"
+                <div className="space-y-3 mt-2">
+                  <div className="flex items-center justify-center gap-2 flex-wrap min-h-[36px]">
+                    {/* 1. 核心称谓 pill (带 Hover 翻译) - 仅限非本人显示 */}
+                    {!isMeMember && (() => {
+                      const logicTag = member.logicTag || member.logic_tag || "";
+                      const tooltip = `${translateLogicTag(logicTag)}${member.ancestralHall ? ` · ${member.ancestralHall}` : ''}`;
+
+                      // 宠物 或 社交朋友，且名字已经出现在标题中，或者称谓是通用的“朋友/家人”时，不再重复显示此 pill
+                      const isRedundant = isPet || (isSocial && (displayName.includes(rel) || rel === '朋友' || rel === '家人' || rel === displayName));
+                      if (isRedundant) return null;
+
+                      return (
+                        <span
+                          className={cn(
+                            "text-sm font-bold px-4 py-1 rounded-full border tracking-widest flex items-center gap-1.5 transition-all shadow-sm cursor-help active:scale-95 hover:shadow-md",
+                            type === 'blood' ? "text-[#eab308] bg-[#eab308]/5 border-[#eab308]/20" :
+                              type === 'affinal' ? "text-[#8b5e34] bg-[#8b5e34]/5 border-[#8b5e34]/20" :
+                                "text-slate-400 bg-slate-50 border-slate-100"
+                          )}
+                          title={tooltip || "档案细节"}
                         >
-                          <span className="opacity-60 text-[8px]">🧭</span> {member.logicTag || member.logic_tag}
-                        </button>
-                      )}
-
-                      {/* 房分标签：若录入时指定了几房，在此显示，方便追溯家族分支 */}
-                      {member.ancestralHall && (
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center gap-1 tracking-wider">
-                          <span className="text-[9px]">🏠</span>
-                          {member.ancestralHall}
+                          <Sparkles size={12} fill="currentColor" /> {rel}
                         </span>
-                      )}
+                      );
+                    })()}
 
-                      {member.isRegistered ? (
-                        <span className="px-3 py-1 bg-emerald-50 text-emerald-500 rounded-full text-[10px] font-black inline-flex items-center gap-1">
-                          <CheckCircle size={12} fill="currentColor" /> 已注册
+                    {/* 2. 性别标签 (所有成员均显示) */}
+                    {(() => {
+                      const gender = (isMeMember ? currentUser?.gender : member.gender) || 'male';
+                      if (isPet) return (
+                        <span className="text-sm font-bold px-3 py-1 rounded-full bg-amber-50 text-amber-500 border border-amber-100 flex items-center gap-1.5 shadow-sm">
+                          🐾 性别：{gender === 'male' ? '公' : '母'}
+                        </span>
+                      );
+                      return (
+                        <span className={cn(
+                          "text-sm font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 shadow-sm transition-colors",
+                          gender === 'female' ? "text-pink-500 bg-pink-50 border-pink-100" : "text-blue-500 bg-blue-50 border-blue-100"
+                        )}>
+                          {gender === 'female' ? "♀ 女" : "♂ 男"}
+                        </span>
+                      );
+                    })()}
+
+                    {/* 3. 注册状态 (仅在不是本人且不是宠物时邀请) */}
+                    {!isMeMember && (
+                      member.isRegistered ? (
+                        <span className="px-3 py-1 bg-emerald-50 text-emerald-500 rounded-full text-[10px] font-black inline-flex items-center gap-1 border border-emerald-100 shadow-sm">
+                          <CheckCircle size={12} fill="currentColor" /> 已入驻
                         </span>
                       ) : (
-                        <button
-                          onClick={() => setShowShareModal(true)}
-                          className="px-3 py-1 bg-[#eab308] text-black rounded-full text-[10px] font-black inline-flex items-center gap-1.5 hover:bg-[#d9a306] transition-all shadow-sm active:scale-95"
-                        >
-                          邀请注册 <Share2 size={12} />
-                        </button>
-                      )}
-                    </div>
-                    {/* 关系链路说明：仅间接关系时显示，帮助用户理解该成员与自己的关联路径 */}
-                    {(() => {
-                      const chain = getRelationshipChain(meNode, member, members);
-                      return chain ? (
-                        <p className="text-[11px] text-slate-400/70 italic mt-1.5 text-center tracking-wide">
-                          TA是{chain}
-                        </p>
-                      ) : null;
-                    })()}
-                  </>
-                )}
+                        !isPet && (
+                          <button
+                            onClick={() => setShowShareModal(true)}
+                            className="px-3 py-1 bg-[#eab308] text-black rounded-full text-[10px] font-black inline-flex items-center gap-1.5 hover:bg-[#d9a306] transition-all shadow-sm active:scale-95"
+                          >
+                            邀请注册 <Share2 size={12} />
+                          </button>
+                        )
+                      )
+                    )}
+                  </div>
+
+                  {/* 4. 仅对于支脉亲属：非 Hover 时显示辅助提示 (如：三房) */}
+                  {type === 'blood' && member.ancestralHall && !isMeMember && (
+                    <p className="text-[10px] text-slate-300 font-bold tracking-widest uppercase text-center">
+                      来自：{member.ancestralHall}
+                    </p>
+                  )}
+                </div>
               </>
             );
           })()}
@@ -876,20 +893,38 @@ export const ArchivePage: React.FC = () => {
 
         {/* Input Section */}
         <section className="space-y-8">
-          <div className="flex border-b border-slate-200">
-            <button
-              onClick={() => setTab("say")}
-              className={cn("flex-1 py-5 text-xl font-black border-b-4 transition-all", tab === "say" ? "text-[#eab308] border-[#eab308]" : "text-slate-400 border-transparent")}
-            >
-              {isMeMember ? "我想对自己说..." : "我想对他/她说..."}
-            </button>
-            <button
-              onClick={() => setTab("questions")}
-              className={cn("flex-1 py-5 text-xl font-black border-b-4 transition-all", tab === "questions" ? "text-[#eab308] border-[#eab308]" : "text-slate-400 border-transparent")}
-            >
-              试试推荐问题
-            </button>
-          </div>
+          {(() => {
+            const isPet = member.memberType === 'pet' || member.member_type === 'pet';
+            const isSocial = member.kinshipType === 'social' || member.kinship_type === 'social' || type === 'social';
+
+            // 朋友和宠物不需要推荐问题（代际/家族问题不适用）
+            const hideQuestions = isPet || isSocial;
+
+            return (
+              <div className="flex border-b border-slate-200">
+                <button
+                  onClick={() => setTab("say")}
+                  className={cn(
+                    "flex-1 py-5 text-xl font-black border-b-4 transition-all",
+                    tab === "say" ? "text-[#eab308] border-[#eab308]" : "text-slate-400 border-transparent"
+                  )}
+                >
+                  {isMeMember ? "我想对自己说..." : "我想对他/她说..."}
+                </button>
+                {!hideQuestions && (
+                  <button
+                    onClick={() => setTab("questions")}
+                    className={cn(
+                      "flex-1 py-5 text-xl font-black border-b-4 transition-all",
+                      tab === "questions" ? "text-[#eab308] border-[#eab308]" : "text-slate-400 border-transparent"
+                    )}
+                  >
+                    试试推荐问题
+                  </button>
+                )}
+              </div>
+            );
+          })()}
 
           <AnimatePresence mode="wait">
             {tab === "questions" && (
@@ -1220,7 +1255,7 @@ export const ArchivePage: React.FC = () => {
             })}
           </div>
         </section>
-      </main>
+      </main >
 
       {/* Share Modal */}
       <AnimatePresence>
@@ -1281,106 +1316,108 @@ export const ArchivePage: React.FC = () => {
             </div>
           )
         }
-        {showEditInfoModal && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
+        {
+          showEditInfoModal && (
+            <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
 
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px] flex flex-col max-h-[85vh]"
-            >
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="text-2xl font-bold">编辑档案资料</h3>
-                <button onClick={() => setShowEditInfoModal(false)} className="size-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
-                  <X size={20} />
-                </button>
-              </div>
+              <motion.div
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px] flex flex-col max-h-[85vh]"
+              >
+                <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-2xl font-bold">编辑档案资料</h3>
+                  <button onClick={() => setShowEditInfoModal(false)} className="size-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
+                    <X size={20} />
+                  </button>
+                </div>
 
-              <div className="flex-1 overflow-y-auto space-y-6 no-scrollbar pb-4 text-left">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">姓名</label>
-                  <input
-                    type="text"
-                    value={editInfoForm.name}
-                    onChange={(e) => setEditInfoForm({ ...editInfoForm, name: e.target.value })}
-                    className="w-full h-16 px-6 rounded-2xl bg-slate-50 border-none font-bold text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">生日</label>
-                  <input
-                    type="date"
-                    value={editInfoForm.birthday}
-                    onChange={(e) => setEditInfoForm({ ...editInfoForm, birthday: e.target.value })}
-                    className="w-full h-16 px-6 rounded-2xl bg-slate-50 border-none font-bold text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">简介</label>
-                  <textarea
-                    value={editInfoForm.bio}
-                    onChange={(e) => setEditInfoForm({ ...editInfoForm, bio: e.target.value })}
-                    className="w-full min-h-[100px] p-6 rounded-2xl bg-slate-50 border-none font-bold text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all resize-none"
-                    placeholder="写一点关于TA的介绍..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">性别</label>
-                  <div className="flex gap-4 px-2">
-                    {["male", "female"].map((g) => (
-                      <button
-                        key={g}
-                        type="button"
-                        onClick={() => setEditInfoForm({ ...editInfoForm, gender: g })}
-                        className={cn(
-                          "flex-1 py-4 rounded-2xl font-bold transition-all border-2",
-                          editInfoForm.gender === g
-                            ? "bg-[#eab308] border-[#eab308] text-black shadow-lg shadow-[#eab308]/20"
-                            : "bg-slate-50 border-transparent text-slate-400"
-                        )}
-                      >
-                        {g === "male" ? "男 (♂)" : "女 (♀)"}
-                      </button>
-                    ))}
+                <div className="flex-1 overflow-y-auto space-y-6 no-scrollbar pb-4 text-left">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">姓名</label>
+                    <input
+                      type="text"
+                      value={editInfoForm.name}
+                      onChange={(e) => setEditInfoForm({ ...editInfoForm, name: e.target.value })}
+                      className="w-full h-16 px-6 rounded-2xl bg-slate-50 border-none font-bold text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
+                    />
                   </div>
-                  <div className="space-y-2 pb-6">
-                    <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">排行 (房分)</label>
-                    <div className="grid grid-cols-4 gap-2 px-1">
-                      {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小', '不知道'].map((rk) => (
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">生日</label>
+                    <input
+                      type="date"
+                      value={editInfoForm.birthday}
+                      onChange={(e) => setEditInfoForm({ ...editInfoForm, birthday: e.target.value })}
+                      className="w-full h-16 px-6 rounded-2xl bg-slate-50 border-none font-bold text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">简介</label>
+                    <textarea
+                      value={editInfoForm.bio}
+                      onChange={(e) => setEditInfoForm({ ...editInfoForm, bio: e.target.value })}
+                      className="w-full min-h-[100px] p-6 rounded-2xl bg-slate-50 border-none font-bold text-slate-800 focus:ring-2 focus:ring-[#eab308]/20 transition-all resize-none"
+                      placeholder="写一点关于TA的介绍..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">性别</label>
+                    <div className="flex gap-4 px-2">
+                      {["male", "female"].map((g) => (
                         <button
-                          key={rk}
+                          key={g}
                           type="button"
-                          onClick={() => setEditInfoForm({ ...editInfoForm, ranking: rk })}
+                          onClick={() => setEditInfoForm({ ...editInfoForm, gender: g })}
                           className={cn(
-                            "py-3 rounded-xl font-bold transition-all border-2 text-xs",
-                            editInfoForm.ranking === rk
-                              ? "bg-[#eab308] border-[#eab308] text-black"
+                            "flex-1 py-4 rounded-2xl font-bold transition-all border-2",
+                            editInfoForm.gender === g
+                              ? "bg-[#eab308] border-[#eab308] text-black shadow-lg shadow-[#eab308]/20"
                               : "bg-slate-50 border-transparent text-slate-400"
                           )}
                         >
-                          {rk}
+                          {g === "male" ? "男 (♂)" : "女 (♀)"}
                         </button>
                       ))}
                     </div>
-                    <p className="text-[10px] text-slate-400 px-4 mt-2">若不清楚具体排行，请选‘不知道’。录入后将自动同步更新宗族称谓与地图位置。</p>
+                    <div className="space-y-2 pb-6">
+                      <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">排行 (房分)</label>
+                      <div className="grid grid-cols-4 gap-2 px-1">
+                        {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小', '不知道'].map((rk) => (
+                          <button
+                            key={rk}
+                            type="button"
+                            onClick={() => setEditInfoForm({ ...editInfoForm, ranking: rk })}
+                            className={cn(
+                              "py-3 rounded-xl font-bold transition-all border-2 text-xs",
+                              editInfoForm.ranking === rk
+                                ? "bg-[#eab308] border-[#eab308] text-black"
+                                : "bg-slate-50 border-transparent text-slate-400"
+                            )}
+                          >
+                            {rk}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-slate-400 px-4 mt-2">若不清楚具体排行，请选‘不知道’。录入后将自动同步更新宗族称谓与地图位置。</p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="pt-8 grid grid-cols-2 gap-4">
-                <button onClick={() => setShowEditInfoModal(false)} className="py-5 bg-slate-100 rounded-3xl font-bold text-slate-500">取消</button>
-                <button
-                  onClick={handleUpdateInfo}
-                  className="py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-lg shadow-[#eab308]/20"
-                >
-                  保存修改
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </div>
+                <div className="pt-8 grid grid-cols-2 gap-4">
+                  <button onClick={() => setShowEditInfoModal(false)} className="py-5 bg-slate-100 rounded-3xl font-bold text-slate-500">取消</button>
+                  <button
+                    onClick={handleUpdateInfo}
+                    className="py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-lg shadow-[#eab308]/20"
+                  >
+                    保存修改
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )
+        }
+      </AnimatePresence >
+    </div >
   );
 };

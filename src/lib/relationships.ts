@@ -279,7 +279,7 @@ function computeRigorousRelationship(viewer: any, target: any, members: any[], d
 
 export function getRelationType(rel: string): 'blood' | 'affinal' | 'social' {
     const clean = getCleanRelationship(rel);
-    const socialKeywords = ["战友", "同学", "朋友", "好友", "同事", "恩师", "宠物", "伙伴", "导师", "学生", "家人"];
+    const socialKeywords = ["战友", "同学", "朋友", "好友", "同事", "恩师", "宠物", "伙伴", "导师", "学生"];
     if (socialKeywords.some(sw => clean.includes(sw))) return 'social';
     const affinalKeywords = ["婿", "媳", "岳", "丈", "妻", "夫", "嫂", "舅子", "姨子", "内侄", "婶", "姆", "妗", "姻"];
     if (affinalKeywords.some(k => clean.includes(k))) return 'affinal';
@@ -304,11 +304,10 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
     // 2. 判定是否为“至亲” (用于排查伪装成血亲的社交关系)
     const isDirect = /^(大|二|三|四|五|六|七|八|九|十|小|老|幺)?(本人|爷爷|奶奶|外公|外婆|爸爸?|妈妈?|哥哥?|弟弟?|姐姐?|妹妹?|儿子|女儿|父亲|母亲|祖父|祖母|外祖父|外祖母)$/.test(rel);
 
-    // 1. 公共非血缘分类
-    const isSocialOrPet = type === 'social' ||
-        tNode.memberType === 'pet' || tNode.member_type === 'pet' ||
+    // 1. 公共非血缘分类 (严格依赖 memberType 或 kinshipType)
+    const isSocialOrPet = tNode.memberType === 'pet' || tNode.member_type === 'pet' ||
         tNode.kinship_type === 'social' || tNode.kinshipType === 'social' ||
-        (tNode.added_by_member_id && String(tNode.added_by_member_id) === String(vNode.id || vNode.memberId) && type === 'blood' && !isDirect);
+        type === 'social';
 
     if (isSocialOrPet) {
         const chain = getRelationshipChain(vNode, tNode, members);
@@ -523,4 +522,32 @@ export function getRelationshipChain(viewer: any, target: any, members: any[]): 
     }
 
     return null;
+}
+
+/**
+ * 将技术逻辑标识翻译成人类可读的文字
+ */
+export function translateLogicTag(tag: string): string {
+    if (!tag) return "";
+    let parts: string[] = [];
+    const upper = tag.toString().toUpperCase();
+
+    // 1. 方向推断
+    if (upper.includes('[F]')) parts.push("父系/本家");
+    if (upper.includes('[M]')) parts.push("母系/侧系");
+
+    // 2. 排行推断 (兼容 -OX 和排行词)
+    const rankMatch = upper.match(/-O(二十|十一|十二|十三|十四|十五|十六|十七|十八|十九|一|二|三|四|五|六|七|八|九|十|大|小|幺|老)$/);
+    if (rankMatch) {
+        parts.push(`排行${rankMatch[1]}`);
+    }
+
+    // 3. 代数推断
+    const genMatch = upper.match(/G(\d+)/);
+    if (genMatch) {
+        parts.push(`第${genMatch[1]}世代`);
+    }
+
+    if (parts.length === 0) return tag === "F-UNKNOWN" ? "待确定的家族坐标" : tag;
+    return parts.join(" · ");
 }
