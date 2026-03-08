@@ -581,12 +581,16 @@ export async function createApp() {
 
         // 核心兜底：如果某些新增加的列（如 member_type, ancestral_hall）在数据库中不存在，降级重试
         if (error && (error.message?.includes("column") || error.code === "PGRST204" || error.code === "42703")) {
-          console.warn(`[MEMBER:FALLBACK] Column missing, retrying without new fields. Error: ${error.message}`);
+          console.warn(`[MEMBER:FALLBACK] Column missing, retrying without problematic fields. Error: ${error.message}`);
           const fallbackPayload = { ...insertPayload };
-          delete fallbackPayload.member_type;
-          delete fallbackPayload.ancestral_hall;
-          delete fallbackPayload.generation_num;
-          delete fallbackPayload.logic_tag;
+          // 仅在明确报错缺失时才删除
+          if (error.message.includes("member_type")) delete fallbackPayload.member_type;
+          if (error.message.includes("ancestral_hall")) delete fallbackPayload.ancestral_hall;
+          if (error.message.includes("generation_num")) delete fallbackPayload.generation_num;
+          if (error.message.includes("logic_tag")) delete fallbackPayload.logic_tag;
+          if (error.message.includes("origin_side")) delete fallbackPayload.origin_side;
+          if (error.message.includes("added_by_member_id")) delete fallbackPayload.added_by_member_id;
+          if (error.message.includes("sibling_order")) delete fallbackPayload.sibling_order;
           const result = await supabase.from("family_members").insert(fallbackPayload).select().single();
           data = result.data;
           error = result.error;
