@@ -57,12 +57,13 @@ export function getLogicTag(side: 'paternal' | 'maternal', connector: string, ra
 }
 
 /**
- * 礼法防火墙：实时检测称谓与支脉的逻辑冲突
+ * 礼法防火墙：实时检测称谓与支脉、性别的逻辑冲突
  */
 export function validateKinshipLogic(
     side: 'paternal' | 'maternal',
     connector: string,
     relText: string,
+    gender: 'male' | 'female',
     targetSurname?: string,
     mySurname?: string
 ): { isValid: boolean, warning?: string, type: 'error' | 'warning' | 'success', tag?: string } {
@@ -72,6 +73,20 @@ export function validateKinshipLogic(
     const tag = getLogicTag(side, connector, undefined, isSameSurname);
     const rel = relText || "";
     if (!rel) return { isValid: true, type: 'success', tag };
+
+    // --- 🚀 新增：称号与性别一致性强校验 ---
+    const femaleKeywords = ["姑", "姨", "妈", "娘", "奶", "婆", "姐", "妹", "嫂", "侄女", "外甥女", "媳", "婶", "妗", "姥", "女"];
+    const maleKeywords = ["叔", "伯", "爸", "爹", "爷", "公", "哥", "弟", "婿", "夫", "男", "侄子", "外甥", "舅"];
+
+    const isRelFemale = femaleKeywords.some(k => rel.includes(k));
+    const isRelMale = maleKeywords.some(k => rel.includes(k));
+
+    if (gender === 'male' && isRelFemale && !isRelMale) {
+        return { isValid: false, warning: `礼法冲突：您选择的性别为“男”，但称谓“${rel}”带有明显的女性特征。请修正性别或称谓。`, type: 'error', tag };
+    }
+    if (gender === 'female' && isRelMale && !isRelFemale) {
+        return { isValid: false, warning: `礼法冲突：您选择的性别为“女”，但称谓“${rel}”带有明显的男性特征。请修正性别或称谓。`, type: 'error', tag };
+    }
 
     // 增加：同姓堂舅/姨的特殊识别
     if (isMaternal && isSameSurname && (rel.includes('舅') || rel.includes('姨'))) {

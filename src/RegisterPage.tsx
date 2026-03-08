@@ -645,6 +645,25 @@ export const RegisterPage: React.FC = () => {
                         )}
                       </div>
 
+                      {(() => {
+                        const rel = selectedRelationship || inviteData?.targetRole || "";
+                        const femaleKeywords = ["姑", "姨", "妈", "娘", "奶", "婆", "姐", "妹", "嫂", "侄女", "外甥女", "媳", "婶", "妗", "姥", "女"];
+                        const maleKeywords = ["叔", "伯", "爸", "爹", "爷", "公", "哥", "弟", "婿", "夫", "男", "侄子", "外甥", "舅"];
+                        const isRelFemale = femaleKeywords.some(k => rel.includes(k));
+                        const isRelMale = maleKeywords.some(k => rel.includes(k));
+                        const isConflict = (gender === "male" && isRelFemale && !isRelMale) || (gender === "female" && isRelMale && !isRelFemale);
+
+                        if (isConflict) {
+                          return (
+                            <div className="p-3 bg-red-50 border border-red-100 rounded-2xl text-[10px] text-red-500 font-bold flex items-center gap-2 animate-pulse">
+                              <X size={14} />
+                              礼法冲突：身份【{rel}】与选定性别不符，请先返回修正性别。
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+
                       <div className="space-y-1.5 text-left w-full">
                         <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">您的身份</label>
                         <div className="w-full h-12 rounded-2xl bg-slate-100 px-5 font-bold flex items-center">
@@ -655,13 +674,25 @@ export const RegisterPage: React.FC = () => {
                   </div>
 
                   <div className="grid gap-4 pt-2">
-                    <Button
-                      size="xl"
-                      className="w-full h-16 rounded-2xl bg-[#eab308] text-black font-black"
-                      onClick={() => handleCompleteRegistration()}
-                    >
-                      <Check size={20} /> 是的，确认加入
-                    </Button>
+                    {(() => {
+                      const rel = selectedRelationship || inviteData?.targetRole || "";
+                      const femaleKeywords = ["姑", "姨", "妈", "娘", "奶", "婆", "姐", "妹", "嫂", "侄女", "外甥女", "媳", "婶", "妗", "姥", "女"];
+                      const maleKeywords = ["叔", "伯", "爸", "爹", "爷", "公", "哥", "弟", "婿", "夫", "男", "侄子", "外甥", "舅"];
+                      const isRelFemale = femaleKeywords.some(k => rel.includes(k));
+                      const isRelMale = maleKeywords.some(k => rel.includes(k));
+                      const isConflict = (gender === "male" && isRelFemale && !isRelMale) || (gender === "female" && isRelMale && !isRelFemale);
+
+                      return (
+                        <Button
+                          size="xl"
+                          disabled={isConflict}
+                          className={cn("w-full h-16 rounded-2xl font-black", isConflict ? "bg-slate-100 text-slate-300" : "bg-[#eab308] text-black")}
+                          onClick={() => handleCompleteRegistration()}
+                        >
+                          <Check size={20} /> 是的，确认加入
+                        </Button>
+                      );
+                    })()}
                     <button
                       className="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold"
                       onClick={() => setShowVerificationModal(false)}

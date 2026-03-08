@@ -731,13 +731,27 @@ export async function createApp() {
 
     // --- Helper: Get Inverse Relationship Label ---
     const getInverseLabel = async (relText: string, targetGender: string) => {
-      // 简单硬编码反转，作为 mumuy 桥接的补充
       const g = (targetGender || 'male') === 'female' ? '女' : '男';
-      if (relText === "堂姐" || relText === "堂哥") return g === '女' ? "堂妹" : "堂弟";
-      if (relText === "表姐" || relText === "表哥") return g === '女' ? "表妹" : "表弟";
-      if (relText === "姐姐" || relText === "哥哥") return g === '女' ? "妹妹" : "弟弟";
-      if (relText === "叔叔" || relText === "伯伯" || relText === "舅舅" || relText === "姑姑") return g === '女' ? "侄女" : "侄子";
-      return relText; // 兜底
+      // 增加更全面的反转映射
+      const invMap: Record<string, string> = {
+        "堂姐": g === '女' ? "堂妹" : "堂弟", "堂哥": g === '女' ? "堂妹" : "堂弟",
+        "表姐": g === '女' ? "表妹" : "表弟", "表哥": g === '女' ? "表妹" : "表弟",
+        "姐姐": g === '女' ? "妹妹" : "弟弟", "哥哥": g === '女' ? "妹妹" : "弟弟",
+        "叔叔": g === '女' ? "侄女" : "侄子", "伯伯": g === '女' ? "侄女" : "侄子", "舅舅": g === '女' ? "外甥女" : "外甥", "姑姑": g === '女' ? "内侄女" : "内侄",
+        "姨妈": g === '女' ? "姨甥女" : "姨甥", "儿子": g === '女' ? "母亲" : "父亲", "女儿": g === '女' ? "母亲" : "父亲"
+      };
+      return invMap[relText] || relText;
+    };
+
+    // --- Helper: Kinship Gender Guard ---
+    const checkGenderConflict = (rel: string, gender: string) => {
+      const femaleKeywords = ["姑", "姨", "妈", "娘", "奶", "婆", "姐", "妹", "嫂", "侄女", "外甥女", "媳", "婶", "妗", "姥", "女"];
+      const maleKeywords = ["叔", "伯", "爸", "爹", "爷", "公", "哥", "弟", "婿", "夫", "男", "侄子", "外甥", "舅"];
+      const isRelFemale = femaleKeywords.some(k => rel.includes(k));
+      const isRelMale = maleKeywords.some(k => rel.includes(k));
+      if (gender === 'male' && isRelFemale && !isRelMale) return true;
+      if (gender === 'female' && isRelMale && !isRelFemale) return true;
+      return false;
     };
 
     // --- Helper: Rigorous Relationship Resolver ---
@@ -900,6 +914,10 @@ export async function createApp() {
         if (!inviteCode || !name || !phone || !password) {
           console.error("[CLAIM:ERROR] Missing fields:", { inviteCode: !!inviteCode, name: !!name, phone: !!phone, password: !!password });
           return res.status(400).json({ error: "Required fields missing (name, phone, password)" });
+        }
+
+        if (gender && checkGenderConflict(relationshipToInviter, gender)) {
+          return res.status(400).json({ error: `礼法冲突：身份“${relationshipToInviter}”与选定性别不符。` });
         }
 
         let targetId: number | null = null;
@@ -1090,7 +1108,7 @@ export async function createApp() {
     app.post("/api/accept-invite", async (req, res) => {
       try {
         // NOTE: 优先使用 userId（UUID）识别用户，不再依赖容易丢失的 phone 字段
-        const { userId, phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl, mode, targetSiblingOrder, inviterAncestralHall, inviterGenerationNum, birthDate } = req.body;
+        const { userId, phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl, mode, targetSiblingOrder, inviterAncestralHall, inviterGenerationNum, birthDate, gender } = req.body;
         // mode: "migrate" 迁移内容 | "clear" 清空内容 | "direct" 默认直接加入
         let effectiveMode: string = mode || "direct";
         if ((!userId && !phone) || !inviteCode) {
@@ -1356,6 +1374,12 @@ export async function createApp() {
         }
 
         const finalTargetId = target.id;
+        const finalGender = gender || target.gender;
+
+        // --- Kinship Firewall: Gender consistency check ---
+        if (finalGender && checkGenderConflict(relationshipToInviter, finalGender)) {
+          return res.status(400).json({ error: `礼法冲突：身份“${relationshipToInviter}”与系统记录的性别不符。` });
+        }
 
         // 1.9 Pre-sync inviter info from request to influence final resolution
         if (inviterAncestralHall && !inviter.ancestral_hall) {

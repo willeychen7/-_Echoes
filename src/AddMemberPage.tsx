@@ -192,14 +192,14 @@ export const AddMemberPage: React.FC = () => {
   React.useEffect(() => {
     const relText = (relationship === "其他" ? customRelationship : relationship) || "";
     if (lineageSide && connectorNode) {
-      const check = validateKinshipLogic(lineageSide, connectorNode, relText, targetSurname, mySurname);
+      const check = validateKinshipLogic(lineageSide, connectorNode, relText, gender, targetSurname, mySurname);
       setCorrectionNotice(check.warning || null);
       setCorrectionType(check.type);
       setLogicTag(check.tag || null);
     } else {
       setCorrectionNotice(null);
     }
-  }, [relationship, customRelationship, lineageSide, connectorNode, mySurname, targetSurname]);
+  }, [relationship, customRelationship, lineageSide, connectorNode, mySurname, targetSurname, gender]);
 
   // 宗法防错守卫：阻断错误的选择并触发教学提示
   const handleKinshipTypeSelect = (type: 'blood' | 'affinal' | 'social') => {
@@ -283,7 +283,23 @@ export const AddMemberPage: React.FC = () => {
   };
 
   const handleAdd = async () => {
+    if (!name.trim()) {
+      alert("请输入姓名");
+      return;
+    }
     if (!name || (connectorNode !== 'sibling' && !relationship && !customRelationship)) return;
+
+    // --- 🚀 礼法防火墙：最终提交拦截 ---
+    const relTextRaw = (relationship === "其他" ? customRelationship : relationship) || "";
+    if (lineageSide && connectorNode) {
+      const check = validateKinshipLogic(lineageSide, connectorNode, relTextRaw, gender, targetSurname, mySurname);
+      if (!check.isValid && check.type === 'error') {
+        alert(check.warning || "礼法冲突：输入的称谓与逻辑不符，请修正后再提交。");
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
 
     const savedUser = localStorage.getItem("currentUser");
     const currentUser = savedUser ? JSON.parse(savedUser) : null;
