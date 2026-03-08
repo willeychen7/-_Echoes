@@ -999,7 +999,7 @@ export async function createApp() {
     app.post("/api/accept-invite", async (req, res) => {
       try {
         // NOTE: 优先使用 userId（UUID）识别用户，不再依赖容易丢失的 phone 字段
-        const { userId, phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl, mode, targetSiblingOrder, inviterAncestralHall } = req.body;
+        const { userId, phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl, mode, targetSiblingOrder, inviterAncestralHall, inviterGenerationNum } = req.body;
         // mode: "migrate" 迁移内容 | "clear" 清空内容 | "direct" 默认直接加入
         let effectiveMode: string = mode || "direct";
         if ((!userId && !phone) || !inviteCode) {
@@ -1410,8 +1410,9 @@ export async function createApp() {
         if (mErr) throw mErr;
 
         // 4. Update inviter back-link
-        if (inviterAncestralHall && !inviter.ancestral_hall) {
-          invUpdate.ancestral_hall = inviterAncestralHall;
+        if ((inviterAncestralHall && !inviter.ancestral_hall) || (inviterGenerationNum && !inviter.generation_num)) {
+          if (inviterAncestralHall && !inviter.ancestral_hall) invUpdate.ancestral_hall = inviterAncestralHall;
+          if (inviterGenerationNum && !inviter.generation_num) invUpdate.generation_num = inviterGenerationNum;
 
           // === 核心新增：发送协作确认通知给邀请人 ===
           try {
@@ -1424,7 +1425,7 @@ export async function createApp() {
               sender_name: name || target.name,
               sender_avatar: avatarUrl || target.avatar_url,
               type: "identity_update",
-              content: `已根据受邀者的反馈，协助补全了您的支脉信息（${inviterAncestralHall}），这有助于完善家族树排位。若不准请点击修正。`,
+              content: `已根据受邀者的反馈，协助补全了您的支脉信息（${inviterAncestralHall || ''} 第${inviterGenerationNum || ''}代），这有助于完善家族树排位。若不准请点击修正。`,
               link_url: "/profile",
               is_read: false
             });

@@ -1,7 +1,12 @@
 // Force deployment sync - Vercel build trigger
 import React, { useState, useEffect, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Edit2, Share2, LogOut, Heart, MessageSquare, Clock, X, Check, CheckCircle, Camera, Gift, Users, Bell, ChevronRight, Plus, Sparkles, ChevronDown } from "lucide-react";
+import {
+  Plus, Search, Filter, ArrowLeft, MoreHorizontal, Edit2, Trash2, Camera,
+  Settings, History, Heart, MessageSquare, Mic, Play, Pause, ChevronRight,
+  Share2, QrCode, Copy, CheckCircle, Bell, UserPlus, Info, Shield, Check, X,
+  AlertTriangle, Gift, Users, Clock, LogOut, Sparkles, ChevronDown
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "./lib/utils";
 import { updateAvatarCache } from "./lib/useAvatarCache";
@@ -90,7 +95,9 @@ export const ProfilePage: React.FC = () => {
   const [isCroppingForInvite, setIsCroppingForInvite] = useState(false);
   const [isEditingTempName, setIsEditingTempName] = useState(false);
   const [customRelText, setCustomRelText] = useState("");
-  const [elderRel, setElderRel] = useState(""); // 新增：记录对邀请人父辈的称呼
+  const [elderRel, setElderRel] = useState<string | null>(null); // 新增：记录对邀请人父辈的称呼
+  const [isRelConflict, setIsRelConflict] = useState(false);
+  const [showConflictWarning, setShowConflictWarning] = useState(false);
   // 迁移对话框
   const [migrationInfo, setMigrationInfo] = useState<any>(null); // null = 不需要迁移，{} = 需要确认
   const [pendingAcceptParams, setPendingAcceptParams] = useState<any>(null);
@@ -493,7 +500,31 @@ export const ProfilePage: React.FC = () => {
     setIsValidatingInvite(false);
   };
 
+  // 校验逻辑：称谓与房分是否冲突
+  useEffect(() => {
+    if (elderRel && elderRel !== "不知道" && inviteData?.inviterAncestralHall) {
+      const hall = inviteData.inviterAncestralHall;
+      let hasConflict = false;
+      if (elderRel === "大伯" && hall !== "大房") hasConflict = true;
+      else if (elderRel === "二伯" && hall !== "二房") hasConflict = true;
+      else if (elderRel === "三伯" && hall !== "三房") hasConflict = true;
+      else if (elderRel === "爸爸" && hall !== inviteData.targetAncestralHall) hasConflict = true;
+      else if (elderRel === "叔叔" && !["三房", "四房", "五房", "六房", "七房", "八房", "九房", "十房", "小房"].includes(hall)) hasConflict = true;
+
+      setIsRelConflict(hasConflict);
+      if (hasConflict) setShowConflictWarning(true);
+      else setShowConflictWarning(false);
+    } else {
+      setIsRelConflict(false);
+      setShowConflictWarning(false);
+    }
+  }, [elderRel, inviteData]);
+
   const handleAcceptInvite = async (overrideRole?: string, overrideStdRole?: string, overrideInviteData?: any, overrideName?: string, overrideAvatar?: string, mode?: string) => {
+    if (isRelConflict) {
+      alert("人物关系与对方登记的信息冲突，请核实后重试。");
+      return;
+    }
     const finalInviteData = overrideInviteData || inviteData;
     const finalRole = overrideRole || selectedRel;
     let finalStdRole = overrideStdRole || relationships.find(r => r.label === finalRole)?.value || "other";
@@ -533,13 +564,22 @@ export const ProfilePage: React.FC = () => {
         }
       }
 
-      // 计算推导出的邀请人房分
+      // 计算推导出的邀请人房分与辈分
       let suggestedInviterHall = inviteData.inviterAncestralHall;
-      if (!suggestedInviterHall && elderRel) {
-        if (elderRel === "大伯") suggestedInviterHall = "大房";
-        else if (elderRel === "二伯") suggestedInviterHall = "二房";
-        else if (elderRel === "三伯") suggestedInviterHall = "三房";
-        else if (elderRel === "爸爸") suggestedInviterHall = inviteData.targetAncestralHall;
+      let suggestedInviterGen = inviteData.inviterGenerationNum;
+
+      if (elderRel && elderRel !== "不知道") {
+        // 如果 A 没填房分，补全它
+        if (!suggestedInviterHall) {
+          if (elderRel === "大伯") suggestedInviterHall = "大房";
+          else if (elderRel === "二伯") suggestedInviterHall = "二房";
+          else if (elderRel === "三伯") suggestedInviterHall = "三房";
+          else if (elderRel === "爸爸") suggestedInviterHall = inviteData.targetAncestralHall;
+        }
+        // 如果 A 没填代数，且 B 是 A 的同辈（堂/表/手足），同步 B 的代数给 A
+        if (!suggestedInviterGen && (finalStdRole === "cousin" || finalStdRole === "sibling" || finalStdRole === "other")) {
+          suggestedInviterGen = inviteData.targetGenerationNum;
+        }
       }
 
       const res = await fetch("/api/accept-invite", {
@@ -555,7 +595,8 @@ export const ProfilePage: React.FC = () => {
           avatarUrl: finalAvatar,
           mode: mode || "direct",
           targetSiblingOrder: inviteData.targetSiblingOrder,
-          inviterAncestralHall: suggestedInviterHall
+          inviterAncestralHall: suggestedInviterHall,
+          inviterGenerationNum: suggestedInviterGen
         })
       });
 
@@ -1369,34 +1410,44 @@ export const ProfilePage: React.FC = () => {
                           {/* 校验与定义反馈逻辑 */}
                           {elderRel && elderRel !== "不知道" && (
                             <motion.div
-                              initial={{ opacity: 0, y: 5 }}
-                              animate={{ opacity: 1, y: 0 }}
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
                               className={cn(
-                                "p-3 rounded-2xl flex items-start gap-3 border-2",
-                                (!inviteData.inviterAncestralHall ||
-                                  (elderRel === "大伯" && inviteData.inviterAncestralHall === "大房") ||
-                                  (elderRel === "二伯" && inviteData.inviterAncestralHall === "二房") ||
-                                  (elderRel === "三伯" && inviteData.inviterAncestralHall === "三房") ||
-                                  (elderRel === "爸爸" && inviteData.inviterAncestralHall === inviteData.targetAncestralHall) ||
-                                  (elderRel === "叔叔" && ["三房", "四房", "五房", "六房", "七房", "八房", "九房", "十房", "小房"].includes(inviteData.inviterAncestralHall || ""))
-                                )
-                                  ? "bg-emerald-50 border-emerald-100/50 text-emerald-600"
-                                  : "bg-orange-50 border-orange-100/50 text-orange-600"
+                                "p-4 rounded-2xl flex items-start gap-3 border-2 transition-all shadow-sm",
+                                !isRelConflict
+                                  ? "bg-emerald-50 border-emerald-100 text-emerald-600"
+                                  : "bg-rose-50 border-rose-100 text-rose-600 ring-4 ring-rose-200/20"
                               )}
                             >
                               <div className="mt-0.5">
-                                {(!inviteData.inviterAncestralHall || ((elderRel === "大伯" && inviteData.inviterAncestralHall === "大房") || (elderRel === "二伯" && inviteData.inviterAncestralHall === "二房") || (elderRel === "三伯" && inviteData.inviterAncestralHall === "三房") || (elderRel === "爸爸" && inviteData.inviterAncestralHall === inviteData.targetAncestralHall) || (elderRel === "叔叔" && ["三房", "四房", "五房", "六房", "七房", "八房", "九房", "十房", "小房"].includes(inviteData.inviterAncestralHall || ""))))
+                                {!isRelConflict
                                   ? <CheckCircle size={14} />
-                                  : <Bell size={14} className="animate-pulse" />
+                                  : <AlertTriangle size={14} className="animate-bounce" />
                                 }
                               </div>
-                              <div className="text-[10px] font-bold text-left leading-normal">
-                                {!inviteData.inviterAncestralHall
-                                  ? `智能定位：根据您的称呼，系统已推断邀请人属于“${elderRel.replace("伯", "房").replace("叔叔", "三房以后的房分").replace("爸爸", "同房")}”。`
-                                  : ((elderRel === "大伯" && inviteData.inviterAncestralHall === "大房") || (elderRel === "二伯" && inviteData.inviterAncestralHall === "二房") || (elderRel === "三伯" && inviteData.inviterAncestralHall === "三房") || (elderRel === "爸爸" && inviteData.inviterAncestralHall === inviteData.targetAncestralHall) || (elderRel === "叔叔" && ["三房", "四房", "五房", "六房", "七房", "八房", "九房", "十房", "小房"].includes(inviteData.inviterAncestralHall || "")))
-                                    ? `验证吻合：您称呼${elderRel}，这与对方登记的“${inviteData.inviterAncestralHall}”身份完全匹配。`
-                                    : `信息不符：您称呼${elderRel}，但对方登记为“${inviteData.inviterAncestralHall}”。建议核对。`
-                                }
+                              <div className="text-xs font-bold text-left leading-snug">
+                                {isRelConflict ? (
+                                  <>
+                                    <div>人物归位冲突！</div>
+                                    <div className="text-[10px] opacity-80 mt-1">
+                                      您称呼对方父亲为“{elderRel}”，但对方已登记为“{inviteData.inviterAncestralHall}”。系统已拦截此次加入，请核实身份。
+                                    </div>
+                                  </>
+                                ) : !inviteData.inviterAncestralHall ? (
+                                  <>
+                                    <div>身份协助定向</div>
+                                    <div className="text-[10px] opacity-80 mt-1">
+                                      基于您的称呼，系统已推断邀请人属于“{elderRel.replace("伯", "房").replace("叔叔", "三房以后的房分").replace("爸爸", "同房")}”，其代数将同步为第 {inviteData.targetGenerationNum} 代。
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div>验证吻合</div>
+                                    <div className="text-[10px] opacity-80 mt-1">
+                                      称谓与对方登记的“{inviteData.inviterAncestralHall} / 第{inviteData.inviterGenerationNum || inviteData.targetGenerationNum}代”信息完全匹配。
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             </motion.div>
                           )}
@@ -1481,7 +1532,13 @@ export const ProfilePage: React.FC = () => {
 
                     <div className="grid gap-3 pt-2 px-2">
                       <button
-                        className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-black shadow-xl shadow-[#eab308]/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                        className={cn(
+                          "w-full py-5 rounded-3xl font-black shadow-xl transition-all flex items-center justify-center gap-2 active:scale-95",
+                          (!selectedRel || (!elderRel && !inviteData?.inviterAncestralHall) || isRelConflict)
+                            ? "bg-slate-100 text-slate-300 cursor-not-allowed shadow-none"
+                            : "bg-[#eab308] text-black shadow-[#eab308]/20"
+                        )}
+                        disabled={!selectedRel || (!elderRel && !inviteData?.inviterAncestralHall) || isRelConflict}
                         onClick={() => {
                           const effectiveRel = (selectedRel === "其他" && customRelText.trim())
                             ? customRelText.trim()
@@ -1495,7 +1552,8 @@ export const ProfilePage: React.FC = () => {
                           );
                         }}
                       >
-                        <Check size={20} /> 是的，确认加入
+                        {isRelConflict ? <X size={20} /> : <Check size={20} />}
+                        {isRelConflict ? "身份冲突 无法加入" : "是的，确认加入"}
                       </button>
                       <button
                         className="w-full py-4 bg-slate-50 text-slate-500 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
