@@ -448,7 +448,7 @@ export const AddMemberPage: React.FC = () => {
           ancestralHall: (
             parent?.ancestralHall ||
             (connectingRank && connectingRank !== '不知道' ? `${connectingRank}房` : null) ||
-            (['father', 'mother', 'grandfather', 'grandmother', 'm_grandfather', 'm_grandmother'].includes(connectorNode as string) && selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : null)
+            (selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : null)
           ),
           logicTag: currentLogicTag,
           siblingOrder: siblingOrder || null
@@ -481,7 +481,7 @@ export const AddMemberPage: React.FC = () => {
           ancestralHall: (
             parent?.ancestralHall ||
             (connectingRank && connectingRank !== '不知道' ? `${connectingRank}房` : null) ||
-            (['father', 'mother', 'grandfather', 'grandmother', 'm_grandfather', 'm_grandmother'].includes(connectorNode as string) && selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : null)
+            (selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : null)
           ),
           logicTag: currentLogicTag
         });
@@ -793,7 +793,7 @@ export const AddMemberPage: React.FC = () => {
                     TA是您哪位{lineageSide === 'paternal' ? '叔伯' : '舅姨'}家的孩子？
                   </label>
                   <p className="text-[10px] text-amber-600/60 px-1 mb-2 font-bold italic">
-                    💡 这里选的是“父辈排行”。例如：二叔家的孩子，就属于“二房”。
+                    💡 这里选的是“父辈排行”。例如：二叔排老二，就属于“二房”。
                   </p>
                   <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
                     {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小', '不知道'].map(rk => (
@@ -885,10 +885,10 @@ export const AddMemberPage: React.FC = () => {
                                   : connectorNode === 'm_grandmother' ? '外婆连脉'
                                     : connectorNode === 'self_p' || connectorNode === 'self_m' ? '同宗同代'
                                       : '子路晚辈'}
-                      {selectedRank && selectedRank !== '不知道' && (
+                      {((selectedRank && selectedRank !== '不知道') || (connectingRank && connectingRank !== '不知道')) && (
                         <>
                           <ChevronRight size={10} className="inline opacity-50" />
-                          {selectedRank}房
+                          {selectedRank && selectedRank !== '不知道' ? selectedRank : connectingRank}房
                         </>
                       )}
                     </span>
