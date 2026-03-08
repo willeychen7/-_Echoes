@@ -757,7 +757,7 @@ export async function createApp() {
 
       // 2. Ancestral Hall (Paternal Branch) Propagation
       if (inviter.ancestral_hall && !targetRecord?.ancestral_hall) {
-        if (["father", "son", "brother", "grandfather", "grandson", "uncle", "nephew"].includes(role)) {
+        if (["father", "son", "brother", "grandfather", "grandson", "uncle", "nephew", "cousin"].includes(role)) {
           updateData.ancestral_hall = inviter.ancestral_hall;
         }
       }
@@ -863,7 +863,7 @@ export async function createApp() {
 
     app.post("/api/register-claim", async (req, res) => {
       try {
-        const { inviteCode, name, avatarUrl, relationshipToInviter, standardRole, phone, password, birthDate, gender } = req.body;
+        const { inviteCode, name, avatarUrl, relationshipToInviter, standardRole, phone, password, birthDate, gender, inviterAncestralHall, inviterGenerationNum } = req.body;
         if (!inviteCode || !name || !phone || !password) {
           console.error("[CLAIM:ERROR] Missing fields:", { inviteCode: !!inviteCode, name: !!name, phone: !!phone, password: !!password });
           return res.status(400).json({ error: "Required fields missing (name, phone, password)" });
@@ -898,8 +898,16 @@ export async function createApp() {
         if (!target) return res.status(404).json({ error: "Target profile not found" });
         if (!inviter) return res.status(404).json({ error: "Inviter not found" });
 
+        // 1.9 Synchronize potential inviter info provided by claiming user
+        if (inviterAncestralHall && !inviter.ancestral_hall) inviter.ancestral_hall = inviterAncestralHall;
+        if (inviterGenerationNum && !inviter.generation_num) inviter.generation_num = inviterGenerationNum;
+
         // 2. Perform rigorous relationship calculation & data update
         const { updateData, invUpdate } = await resolveRigorousRel(standardRole, inviter, target.id);
+
+        // 2.5 Ensure the inviter's metadata is also queued for update if supplied manually
+        if (inviterAncestralHall && !inviter.ancestral_hall) invUpdate.ancestral_hall = inviterAncestralHall;
+        if (inviterGenerationNum && !inviter.generation_num) invUpdate.generation_num = inviterGenerationNum;
 
         // Merge additional fields
         const finalTargetData = {
@@ -1310,6 +1318,10 @@ export async function createApp() {
 
         const finalTargetId = target.id;
 
+        // 1.9 Pre-sync inviter info from request to influence final resolution
+        if (inviterAncestralHall && !inviter.ancestral_hall) inviter.ancestral_hall = inviterAncestralHall;
+        if (inviterGenerationNum && !inviter.generation_num) inviter.generation_num = inviterGenerationNum;
+
         // 2. Perform rigorous relationship calculation
         const resolved = await resolveRigorousRel(standardRole, inviter, finalTargetId);
         updateData = resolved.updateData;
@@ -1338,6 +1350,7 @@ export async function createApp() {
         if ((inviterAncestralHall && !inviter.ancestral_hall) || (inviterGenerationNum && !inviter.generation_num)) {
           if (inviterAncestralHall && !inviter.ancestral_hall) invUpdate.ancestral_hall = inviterAncestralHall;
           if (inviterGenerationNum && !inviter.generation_num) invUpdate.generation_num = inviterGenerationNum;
+          if (inviter.id === target.id) delete invUpdate.ancestral_hall; // Guard against self-update logic loops
 
           // === 核心新增：发送协作确认通知给邀请人 ===
           try {
