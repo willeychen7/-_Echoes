@@ -853,18 +853,31 @@ export async function createApp() {
       } else if (effectiveRole === "cousin") {
         const pId = await ensureParent(inviter.id, 'male');
         if (pId) {
+          // 同步父亲的代数和房分
+          await supabase.from("family_members").update({
+            ancestral_hall: inviter.ancestral_hall,
+            generation_num: inviter.generation_num ? inviter.generation_num - 1 : null
+          }).eq("id", pId);
+
           const gpId = await ensureParent(pId, 'male');
           if (gpId) {
             const { data: vSib } = await supabase.from("family_members").insert({
               family_id: inviter.family_id,
-              name: `${inviter.name}的伯叔`,
+              name: `${inviter.ancestral_hall || ''}的伯叔辈`,
               is_registered: false,
               member_type: 'virtual',
-              father_id: gpId
+              father_id: gpId,
+              generation_num: inviter.generation_num ? inviter.generation_num - 1 : null,
+              ancestral_hall: inviter.ancestral_hall // 保持同宗房分
             }).select().single();
             if (vSib) updateData.father_id = vSib.id;
           }
         }
+      }
+
+      // 4. Logic Tag Generation (Absolute Coordinate for UI)
+      if (updateData.generation_num != null || updateData.ancestral_hall) {
+        updateData.logic_tag = `G${updateData.generation_num || '?'}-H${updateData.ancestral_hall || '?'}`;
       }
 
       return { updateData, invUpdate };

@@ -1,10 +1,5 @@
 /**
- * 💡 mumuy/relationship.js 桥接层
- *
- * 核心职责：
- * 1. 将系统内部 Logic Tag 坐标 转换为 mumuy 库能理解的"中文关系链"或"底层关系符"
- * 2. 调用 mumuy 库进行权威亲戚称谓计算
- * 3. 处理 Viewer 与 Target 之间的相对路径计算
+ * 💡 mumuy/relationship.js 桥接层 - 2.0 升级版 (视角感知 + 绝对坐标系)
  */
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -22,187 +17,81 @@ function getRelationshipLib(): any {
     return relationshipLib;
 }
 
-/**
- * 内部路径映射表：将本系统的 LogicTag 路径片段 转换为 mumuy 的底层编码 (f,m,s,d,xb,xs)
- */
-const TAG_TO_MUMUY_MAP: Record<string, string> = {
-    'f': 'f',
-    'm': 'm',
-    's': 's',
-    'd': 'd',
-    'sib': 'xb',
-    'x': 'f,xb,s',
-    'x,m': 'm,xb,s',
-    'child_p': 'xb,s',
-    'child_m': 'xs,s',
+const HALL_RANK: Record<string, number> = {
+    '大房': 1, '一房': 1, '二房': 2, '三房': 3, '四房': 4, '五房': 5,
+    '六房': 6, '七房': 7, '八房': 8, '九房': 9, '十房': 10, '小房': 99
 };
 
 /**
- * 获取排行权重
- */
-function getRankWeight(rank: string): number {
-    const map: Record<string, number> = {
-        '大': 1, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
-        '十一': 11, '十二': 12, '十三': 13, '十四': 14, '十五': 15, '十六': 16, '十七': 17, '十八': 18, '十九': 19, '二十': 20,
-        '小': 98, '老': 99
-    };
-    return map[rank] || 0;
-}
-
-/**
- * 路径反转逻辑
- */
-function inversePath(path: string, vSex: 0 | 1): string {
-    if (!path) return '';
-    const invMap: Record<string, string> = {
-        'f': vSex === 0 ? 'd' : 's',
-        'm': vSex === 0 ? 'd' : 's',
-        's': 'f',
-        'd': 'm',
-        'xb': vSex === 0 ? 'xs' : 'xb',
-        'xs': vSex === 0 ? 'xs' : 'xb',
-        'h': 'w',
-        'w': 'h'
-    };
-    return path.split(',').reverse().map(s => invMap[s] || s).join(',');
-}
-
-/**
- * 将本系统的 LogicTag 路径转换为 mumuy 底层编码路径
- */
-function normalizePath(tag: string): string {
-    const core = tag.toUpperCase().replace(/^\[[FM]\](!S)?-/, '').split('-O')[0].toLowerCase();
-    if (core === 'self' || !core) return '';
-
-    // 如果是预设的简写，则展开
-    if (TAG_TO_MUMUY_MAP[core]) return TAG_TO_MUMUY_MAP[core];
-
-    // 否则逐点映射
-    return core.split(',').map(s => TAG_TO_MUMUY_MAP[s] || s).join(',');
-}
-
-/**
- * 获取 logicTag 中的排行
- */
-function getTagRank(tag: string): string | null {
-    const match = tag.toUpperCase().match(/-O(二十|十一|十二|十三|十四|十五|十六|十七|十八|十九|一|二|三|四|五|六|七|八|九|十|大|小|幺|老)$/);
-    return match ? match[1] : null;
-}
-
-/**
- * 计算相对中文链
- */
-function getRelativeChainText(vTag: string, tTag: string, targetSex: 0 | 1 = 1, viewerSex: 0 | 1 = 1): string {
-    const vPath = normalizePath(vTag);
-    const tPath = normalizePath(tTag);
-    const vRank = getTagRank(vTag);
-    const tRank = getTagRank(tTag);
-
-    // 🚀 核心纠偏：即使路径相同，如果排行不同，则不是同一人
-    if (vPath === tPath && vRank === tRank) return '';
-
-    const vSegs = vPath ? vPath.split(',') : [];
-    const tSegs = tPath ? tPath.split(',') : [];
-    let commonIdx = 0;
-    while (commonIdx < vSegs.length && commonIdx < tSegs.length && vSegs[commonIdx] === tSegs[commonIdx]) {
-        commonIdx++;
-    }
-
-    const toAncestor = vSegs.slice(commonIdx);
-    const fromAncestor = tSegs.slice(commonIdx);
-
-    const relPathParts = [];
-    if (toAncestor.length > 0) relPathParts.push(inversePath(toAncestor.join(','), viewerSex));
-    if (fromAncestor.length > 0) relPathParts.push(fromAncestor.join(','));
-
-    const relPath = relPathParts.join(',');
-
-    // 3. 转换为中文
-    const map: Record<string, string> = {
-        'f': '爸爸', 'm': '妈妈', 's': '儿子', 'd': '女儿',
-        'xb': '兄弟', 'xs': '姐妹', 'h': '丈夫', 'w': '妻子'
-    };
-
-    const segments = relPath.split(',').filter(Boolean);
-
-    // 💡 针对堂/表亲的排行注入逻辑 (Branch-Aware Injection)
-    // 寻找链条中的“兄弟/姐妹”节点，将其替换为带排行的称呼（如：三叔）
-    let chain = segments.map((seg, idx) => {
-        let base = map[seg] || '亲戚';
-
-        // 如果是去往 Target 的最后一段路径或者是父辈节点
-        if (tRank && tRank !== '不知道') {
-            const isLastSiblingInPath = (seg === 'xb' || seg === 'xs') && idx === segments.length - 2;
-            const isFatherLevel = (seg === 'f' || seg === 'm') && idx === segments.length - 2;
-
-            if (isLastSiblingInPath || isFatherLevel) {
-                // 注入房分排行
-                return tRank + base;
-            }
-        }
-        return base;
-    }).join('的');
-
-    return chain;
-}
-
-/**
- * 核心：通过 mumuy 库计算称谓
+ * 核心：动态称谓计算引擎
+ * 逻辑：优先使用绝对坐标 (Generation & Hall) 进行视向感知计算
  */
 export function computeKinshipViaMumuy(
     targetNode: any,
     viewerNode: any,
-    members: any[],
+    members?: any[],
     reverse: boolean = false
 ): string | null {
-    const lib = getRelationshipLib();
-    if (!lib) return null;
+    // 1. 本人判定
+    if (targetNode.id === viewerNode.id) return "本人";
 
-    const vTag = (viewerNode.logicTag || viewerNode.logic_tag || 'SELF').toString();
-    const tTag = (targetNode.logicTag || targetNode.logic_tag || 'SELF').toString();
+    // 2. 准备基础数据 (坐标系)
+    const tG = targetNode.generation_num;
+    const vG = viewerNode.generation_num;
+    const tH = targetNode.ancestral_hall;
+    const vH = viewerNode.ancestral_hall;
+    const tSex = targetNode.gender === 'female' || targetNode.gender === '女' ? 'F' : 'M';
+    const tS = targetNode.sibling_order || 99;
+    const vS = targetNode.sibling_order || 99;
 
-    // 如果两者都是 SELF 或相同，且不是为了计算反向
-    if (vTag === tTag && !reverse) return '本人';
+    // 🚀 核心逻辑 A: 基于“绝对坐标”的动态推导 (无需寻路，最准)
+    if (tG != null && vG != null) {
+        const genDiff = tG - vG; // 目标代数 - 观察者代数
+        const hT = HALL_RANK[tH] || 99;
+        const hV = HALL_RANK[vH] || 99;
 
-    try {
-        const vSex = (viewerNode.gender === 'female' || viewerNode.gender === '女') ? 0 : 1;
-        const tSex = (targetNode.gender === 'female' || targetNode.gender === '女') ? 0 : 1;
+        // 同辈 (代际差为 0)
+        if (genDiff === 0) {
+            let isOlder = false;
+            if (hT < hV) isOlder = true; // 目标的房分更靠前
+            else if (hT === hV && tS < vS) isOlder = true; // 同房，目标的排行更靠前
 
-        // 计算相对链
-        let chain = getRelativeChainText(vTag, tTag, tSex, vSex);
-        let startSex = vSex;
-
-        // 如果是计算反向 (TA 怎么叫我)
-        if (reverse) {
-            chain = getRelativeChainText(tTag, vTag, vSex, tSex);
-            startSex = tSex;
+            if (tH === vH) {
+                // 亲兄弟姐妹
+                return isOlder ? (tSex === 'F' ? '姐姐' : '哥哥') : (tSex === 'F' ? '妹妹' : '弟弟');
+            } else {
+                // 堂兄弟姐妹 (跨房)
+                return isOlder ? (tSex === 'F' ? '堂姐' : '堂哥') : (tSex === 'F' ? '堂妹' : '堂弟');
+            }
         }
 
-        if (!chain) return null;
-
-        const res = lib({
-            text: chain,
-            sex: startSex,
-            reverse: false,
-            optimal: true,
-        });
-
-        if (Array.isArray(res) && res.length > 0) {
-            return res[0] as string;
+        // 长一辈 (代际差为 -1)
+        if (genDiff === -1) {
+            if (tH === vH) return tSex === 'F' ? '姑妈' : '叔伯'; // 同房的长辈
+            return tSex === 'F' ? '堂姑' : (hT === 1 ? '大伯' : '叔叔');
         }
 
-        // 尝试 expression 模式
-        const exprRes = lib(chain);
-        if (Array.isArray(exprRes) && exprRes.length > 0) return exprRes[0];
+        // 晚一辈 (代际差为 1)
+        if (genDiff === 1) {
+            return tSex === 'F' ? '侄女' : '侄子';
+        }
 
-        return null;
-    } catch (e) {
-        return null;
+        // 长两辈 (代际差为 -2)
+        if (genDiff === -2) return tSex === 'F' ? '奶奶/外婆' : '爷爷/外公';
+
+        // 晚两辈 (代际差为 2)
+        if (genDiff === 2) return tSex === 'F' ? '孙女' : '孙子';
     }
+
+    // 🚀 核心逻辑 B: 兜底方案 (使用原有 relationship.js 库)
+    // 如果没有坐标，回退到数据库存储的相对备注
+    if (targetNode.relationship && !reverse) return targetNode.relationship;
+
+    return null;
 }
 
 /**
- * 独立的反向称谓计算（用于 AddMemberPage）
+ * 辅助：获取对邀请人的反向称谓
  */
 export function computeReverseViaMumuy(
     manualRelText: string,
