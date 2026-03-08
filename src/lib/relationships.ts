@@ -398,27 +398,9 @@ export function getRelationshipChain(viewer: any, target: any, members: any[]): 
 
     const isAncestor = /^(本人|爸爸|妈妈|父亲|母亲|爷爷|奶奶|外公|外婆|曾祖父|曾祖母|高祖父|高祖母)$/;
 
-    // === 策略 1（最高优先）：创建者路径 ===
-    // target.createdByMemberId = 谁建了这个档案
-    // target.relationship = 创建者如何称呼 target（这才是 relationship 字段的真正语义）
-    const creatorId = target.createdByMemberId || target.created_by_member_id;
-    const creatorRelLabel = (target.relationship || '').trim(); // 创建者眼中的 target 称谓
-    if (creatorId && creatorRelLabel && Number(creatorId) !== vId && Number(creatorId) !== tId) {
-        const creatorNode = ctx.membersMap.get(Number(creatorId));
-        if (creatorNode) {
-            const viewerCallsCreator = getRigorousRelationship(viewer, creatorNode, members);
-            if (viewerCallsCreator && !['家人', '亲戚', '本人', ''].includes(viewerCallsCreator)
-                && !isAncestor.test(viewerCallsCreator)) {
-                const cName = creatorNode.name || '';
-                return cName
-                    ? `${cName}（我${viewerCallsCreator}）的${creatorRelLabel}`
-                    : `我${viewerCallsCreator}的${creatorRelLabel}`;
-            }
-        }
-    }
-
-    // --- 构建无向邻接表（基于 father_id / mother_id / spouse_id 结构字段）---
-    // 边：(fromId, toId)，双向
+    // === 策略 1（优先）：BFS 图遍历 ===
+    // 基于 father_id / mother_id / spouse_id 结构化连线，找最短路径中间人
+    // 这是最严谨的方法——结构化数据 > 文本标签
     const adj = new Map<number, Set<number>>();
     const addEdge = (a: number | null | undefined, b: number | null | undefined) => {
         if (!a || !b || a === b) return;
@@ -438,7 +420,6 @@ export function getRelationshipChain(viewer: any, target: any, members: any[]): 
         addEdge(mId, spId ? Number(spId) : null);
     }
 
-    // --- BFS：从 vId 到 tId，记录前驱节点以恢复路径 ---
     const prev = new Map<number, number>();
     const visited = new Set<number>([vId]);
     const queue: number[] = [vId];
@@ -455,44 +436,53 @@ export function getRelationshipChain(viewer: any, target: any, members: any[]): 
         }
     }
 
-    if (!found) return null; // 图中无连通路径
+    if (found) {
+        const path: number[] = [];
+        let cur: number | undefined = tId;
+        while (cur !== undefined) {
+            path.unshift(cur);
+            cur = prev.get(cur);
+        }
 
-    // --- 恢复路径：tId ← ... ← vId ---
-    const path: number[] = [];
-    let cur: number | undefined = tId;
-    while (cur !== undefined) {
-        path.unshift(cur);
-        cur = prev.get(cur);
+        if (path.length >= 3) {
+            const longAncestors = /^(本人|爸爸|妈妈|父亲|母亲|爷爷|奶奶|外公|外婆|曾祖父|曾祖母|高祖父|高祖母)$/;
+            for (let i = path.length - 2; i >= 1; i--) {
+                const candidateId = path[i];
+                const candidateNode = ctx.membersMap.get(candidateId);
+                if (!candidateNode) continue;
+
+                const viewerCallsM = getRigorousRelationship(viewer, candidateNode, members);
+                if (!viewerCallsM || ['家人', '亲戚', '本人', ''].includes(viewerCallsM)) continue;
+                if (longAncestors.test(viewerCallsM)) continue;
+
+                const mCallsTarget = getRigorousRelationship(candidateNode, target, members);
+                if (!mCallsTarget || ['家人', '亲戚', '本人', ''].includes(mCallsTarget)) continue;
+
+                const mName = candidateNode.name || '';
+                return mName
+                    ? `${mName}（我${viewerCallsM}）的${mCallsTarget}`
+                    : `我${viewerCallsM}的${mCallsTarget}`;
+            }
+        }
     }
 
-    // path[0] = vId, path[path.length-1] = tId
-    // 直接相邻（两步）= 已被 isDirectRel 过滤，这里路径长度 >= 3
-    if (path.length < 3) return null;
-
-    // --- 从路径上找最佳"中间人"---
-    // 策略：从靠近 target 的一端往 viewer 方向找，
-    // 找到第一个"viewer 能叫出有意义称谓"且"自身有真实姓名"的节点
-    const longAncestors = /^(本人|爸爸|妈妈|父亲|母亲|爷爷|奶奶|外公|外婆|曾祖父|曾祖母|高祖父|高祖母)$/;
-
-    for (let i = path.length - 2; i >= 1; i--) {
-        const candidateId = path[i];
-        const candidateNode = ctx.membersMap.get(candidateId);
-        if (!candidateNode) continue;
-
-        // viewer 如何称呼这个中间人
-        const viewerCallsM = getRigorousRelationship(viewer, candidateNode, members);
-        if (!viewerCallsM || ['家人', '亲戚', '本人', ''].includes(viewerCallsM)) continue;
-        // 直系长辈作为中间人时路径说明会冗余（如"外婆的女儿"），跳过
-        if (longAncestors.test(viewerCallsM)) continue;
-
-        // 这个中间人如何称呼 target
-        const mCallsTarget = getRigorousRelationship(candidateNode, target, members);
-        if (!mCallsTarget || ['家人', '亲戚', '本人', ''].includes(mCallsTarget)) continue;
-
-        const mName = candidateNode.name || '';
-        return mName
-            ? `${mName}（我${viewerCallsM}）的${mCallsTarget}`
-            : `我${viewerCallsM}的${mCallsTarget}`;
+    // === 策略 2（兜底）：创建者路径 ===
+    // BFS 找不到连通路径时（结构化连线不完整），退而求其次：
+    // 用「谁建了这个档案（createdByMemberId）」+ 「建档时的称谓（relationship）」来推导
+    const creatorId = target.createdByMemberId || target.created_by_member_id;
+    const creatorRelLabel = (target.relationship || '').trim();
+    if (creatorId && creatorRelLabel && Number(creatorId) !== vId && Number(creatorId) !== tId) {
+        const creatorNode = ctx.membersMap.get(Number(creatorId));
+        if (creatorNode) {
+            const viewerCallsCreator = getRigorousRelationship(viewer, creatorNode, members);
+            if (viewerCallsCreator && !['家人', '亲戚', '本人', ''].includes(viewerCallsCreator)
+                && !isAncestor.test(viewerCallsCreator)) {
+                const cName = creatorNode.name || '';
+                return cName
+                    ? `${cName}（我${viewerCallsCreator}）的${creatorRelLabel}`
+                    : `我${viewerCallsCreator}的${creatorRelLabel}`;
+            }
+        }
     }
 
     return null;
