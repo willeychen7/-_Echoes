@@ -525,6 +525,15 @@ export const ProfilePage: React.FC = () => {
         }
       }
 
+      // 计算推导出的邀请人房分
+      let suggestedInviterHall = inviteData.inviterAncestralHall;
+      if (!suggestedInviterHall && elderRel) {
+        if (elderRel === "大伯") suggestedInviterHall = "大房";
+        else if (elderRel === "二伯") suggestedInviterHall = "二房";
+        else if (elderRel === "三伯") suggestedInviterHall = "三房";
+        else if (elderRel === "爸爸") suggestedInviterHall = inviteData.targetAncestralHall;
+      }
+
       const res = await fetch("/api/accept-invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -536,7 +545,9 @@ export const ProfilePage: React.FC = () => {
           standardRole: finalStdRole,
           name: finalName,
           avatarUrl: finalAvatar,
-          mode: mode || "direct"
+          mode: mode || "direct",
+          targetSiblingOrder: inviteData.targetSiblingOrder,
+          inviterAncestralHall: suggestedInviterHall
         })
       });
 
@@ -1325,7 +1336,10 @@ export const ProfilePage: React.FC = () => {
 
                         <div className="space-y-3">
                           <p className="text-xs text-slate-500 font-medium text-left leading-relaxed">
-                            您称呼 <span className="text-slate-800 font-bold">{inviteData.inviterName}</span> 的父亲（您的伯叔）为？
+                            {inviteData.inviterAncestralHall
+                              ? `您称呼 ${inviteData.inviterName} 的父亲（您的伯叔）为？`
+                              : `对方尚未登记房分，请通过您的称呼协助补全：您称呼 ${inviteData.inviterName} 的父亲为？`
+                            }
                           </p>
                           <div className="flex flex-wrap gap-2">
                             {["大伯", "二伯", "三伯", "叔叔", "爸爸", "不知道"].map(btn => (
@@ -1344,14 +1358,14 @@ export const ProfilePage: React.FC = () => {
                             ))}
                           </div>
 
-                          {/* 校验反馈逻辑 */}
+                          {/* 校验与定义反馈逻辑 */}
                           {elderRel && elderRel !== "不知道" && (
                             <motion.div
                               initial={{ opacity: 0, y: 5 }}
                               animate={{ opacity: 1, y: 0 }}
                               className={cn(
                                 "p-3 rounded-2xl flex items-start gap-3 border-2",
-                                (
+                                (!inviteData.inviterAncestralHall ||
                                   (elderRel === "大伯" && inviteData.inviterAncestralHall === "大房") ||
                                   (elderRel === "二伯" && inviteData.inviterAncestralHall === "二房") ||
                                   (elderRel === "三伯" && inviteData.inviterAncestralHall === "三房") ||
@@ -1363,15 +1377,17 @@ export const ProfilePage: React.FC = () => {
                               )}
                             >
                               <div className="mt-0.5">
-                                {((elderRel === "大伯" && inviteData.inviterAncestralHall === "大房") || (elderRel === "二伯" && inviteData.inviterAncestralHall === "二房") || (elderRel === "三伯" && inviteData.inviterAncestralHall === "三房") || (elderRel === "爸爸" && inviteData.inviterAncestralHall === inviteData.targetAncestralHall) || (elderRel === "叔叔" && ["三房", "四房", "五房", "六房", "七房", "八房", "九房", "十房", "小房"].includes(inviteData.inviterAncestralHall || "")))
+                                {(!inviteData.inviterAncestralHall || ((elderRel === "大伯" && inviteData.inviterAncestralHall === "大房") || (elderRel === "二伯" && inviteData.inviterAncestralHall === "二房") || (elderRel === "三伯" && inviteData.inviterAncestralHall === "三房") || (elderRel === "爸爸" && inviteData.inviterAncestralHall === inviteData.targetAncestralHall) || (elderRel === "叔叔" && ["三房", "四房", "五房", "六房", "七房", "八房", "九房", "十房", "小房"].includes(inviteData.inviterAncestralHall || ""))))
                                   ? <CheckCircle size={14} />
                                   : <Bell size={14} className="animate-pulse" />
                                 }
                               </div>
                               <div className="text-[10px] font-bold text-left leading-normal">
-                                {((elderRel === "大伯" && inviteData.inviterAncestralHall === "大房") || (elderRel === "二伯" && inviteData.inviterAncestralHall === "二房") || (elderRel === "三伯" && inviteData.inviterAncestralHall === "三房") || (elderRel === "爸爸" && inviteData.inviterAncestralHall === inviteData.targetAncestralHall) || (elderRel === "叔叔" && ["三房", "四房", "五房", "六房", "七房", "八房", "九房", "十房", "小房"].includes(inviteData.inviterAncestralHall || "")))
-                                  ? `验证吻合：您称呼${elderRel}，这与对方登记的“${inviteData.inviterAncestralHall}”身份完全匹配。`
-                                  : `信息不符：您称呼${elderRel}，但对方登记为“${inviteData.inviterAncestralHall}”。建议您核实对方或您自己的房分排行。`
+                                {!inviteData.inviterAncestralHall
+                                  ? `智能定位：根据您的称呼，系统已推断邀请人属于“${elderRel.replace("伯", "房").replace("叔叔", "三房以后的房分").replace("爸爸", "同房")}”。`
+                                  : ((elderRel === "大伯" && inviteData.inviterAncestralHall === "大房") || (elderRel === "二伯" && inviteData.inviterAncestralHall === "二房") || (elderRel === "三伯" && inviteData.inviterAncestralHall === "三房") || (elderRel === "爸爸" && inviteData.inviterAncestralHall === inviteData.targetAncestralHall) || (elderRel === "叔叔" && ["三房", "四房", "五房", "六房", "七房", "八房", "九房", "十房", "小房"].includes(inviteData.inviterAncestralHall || "")))
+                                    ? `验证吻合：您称呼${elderRel}，这与对方登记的“${inviteData.inviterAncestralHall}”身份完全匹配。`
+                                    : `信息不符：您称呼${elderRel}，但对方登记为“${inviteData.inviterAncestralHall}”。建议核对。`
                                 }
                               </div>
                             </motion.div>

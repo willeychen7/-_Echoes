@@ -999,7 +999,7 @@ export async function createApp() {
     app.post("/api/accept-invite", async (req, res) => {
       try {
         // NOTE: 优先使用 userId（UUID）识别用户，不再依赖容易丢失的 phone 字段
-        const { userId, phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl, mode, targetSiblingOrder } = req.body;
+        const { userId, phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl, mode, targetSiblingOrder, inviterAncestralHall } = req.body;
         // mode: "migrate" 迁移内容 | "clear" 清空内容 | "direct" 默认直接加入
         let effectiveMode: string = mode || "direct";
         if ((!userId && !phone) || !inviteCode) {
@@ -1393,6 +1393,10 @@ export async function createApp() {
         if (mErr) throw mErr;
 
         // 4. Update inviter back-link
+        if (inviterAncestralHall && !inviter.ancestral_hall) {
+          invUpdate.ancestral_hall = inviterAncestralHall;
+        }
+
         if (Object.keys(invUpdate).length > 1) {
           const { id, ...rest } = invUpdate;
           await supabase.from("family_members").update(rest).eq("id", id);
