@@ -87,9 +87,61 @@ export function computeKinshipViaMumuy(
     if (targetSpouseId && vChildren?.some(c => String(c.id) === String(targetSpouseId))) return tSex === 'F' ? "儿媳" : "女婿";
 
     const vSpouseNode = getFullNode(vSpouseId);
+
+    // --- 姻亲：配偶的父母 → 公婆/岳父母 ---
     if (vSpouseNode && (String(targetNode.id) === String(getVal(vSpouseNode, ['father_id', 'fatherId'])) || String(targetNode.id) === String(getVal(vSpouseNode, ['mother_id', 'motherId'])))) {
         if (vSex === 'F') return tSex === 'F' ? "婆婆" : "公公";
         return tSex === 'F' ? "岳母" : "岳父";
+    }
+
+    // --- 姻亲：子女的配偶的父母 → 亲家公/亲家母 ---
+    // 例：奶奶 → 外公/外婆（儿媳妈妈的父母）
+    const vChildrenSpouseParents: number[] = [];
+    vChildren?.forEach(child => {
+        const childSpouseId = getVal(child, ['spouse_id', 'spouseId']);
+        if (!childSpouseId) return;
+        const childSpouseNode = getFullNode(childSpouseId);
+        if (!childSpouseNode) return;
+        const csF = getVal(childSpouseNode, ['father_id', 'fatherId']);
+        const csM = getVal(childSpouseNode, ['mother_id', 'motherId']);
+        if (csF) vChildrenSpouseParents.push(Number(csF));
+        if (csM) vChildrenSpouseParents.push(Number(csM));
+    });
+    if (vChildrenSpouseParents.includes(Number(targetNode.id))) {
+        return tSex === 'F' ? "亲家母" : "亲家公";
+    }
+
+    // --- 姻亲：配偶的兄弟姐妹（大伯/叔/大姑/小姑，或大舅子/小舅子/大姨子等）---
+    // 这在同辈章节中用 areSiblings 处理（已有逻辑）
+
+    // --- 姻亲扩展：配偶父母的兄弟姐妹 ---
+    // 例：爸爸 → 外公的姐妹（不是「姑」，而是「大舅妈/大岳姑」）
+    // 这里简化：如果 target 是配偶父母的兄弟/姐妹，且非直接亲属，则标记为姻亲亲属
+    if (vSpouseNode) {
+        const spouseFId = getVal(vSpouseNode, ['father_id', 'fatherId']);
+        const spouseMId = getVal(vSpouseNode, ['mother_id', 'motherId']);
+        const spouseFNode = getFullNode(spouseFId);
+        const spouseMNode = getFullNode(spouseMId);
+        // target 是配偶的父亲的兄弟/姐妹
+        if (spouseFId && spouseFNode) {
+            const spFf = getVal(spouseFNode, ['father_id', 'fatherId']);
+            const spFm = getVal(spouseFNode, ['mother_id', 'motherId']);
+            const tSharesFParent = (tFatherId && spFf && String(tFatherId) === String(spFf)) || (tMotherId && spFm && String(tMotherId) === String(spFm));
+            if (tSharesFParent) {
+                // target 是配偶父亲的兄弟/姐妹
+                return tSex === 'F' ? "内姑" : "内舅";
+            }
+        }
+        // target 是配偶的母亲的兄弟/姐妹
+        if (spouseMId && spouseMNode) {
+            const spMf = getVal(spouseMNode, ['father_id', 'fatherId']);
+            const spMm = getVal(spouseMNode, ['mother_id', 'motherId']);
+            const tSharesMParent = (tFatherId && spMf && String(tFatherId) === String(spMf)) || (tMotherId && spMm && String(tMotherId) === String(spMm));
+            if (tSharesMParent) {
+                // target 是配偶母亲的兄弟/姐妹
+                return tSex === 'F' ? "内姨" : "内舅";
+            }
+        }
     }
 
     const isBioAncestor = isAncestorRecursive(targetNode, viewerNode, members);
@@ -136,13 +188,20 @@ export function computeKinshipViaMumuy(
         (targetHall && effectiveVH && targetHall === effectiveVH && !vSpouseId);
 
     // 补充：如果 viewer 已婚，且 target 是配偶的亲兄弟/姐妹 → 先行处理
-    // 例：奶奶视角，爷爷的兄弟 → 应叫「大伯/叔」，不应叫「堂哥」
+    // 区分 viewer 性别：男性视角叫「大舅子/姨子」，女性视角叫「大伯/叔/大姑/小姑」
     if (vSpouseId && vSpouseNode && genDiff === 0) {
         if (areSiblings(targetNode.id, vSpouseNode.id)) {
             const spouseOrder = getExplicitOrder(vSpouseNode);
             const earlyRank = (tS >= 1 && tS <= 20) ? (tS === 1 ? '大' : NUM_CHAR[tS] || '') : '';
-            if (tSex === 'F') return (tS < spouseOrder ? earlyRank + '大姑' : earlyRank + '小姑');
-            return (tS < spouseOrder ? earlyRank + '大伯' : earlyRank + '叔');
+            if (vSex === 'M') {
+                // 丈夫视角：妻子的兄弟 → 大舅子/小舅子；妻子的姐妹 → 大姨子/小姨子
+                if (tSex === 'F') return (tS < spouseOrder ? earlyRank + '大姨子' : earlyRank + '小姨子');
+                return (tS < spouseOrder ? earlyRank + '大舅子' : earlyRank + '小舅子');
+            } else {
+                // 妻子视角：丈夫的兄弟 → 大伯/叔；丈夫的姐妹 → 大姑/小姑
+                if (tSex === 'F') return (tS < spouseOrder ? earlyRank + '大姑' : earlyRank + '小姑');
+                return (tS < spouseOrder ? earlyRank + '大伯' : earlyRank + '叔');
+            }
         }
     }
 
