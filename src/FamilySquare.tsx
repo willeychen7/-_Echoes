@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Card } from "./components/Card";
-import { Calendar as CalendarIcon, Phone, Gift, Plus, FolderOpen, Home, CheckCircle, Trash2, Mic, MessageSquare, Camera, Video, Send, X, Heart, Play, Sparkles, ChevronDown, ChevronUp, Share2, Copy } from "lucide-react";
+import { Calendar as CalendarIcon, Phone, Gift, Plus, FolderOpen, Home, CheckCircle, Trash2, Mic, MessageSquare, Camera, Video, Send, X, Heart, Play, Sparkles, ChevronDown, ChevronUp, Share2, Copy, PawPrint } from "lucide-react";
 import { FamilyMember, FamilyEvent, Message, MessageType } from "./types";
 import { useNavigate, useLocation } from "react-router-dom";
 import { cn, getRelativeTime } from "./lib/utils";
@@ -648,7 +648,7 @@ export const FamilySquare: React.FC = () => {
                   ) || currentUser;
 
                   const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
-                  const isRealMember = (m: any) => !(m.member_type === 'virtual' || m.memberType === 'virtual' || m.member_type === 'pet' || m.memberType === 'pet' || ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"].some(k => (m.name || "").includes(k)));
+                  const isRealMember = (m: any) => !(m.member_type === 'virtual' || m.memberType === 'virtual' || ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"].some(k => (m.name || "").includes(k)));
 
                   // 定义内部统一渲染函数
                   const renderMemberCard = (member: FamilyMember) => {
@@ -781,20 +781,58 @@ export const FamilySquare: React.FC = () => {
                       })()}
 
 
-                      {/* 6. 社会与伙伴 */}
+                      {/* 5. 社会关系 (朋友) */}
                       {(() => {
-                        const social = allReal.filter(m =>
-                          getRelationType(getRigorousRelationship(meNode, m, members)) === 'social' ||
-                          m.memberType === 'pet' || m.member_type === 'pet' ||
-                          m.kinshipType === 'social' || m.kinship_type === 'social'
+                        const friends = allReal.filter(m => {
+                          const label = getKinshipLabel(meNode, m, members) || "";
+                          return label.startsWith("【友】") || m.kinshipType === 'social' || m.kinship_type === 'social';
+                        });
+                        if (friends.length === 0) return null;
+                        return (
+                          <div className="space-y-4 mb-8">
+                            <h3 className="text-sm font-black text-blue-400/80 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                              <div className="size-1.5 bg-blue-300 rounded-full" /> 社会关系
+                            </h3>
+                            <div className="grid grid-cols-2 gap-4">{friends.map(renderMemberCard)}</div>
+                          </div>
                         );
-                        if (social.length === 0) return null;
+                      })()}
+
+                      {/* 6. 家族伙伴 (宠物) */}
+                      {(() => {
+                        const pets = allReal.filter(m => {
+                          const label = getKinshipLabel(meNode, m, members) || "";
+                          return label.startsWith("【宠】") || m.memberType === 'pet' || m.member_type === 'pet';
+                        });
+                        if (pets.length === 0) return null;
+                        return (
+                          <div className="space-y-4 mb-8">
+                            <h3 className="text-sm font-black text-amber-500/80 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                              <PawPrint size={14} className="text-amber-400" /> 家族伙伴
+                            </h3>
+                            <div className="grid grid-cols-2 gap-4">{pets.map(renderMemberCard)}</div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* 7. 其他档案 (兜底) */}
+                      {(() => {
+                        const others = allReal.filter(m => {
+                          const label = getKinshipLabel(meNode, m, members) || "";
+                          const isKnown = ["【至亲】", "【宗亲】", "【外戚】", "【姻】", "【友】", "【宠】"].some(p => label.startsWith(p));
+                          const isMe = currentUser && (
+                            (m.id && currentUser.memberId && String(m.id) === String(currentUser.memberId)) ||
+                            (m.userId && currentUser.id && String(m.userId) === String(currentUser.id))
+                          );
+                          return !isMe && !isKnown;
+                        });
+                        if (others.length === 0) return null;
                         return (
                           <div className="space-y-4 mb-8">
                             <h3 className="text-sm font-black text-slate-300 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
-                              <div className="size-1.5 bg-slate-200 rounded-full" /> 社会与伙伴
+                              <div className="size-1.5 bg-slate-200 rounded-full" /> 家族普亲
                             </h3>
-                            <div className="grid grid-cols-2 gap-4">{social.map(renderMemberCard)}</div>
+                            <div className="grid grid-cols-2 gap-4">{others.map(renderMemberCard)}</div>
                           </div>
                         );
                       })()}

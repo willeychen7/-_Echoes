@@ -279,9 +279,9 @@ function computeRigorousRelationship(viewer: any, target: any, members: any[], d
 
 export function getRelationType(rel: string): 'blood' | 'affinal' | 'social' {
     const clean = getCleanRelationship(rel);
-    const socialKeywords = ["战友", "同学", "朋友", "恩师", "宠物", "家人"];
+    const socialKeywords = ["战友", "同学", "朋友", "好友", "同事", "恩师", "宠物", "伙伴", "导师", "学生", "家人"];
     if (socialKeywords.some(sw => clean.includes(sw))) return 'social';
-    const affinalKeywords = ["婿", "媳", "岳", "丈", "妻", "夫", "嫂", "舅子", "姨子", "内侄", "婶", "姆", "妗"];
+    const affinalKeywords = ["婿", "媳", "岳", "丈", "妻", "夫", "嫂", "舅子", "姨子", "内侄", "婶", "姆", "妗", "姻"];
     if (affinalKeywords.some(k => clean.includes(k))) return 'affinal';
     return 'blood';
 }
@@ -301,26 +301,34 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
     const hall = tNode.ancestralHall || tNode.ancestral_hall || "";
     const hallSuffix = hall ? ` · ${hall}` : "";
 
+    // 2. 判定是否为“至亲” (用于排查伪装成血亲的社交关系)
+    const isDirect = /^(大|二|三|四|五|六|七|八|九|十|小|老|幺)?(本人|爷爷|奶奶|外公|外婆|爸爸?|妈妈?|哥哥?|弟弟?|姐姐?|妹妹?|儿子|女儿|父亲|母亲|祖父|祖母|外祖父|外祖母)$/.test(rel);
+
     // 1. 公共非血缘分类
-    if (type === 'social' || tNode.memberType === 'pet' || tNode.member_type === 'pet' || tNode.kinship_type === 'social' || tNode.kinshipType === 'social') {
+    const isSocialOrPet = type === 'social' ||
+        tNode.memberType === 'pet' || tNode.member_type === 'pet' ||
+        tNode.kinship_type === 'social' || tNode.kinshipType === 'social' ||
+        (tNode.added_by_member_id && String(tNode.added_by_member_id) === String(vNode.id || vNode.memberId) && type === 'blood' && !isDirect);
+
+    if (isSocialOrPet) {
         const chain = getRelationshipChain(vNode, tNode, members);
         const prefix = (tNode.memberType === 'pet' || tNode.member_type === 'pet') ? "【宠】" : "【友】";
         if (chain) return `${prefix}${chain}`;
-        return `${prefix}${rel || (tNode.memberType === 'pet' ? "宠物" : "朋友")}`;
+        // 如果是直接创建的朋友，且没有链条，直接显示其录入的关系
+        let label = rel;
+        if (!label || label === '亲戚' || label === '家人') {
+            label = (tNode.memberType === 'pet' || tNode.member_type === 'pet') ? "宠物" : "朋友";
+        }
+        return `${prefix}${label}`;
     }
     if (type === 'affinal') return `【姻】${hallSuffix}`;
-
-    // 2. 核心判定：判定是否为“至亲” (相对视角下的核心直系)
-    // 允许带有排行前缀 (如：二姐、三妹) 并兼容单字称呼 (姐、哥)
-    const isDirect = /^(大|二|三|四|五|六|七|八|九|十|小|老|幺)?(本人|爷爷|奶奶|外公|外婆|爸爸?|妈妈?|哥哥?|弟弟?|姐姐?|妹妹?|儿子|女儿|父亲|母亲|祖父|祖母|外祖父|外祖母)$/.test(rel);
     if (isDirect) return "【至亲】";
 
     // 3. 相对支脉判定：根据相对称谓中的关键字决定“宗”还是“外”
-    // 这种方式完美解决了用户提到的“随迁”场景：A看B是外戚，B看A也是外戚（因为跨了母系）
     if (/堂|叔|伯|姑/.test(rel)) return `【宗亲】${hallSuffix}`;
     if (/表|舅|姨/.test(rel)) return `【外戚】${hallSuffix}`;
 
-    // 4. 极端兜底：如果无法推算相对路径，尝试参考物理坐标（仅作参考）
+    // 4. 极端兜底：如果无法推算相对路径，尝试参考物理坐标
     const tTag = (tNode.logicTag || tNode.logic_tag || "").toString().toUpperCase();
     if (tTag.startsWith('[F]')) return `【宗亲】${hallSuffix}`;
     if (tTag.startsWith('[M]')) return `【外戚】${hallSuffix}`;

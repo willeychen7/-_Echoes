@@ -594,7 +594,7 @@ export async function createApp() {
     app.post("/api/family-members", async (req, res) => {
       if (!supabase) return res.status(500).json({ error: "服务器初始化失败：数据库未连接" });
       try {
-        const { name, relationship, avatarUrl, bio, birthDate, standardRole, familyId, createdByMemberId, fatherId, ancestralHall, gender, memberType, generationNum, logicTag } = req.body;
+        const { name, relationship, avatarUrl, bio, birthDate, standardRole, familyId, createdByMemberId, fatherId, ancestralHall, gender, memberType, generationNum, logicTag, kinshipType } = req.body;
         // NOTE: 不再生成旧的 FA- 格式邀请码
         // 邀请码统一使用前端动态生成的 INV-{targetId}-{inviterId} 格式
 
@@ -611,7 +611,6 @@ export async function createApp() {
           console.log(`[API:MEMBER] Existing member found: ${existing.id}`);
           return res.json({ id: existing.id, linked: true });
         }
-
         const insertPayload: any = {
           family_id: familyId,
           name,
@@ -626,6 +625,7 @@ export async function createApp() {
           ancestral_hall: ancestralHall || null,
           gender: normalizeGender(gender),
           member_type: memberType || 'human',
+          kinship_type: kinshipType || (memberType === 'pet' ? 'social' : 'blood'),
           generation_num: generationNum || null,
           logic_tag: logicTag || null,
           origin_side: req.body.originSide || null,
@@ -648,6 +648,7 @@ export async function createApp() {
           // 仅在明确报错缺失时才删除
           if (error.message.includes("member_type")) delete fallbackPayload.member_type;
           if (error.message.includes("ancestral_hall")) delete fallbackPayload.ancestral_hall;
+          if (error.message.includes("kinship_type")) delete fallbackPayload.kinship_type;
           if (error.message.includes("generation_num")) delete fallbackPayload.generation_num;
           if (error.message.includes("logic_tag")) delete fallbackPayload.logic_tag;
           if (error.message.includes("origin_side")) delete fallbackPayload.origin_side;
