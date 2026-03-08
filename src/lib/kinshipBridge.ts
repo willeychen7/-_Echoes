@@ -6,17 +6,17 @@
  * 3. 房分排行强化：支持“三姨姑婆”、“外二公”等特定称谓。
  */
 
-import { normalizeGender } from './utils';
+import {
+    normalizeGender,
+    NUM_CHAR,
+    ANCESTOR_PREFIX,
+    DESCENDANT_PREFIX
+} from './utils';
 
 const HALL_RANK: Record<string, number> = {
     '根': 0, '根房': 0, '大房': 1, '一房': 1, '二房': 2, '三房': 3, '四房': 4, '五房': 5,
     '六房': 6, '七房': 7, '八房': 8, '九房': 9, '十房': 10, '小房': 99, '外家房': 1
 };
-
-const NUM_CHAR = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
-
-const ANCESTOR_PREFIX = ['', '', '', '曾', '高', '太', '烈', '天', '远', '鼻'];
-const DESCENDANT_PREFIX = ['', '', '', '曾', '玄', '来', '晜', '仍', '云', '耳'];
 
 function getExplicitOrder(node: any): number {
     const raw = node.sibling_order ?? node.siblingOrder;
@@ -278,8 +278,7 @@ export function computeKinshipViaMumuy(
     // NOTE: 亲兄弟姐妹判断必须使用「原始」父母ID，而非经配偶代理的 effectiveVFatherId
     // 否则已婚女性的亲兄妹会被误判为堂亲
     const isRealSib = (tFatherId && String(tFatherId) === String(vFatherId)) ||
-        (tMotherId && String(tMotherId) === String(vMotherId)) ||
-        (targetHall && effectiveVH && targetHall === effectiveVH && !vSpouseId);
+        (tMotherId && String(tMotherId) === String(vMotherId));
 
     // 补充：如果 viewer 已婚，且 target 是配偶的亲兄弟/姐妹 → 先行处理
     // 区分 viewer 性别：男性视角叫「大舅子/姨子」，女性视角叫「大伯/叔/大姑/小姑」
@@ -389,6 +388,16 @@ export function computeKinshipViaMumuy(
         if (!lca) return targetNode.relationship || "亲戚";
 
         const distV = getGenerationDistance(viewerNode, lca, members);
+
+        // --- 核心修正：识别“堂舅 / 堂姨” (母亲的堂兄弟姐妹) ---
+        const distToLCAFromViewer = lca ? getGenerationDistance(viewerNode, lca, members) : 0;
+        const distToLCAFromTarget = lca ? getGenerationDistance(targetNode, lca, members) : 0;
+
+        // 如果路径是从母亲向上的 (viewerMaternal) 且 target 是母亲的父系堂亲 (target 没有 maternal 记录)
+        if (viewerMaternal && !targetMaternal) {
+            return tSex === 'F' ? rank + "堂姨" : rank + "堂舅";
+        }
+
         let prefix = (isRealSib || targetNode.ancestral_hall === effectiveVH) ? '' : (isMaternal ? '表' : '堂');
         if (!isMaternal && distV >= 4) {
             prefix = distV === 4 ? '再从' : '族';
@@ -491,19 +500,19 @@ function isSpouse(a: any, b: any) {
 function isAncestorRecursive(target, start, members) {
     if (!start || !target) return false;
     if (String(start.id) === String(target.id)) return true;
-    const fId = start.father_id || start.fatherId;
-    const mId = start.mother_id || start.motherId;
-    return isAncestorRecursive(target, members?.find(m => String(m.id) === String(fId)), members) ||
-        isAncestorRecursive(target, members?.find(m => String(m.id) === String(mId)), members);
+    const fId = getVal(start, ['father_id', 'fatherId']);
+    const mId = getVal(start, ['mother_id', 'motherId']);
+    return isAncestorRecursive(target, getFullNode(fId, members), members) ||
+        isAncestorRecursive(target, getFullNode(mId, members), members);
 }
 
 function isDescendantRecursive(target, ancestor, members) {
     if (!target || !ancestor) return false;
     if (String(target.id) === String(ancestor.id)) return true;
-    const fId = target.father_id || target.fatherId;
-    const mId = target.mother_id || target.motherId;
-    return isDescendantRecursive(members?.find(m => String(m.id) === String(fId)), ancestor, members) ||
-        isDescendantRecursive(members?.find(m => String(m.id) === String(mId)), ancestor, members);
+    const fId = getVal(target, ['father_id', 'fatherId']);
+    const mId = getVal(target, ['mother_id', 'motherId']);
+    return isDescendantRecursive(getFullNode(fId, members), ancestor, members) ||
+        isDescendantRecursive(getFullNode(mId, members), ancestor, members);
 }
 
 function findLCA(a, b, members) {
@@ -514,8 +523,8 @@ function findLCA(a, b, members) {
             const n = curr.pop();
             if (!n || res.has(String(n.id))) continue;
             res.add(String(n.id));
-            curr.push(members?.find(m => String(m.id) === String(n.father_id || n.fatherId)));
-            curr.push(members?.find(m => String(m.id) === String(n.mother_id || n.motherId)));
+            curr.push(getFullNode(getVal(n, ['father_id', 'fatherId']), members));
+            curr.push(getFullNode(getVal(n, ['mother_id', 'motherId']), members));
         }
         return res;
     };
@@ -527,8 +536,8 @@ function findLCA(a, b, members) {
         if (!n || visited.has(String(n.id))) continue;
         visited.add(String(n.id));
         if (bAncs.has(String(n.id))) return n;
-        queue.push(members?.find(m => String(m.id) === String(n.father_id || n.fatherId)));
-        queue.push(members?.find(m => String(m.id) === String(n.mother_id || n.motherId)));
+        queue.push(getFullNode(getVal(n, ['father_id', 'fatherId']), members));
+        queue.push(getFullNode(getVal(n, ['mother_id', 'motherId']), members));
     }
     return null;
 }
@@ -536,33 +545,22 @@ function findLCA(a, b, members) {
 function isDescendantThroughDaughter(target, ancestor, members) {
     if (!target || !ancestor || String(target.id) === String(ancestor.id)) return false;
 
-    // 溯源：从 target 向上找 ancestor，看第一步离开 ancestor 的链路是否为女性
     let current = target;
     const visited = new Set();
-    const path: any[] = [];
 
     while (current && !visited.has(String(current.id)) && String(current.id) !== String(ancestor.id)) {
         visited.add(String(current.id));
-        path.unshift(current);
         const fId = getVal(current, ['father_id', 'fatherId']);
         const mId = getVal(current, ['mother_id', 'motherId']);
 
-        let parentNode = null;
-        if (fId && isAncestorRecursive(ancestor, getFullNode(fId, members), members)) {
-            parentNode = getFullNode(fId, members);
-        } else if (mId && isAncestorRecursive(ancestor, getFullNode(mId, members), members)) {
-            parentNode = getFullNode(mId, members);
+        // 如果是通过母亲上溯的，说明这一步就是母系连接
+        if (mId && isAncestorRecursive(ancestor, getFullNode(mId, members), members)) {
+            return true;
         }
 
-        if (!parentNode) break;
+        const parentNode = fId ? getFullNode(fId, members) : null;
+        if (!parentNode || !isAncestorRecursive(ancestor, parentNode, members)) break;
         current = parentNode;
-    }
-
-    if (String(current.id) === String(ancestor.id) && path.length > 0) {
-        // 第一跳节点的母亲是否为 ancestor
-        const firstNode = path[0];
-        const mId = getVal(firstNode, ['mother_id', 'motherId']);
-        return String(mId) === String(ancestor.id);
     }
 
     return false;

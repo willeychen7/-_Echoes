@@ -11,12 +11,12 @@ export const CONNECTOR_SUGGESTIONS: Record<string, string[]> = {
     'grandfather': ['伯公', '叔公', '姑婆', '婶婆', '伯婆', '外公', '外叔公'],
     'grandmother': ['舅公', '姨婆', '堂舅公', '堂姨婆', '姨外婆'],
     'sibling': ['哥哥', '弟弟', '姐姐', '妹妹'], // 亲兄弟姐妹
-    'self_p': ['堂哥', '堂弟', '堂姐', '堂妹'], // 父系堂亲
+    'self_p': ['堂哥', '堂弟', '堂姐', '堂妹', '再从兄', '再从弟', '三从兄'], // 父系宗亲
     'child_p': ['儿子', '女儿', '侄子', '侄女', '孙子', '孙女'],
     'mother': ['舅舅', '阿姨'],
-    'm_grandfather': ['堂舅', '堂姨', '表舅', '外舅公', '外公', '姑婆'],
+    'm_grandfather': ['堂舅', '堂姨', '表舅', '外舅公', '外公', '姑婆', '表叔', '表姑'],
     'm_grandmother': ['姨姥', '表姨', '姨外婆', '外婆'],
-    'self_m': ['表哥', '表弟', '表姐', '表妹'], // 母系表亲
+    'self_m': ['表哥', '表弟', '表姐', '表妹', '再从表哥', '再从表弟'], // 母系外戚
     'child_m': ['外甥', '外甥女', '外孙', '外孙女'],
 };
 
@@ -100,11 +100,11 @@ export function validateKinshipLogic(
         };
     }
 
-    // 1. 母系红线：严禁叔伯姑
-    if (isMaternal && /叔|伯|姑/.test(rel)) {
+    // 1. 母系校验：严禁纯“叔伯姑”，但允许“表叔/表姑/堂舅（如果是同姓外戚）”
+    if (isMaternal && !rel.includes('表') && /叔|伯|姑/.test(rel)) {
         return {
             isValid: false,
-            warning: '礼法冲突：母系(外家)支脉中不可能出现叔、伯、姑。请检查方位或改为“舅/姨”。',
+            warning: '礼法冲突：母系(外家)支脉通常不直接称“叔/伯/姑”。若是母亲的表兄弟姐妹，请称呼“表舅/表姨”或“表叔/表姑”。',
             type: 'error',
             tag
         };
@@ -112,41 +112,30 @@ export function validateKinshipLogic(
 
     // 2. 父系-母族识别：奶奶分支
     if (side === 'paternal' && connector === 'grandmother') {
-        if (rel.includes('堂') && /舅|姨/.test(rel)) {
-            return {
-                isValid: false,
-                warning: '礼法冲突：奶奶的分支属于外戚（母族），不应出现“堂舅/姨”。建议改为“堂舅公/堂姨婆”。',
-                type: 'error',
-                tag
-            };
-        }
-        if (/舅|姨/.test(rel)) {
-            return { isValid: true, warning: '✅ 逻辑适配：成功识别父系中的“母族”分支坐标（如舅公）。', type: 'success', tag };
-        }
-        if (/叔|伯|姑/.test(rel)) {
-            return { isValid: false, warning: '逻辑冲突：奶奶的分支属于外戚，不应出现叔/伯/姑。', type: 'error', tag };
+        if (/叔|伯|姑/.test(rel) && !rel.includes('表') && !rel.includes('堂')) {
+            return { isValid: false, warning: '逻辑冲突：奶奶的分支属于外戚，通常称呼舅/姨系统。', type: 'error', tag };
         }
     }
 
     // 3. 堂舅逻辑纠偏
     if (rel.includes('堂') && !/舅|姨/.test(rel) && side === 'maternal') {
-        return { isValid: false, warning: '逻辑矛盾：母系通常不称“堂”。若是母亲的堂兄弟，请称呼“堂舅”。', type: 'error', tag };
+        const isBiao = rel.includes('表');
+        if (!isBiao) {
+            return { isValid: false, warning: '逻辑矛盾：母系通常不单独称“堂”。若是母亲的堂兄弟，请称呼“堂舅”。', type: 'error', tag };
+        }
     }
 
     // 爷爷分支防错
     if (side === 'paternal' && connector === 'grandfather') {
-        if (/舅|姨/.test(rel)) {
-            return { isValid: false, warning: '爷爷的分支（父系宗亲核心）不应出现舅/姨称谓，请确认方位。', type: 'error', tag };
-        }
-        if (mySurname && targetSurname && targetSurname !== mySurname) {
-            return { isValid: true, warning: '⚠️ 录入爷爷的分支但姓氏不同，请确认是否为“表亲”(如姑母或姑婆的后代)。', type: 'warning', tag };
+        if ((rel.includes('舅') || rel.includes('姨')) && !rel.includes('表') && !rel.includes('堂')) {
+            return { isValid: false, warning: '爷爷的分支（父系宗亲核心）不应直接出现舅/姨称谓，请确认方位。', type: 'error', tag };
         }
     }
 
     return { isValid: true, type: 'success', tag };
 }
 
-import { computeReverseViaMumuy, computeKinshipViaMumuy } from './kinshipBridge';
+import { computeKinshipViaMumuy } from './kinshipBridge';
 import { STANDARD_ROLE_LABELS, getCleanRelationship } from './relationships';
 
 /**
@@ -164,9 +153,8 @@ export function getReverseKinship(
     // --- 🚀 核心升级：如果具备 55.0 引擎环境，直接进行视角对调推演 ---
     if (targetNode && viewerNode && members && members.length > 0) {
         try {
-            // 反向关系即：以 Target 为观察者，看 Viewer 是什么
             const rev = computeKinshipViaMumuy(viewerNode, targetNode, members);
-            if (rev && !['亲属', '其他', '亲戚'].includes(rev)) return rev;
+            if (rev && !['亲属', '其他', '亲戚', '家人'].includes(rev)) return rev;
         } catch (e) { }
     }
 
@@ -178,7 +166,10 @@ export function getReverseKinship(
 
     const coreRel = getCleanRelationship(rel);
     const isMale = normalizeGender(myGender) === 'male';
-    const mySexStr: 'male' | 'female' = isMale ? 'male' : 'female';
+
+    // 提取前缀 (堂、表、再从、三从、族)
+    const prefixes = ['再从', '三从', '堂', '表', '族'];
+    const prefix = prefixes.find(p => rel.includes(p)) || '';
 
     // =====================================================================
     // --- 🌟 Fallback: 启发式内置规则 (用于只有文本标签的场景) ---
@@ -190,9 +181,14 @@ export function getReverseKinship(
         }
     }
 
-    if (/叔|伯/.test(coreRel)) return isMale ? '侄子' : '侄女';
-    if (/舅|姨/.test(coreRel)) return isMale ? '外甥' : '外甥女';
-    if (/哥|姐|弟|妹/.test(coreRel)) return isMale ? '兄弟/姐弟' : '姐妹/兄妹';
+    if (/叔|伯/.test(coreRel)) return prefix + (isMale ? '侄子' : '侄女');
+    if (/姑/.test(coreRel)) return prefix + (isMale ? '外甥' : '外甥女');
+    if (/舅|姨/.test(coreRel)) return prefix + (isMale ? '外甥' : '外甥女');
+    if (/哥|姐|弟|妹/.test(coreRel)) {
+        const isOlder = /哥|姐/.test(coreRel);
+        if (isMale) return isOlder ? prefix + '弟' : prefix + '哥';
+        return isOlder ? prefix + '妹' : prefix + '姐';
+    }
     if (coreRel === '父亲' || coreRel === '母亲' || /爸|妈/.test(coreRel)) return isMale ? '儿子' : '女儿';
 
     return '亲属';

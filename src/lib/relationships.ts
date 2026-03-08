@@ -6,6 +6,13 @@
  * 参见：https://github.com/mumuy/relationship
  */
 import { computeKinshipViaMumuy, computeReverseViaMumuy } from './kinshipBridge';
+import {
+    normalizeGender,
+    NUM_CHAR,
+    ANCESTOR_PREFIX,
+    DESCENDANT_PREFIX,
+    FEMALE_KEYWORDS
+} from './utils';
 
 // NOTE: 标准角色对应的中文显示名
 export const STANDARD_ROLE_LABELS: Record<string, string> = {
@@ -90,17 +97,20 @@ export const RELATIONSHIP_OPTIONS = [
 /** 统一性别判断逻辑 */
 export function isFemale(node: any): boolean {
     if (!node) return false;
-    const g = (node.gender || "").toString().toLowerCase().trim();
-    if (g === "female" || g === "女") return true;
-    if (g === "male" || g === "男") return false;
 
+    // 优先：使用通用底层规范
+    const normalized = normalizeGender(node.gender);
+    if (normalized === 'female') return true;
+    if (normalized === 'male') return false;
+
+    // 其次：根据称谓关键词模糊判定
     const rawR = (node.relationship || "").trim();
     const name = (node.name || "").trim();
-    const femaleKeywords = ["阿姨", "姑姑", "母", "妈", "娘", "奶", "婆", "姐", "妹", "嫂", "侄女", "外甥女", "表姐", "表妹", "堂姐", "堂妹", "内侄女", "女"];
+    const femaleKeywords = ["阿姨", "姑姑", "母", "妈", "娘", "奶", "婆", "姐", "妹", "嫂", "侄女", "外甥女", "表姊", "表妹", "堂姊", "堂妹", "内侄女", "女", "堂姨", "表姨"];
     if (femaleKeywords.some(word => rawR.includes(word))) return true;
 
     if (["侄", "外甥", "孙"].some(k => rawR.includes(k))) {
-        if (["女", "妹", "姐"].some(k => rawR.includes(k))) return true;
+        if (["女", "妹", "姐", "姊"].some(k => rawR.includes(k))) return true;
     }
 
     return femaleKeywords.some(word => name.includes(word));
@@ -114,7 +124,7 @@ export function getCleanRelationship(rel: string): string {
     let clean = (rel || "").trim();
     if (!clean || specialTwoWords.includes(clean)) return clean;
 
-    const rankRegex = /^(大|小|老|一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|二十一|二十二|二十三|二十四|二十五|二十六|二十七|二十八|二十九|三十|排行|排行老|细|幺)+/;
+    const rankRegex = /^(大|小|老|一|二|三|四|五|六|七|八|九|十|十一|十二|十三|十四|十五|十六|十七|十八|十九|二十|再从|三从|族|排行|排行老|细|幺)+/;
     const match = clean.match(rankRegex);
 
     if (match && clean.length > match[0].length) {
@@ -149,13 +159,10 @@ export function deduceRole(relationship: string): string {
         "曾祖父": "great_grandfather", "曾祖母": "great_grandmother",
         "爷爷": "grandfather_paternal", "奶奶": "grandmother_paternal",
         "外公": "grandfather_maternal", "外婆": "grandmother_maternal",
-        "公": "grandfather_maternal", "婆": "grandmother_maternal",
-        "姨外婆": "grandmother_maternal", "姑婆": "grandmother_paternal",
-        "舅公": "grandfather_maternal", "姨婆": "grandmother_maternal",
         "阿哥": "brother", "阿弟": "brother",
         "阿姐": "sister", "阿妹": "sister", "哥哥": "brother", "弟弟": "brother", "姐姐": "sister", "妹妹": "sister",
         "侄子": "nephew", "外甥": "nephew", "侄女": "niece", "外甥女": "niece", "儿子": "son", "女儿": "daughter",
-        "孙子": "grandson", "孙女": "granddaughter"
+        "孙子": "grandson", "外孙": "grandson", "孙女": "granddaughter", "外孙女": "granddaughter"
     };
     return map[clean] || "family";
 }
@@ -170,10 +177,8 @@ export interface KinshipContext {
     dialect: DialectConfig;
 }
 
-const engineCache = new WeakMap<any[], KinshipContext>();
-
 export function getKinshipContext(members: any[]): KinshipContext {
-    if (engineCache.has(members)) return engineCache.get(members)!;
+    // 强制每次获取时更新 Map，确保动态添加的成员可见 (解决测试缓存问题)
     const membersMap = new Map<number, any>();
     for (const m of members) {
         membersMap.set(Number(m.id), {
@@ -185,7 +190,6 @@ export function getKinshipContext(members: any[]): KinshipContext {
         });
     }
     const ctx: KinshipContext = { membersMap, memo: new Map(), dialect: { name: "hokkien" } };
-    engineCache.set(members, ctx);
     return ctx;
 }
 
@@ -301,8 +305,8 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
     const hall = tNode.ancestralHall || tNode.ancestral_hall || "";
     const hallSuffix = hall ? ` · ${hall}` : "";
 
-    // 2. 判定是否为“至亲” (用于排查伪装成血亲的社交关系)
-    const isDirect = /^(大|二|三|四|五|六|七|八|九|十|小|老|幺)?(本人|爷爷|奶奶|外公|外婆|爸爸?|妈妈?|哥哥?|弟弟?|姐姐?|妹妹?|儿子|女儿|父亲|母亲|祖父|祖母|外祖父|外祖母)$/.test(rel);
+    // 2. 判定是否为“至亲” (涵盖 55.0 引擎输出的所有直系组合)
+    const isDirect = /^(大|二|三|四|五|六|七|八|九|十|小|老|幺)?(本人|爷爷|奶奶|外公|外婆|爸爸?|妈妈?|哥哥?|弟弟?|姐姐?|妹妹?|儿子|女儿|父亲|母亲|祖父|祖母|外祖父|外祖母|孙子|孙女|曾孙子|曾孙女|外孙|外孙女)$/.test(rel);
 
     // 1. 公共非血缘分类 (严格依赖 memberType 或 kinshipType)
     const isSocialOrPet = tNode.memberType === 'pet' || tNode.member_type === 'pet' ||
@@ -324,8 +328,9 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
     if (isDirect) return "【至亲】";
 
     // 3. 相对支脉判定：根据相对称谓中的关键字决定“宗”还是“外”
-    if (/堂|叔|伯|姑/.test(rel)) return `【宗亲】${hallSuffix}`;
+    // 注意：优先判定“外戚”关键词，解决“堂舅”被误分为宗亲的问题
     if (/表|舅|姨/.test(rel)) return `【外戚】${hallSuffix}`;
+    if (/堂|叔|伯|姑/.test(rel)) return `【宗亲】${hallSuffix}`;
 
     // 4. 极端兜底：如果无法推算相对路径，尝试参考物理坐标
     const tTag = (tNode.logicTag || tNode.logic_tag || "").toString().toUpperCase();
