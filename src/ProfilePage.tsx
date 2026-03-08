@@ -1262,7 +1262,7 @@ export const ProfilePage: React.FC = () => {
 
                     <div className="bg-slate-50 p-6 rounded-[2.5rem] border-2 border-slate-100/50 flex flex-col items-center gap-4 relative">
                       <div
-                        className="w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-white relative group cursor-pointer shrink-0"
+                        className="w-24 h-24 rounded-full border-4 border-white shadow-xl overflow-hidden bg-white relative group cursor-pointer shrink-0"
                         onClick={() => setShowInviteAvatarPicker(!showInviteAvatarPicker)}
                       >
                         <img
@@ -1270,7 +1270,7 @@ export const ProfilePage: React.FC = () => {
                           alt="Avatar"
                           className="w-full h-full object-cover transition-transform group-hover:scale-110"
                         />
-                        <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                           <Camera className="text-white" size={20} />
                         </div>
                       </div>
@@ -1315,47 +1315,77 @@ export const ProfilePage: React.FC = () => {
                         )}
                       </AnimatePresence>
 
-                      <div className="w-full flex flex-col gap-4 mt-2">
-                        <div className="space-y-1.5 text-left w-full">
-                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">真实姓名</label>
+                      {/* 第一部分：我是谁（确认或修正自己的排行） */}
+                      <div className="space-y-3 p-5 bg-white rounded-3xl border border-slate-100 shadow-sm w-full">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest leading-none">您的家族定位</label>
+                          <span className="text-[10px] bg-[#eab308]/10 text-[#eab308] px-2 py-0.5 rounded-full font-bold">需核对</span>
+                        </div>
+                        <div className="space-y-4">
                           <div className="relative">
                             {isEditingTempName ? (
                               <input
                                 autoFocus
                                 type="text"
-                                className="w-full h-14 rounded-2xl bg-white border-2 border-[#eab308] ring-4 ring-[#eab308]/10 px-5 font-bold text-slate-800 placeholder:text-slate-300 transition-all shadow-sm"
+                                className="w-full h-12 rounded-xl bg-slate-50 border-2 border-[#eab308] px-4 font-bold text-slate-800"
                                 value={tempName}
                                 onChange={(e) => setTempName(e.target.value)}
                                 onBlur={() => setIsEditingTempName(false)}
-                                placeholder="请输入您的姓名"
                               />
                             ) : (
-                              <div className="w-full h-14 rounded-2xl bg-white border-2 border-slate-100 px-5 font-bold text-slate-800 shadow-sm flex items-center justify-between">
-                                <span className={tempName ? "text-slate-800" : "text-slate-300"}>{tempName || "请输入您的姓名"}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setIsEditingTempName(true)}
-                                  className="p-1.5 rounded-full hover:bg-[#eab308]/10 text-slate-300 hover:text-[#eab308] transition-all"
-                                >
+                              <div className="flex items-center justify-between">
+                                <span className="text-lg font-black text-slate-800">{tempName}</span>
+                                <button onClick={() => setIsEditingTempName(true)} className="p-2 text-slate-300 hover:text-[#eab308]">
                                   <Edit2 size={16} />
                                 </button>
                               </div>
                             )}
                           </div>
-                        </div>
-
-                        <div className="space-y-1.5 text-left w-full">
-                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">邀请人对您的称呼</label>
-                          <div className="w-full h-14 rounded-2xl bg-slate-50 border-2 border-slate-100 px-5 font-bold text-slate-400 shadow-sm flex items-center">
-                            <span>{inviteData && inviteData.targetRole || "未知"}</span>
+                          <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-2xl">
+                            <div className="size-8 bg-white rounded-lg flex items-center justify-center shadow-sm text-sm font-black text-[#eab308]">
+                              {inviteData.targetAncestralHall?.charAt(0) || "?"}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-[10px] text-slate-400 font-bold">您所属的房分</p>
+                              <p className="text-sm font-black text-slate-700">{inviteData.targetAncestralHall || "未录入"}</p>
+                            </div>
+                            <div className="h-8 w-px bg-slate-200" />
+                            <div className="flex-1 pl-2">
+                              <p className="text-[10px] text-slate-400 font-bold">排行</p>
+                              <select
+                                className="bg-transparent text-sm font-black text-slate-700 outline-none w-full"
+                                value={inviteData.targetSiblingOrder || ""}
+                                onChange={(e) => {
+                                  const newOrder = e.target.value ? parseInt(e.target.value) : null;
+                                  setInviteData({ ...inviteData, targetSiblingOrder: newOrder });
+                                }}
+                              >
+                                <option value="">未知</option>
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => (
+                                  <option key={v} value={v}>老{['大', '二', '三', '四', '五', '六', '七', '八', '九', '十'][v - 1]}</option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
                         </div>
+                      </div>
 
-                        <div className="space-y-1.5 text-left w-full">
-                          <label className="text-[11px] font-black text-indigo-500 uppercase tracking-widest ml-1">您对邀请人 <span className="text-slate-800">{inviteData.inviterName}</span> 的称呼</label>
-                          <div className="w-full h-14 rounded-2xl bg-indigo-50 border-2 border-indigo-100 px-5 font-bold text-indigo-600 shadow-sm flex items-center justify-between">
-                            <span>{selectedRel || "尚未确定"}</span>
-                            <div className="text-[10px] bg-indigo-500 text-white px-2 py-0.5 rounded-full">智能推导</div>
+                      {/* 第二部分：TA是谁 */}
+                      <div className="space-y-3 p-5 bg-indigo-50/50 rounded-3xl border border-indigo-100 shadow-sm w-full">
+                        <label className="text-[11px] font-black text-indigo-400 uppercase tracking-widest ml-1">您如何称呼邀请人</label>
+                        <div className="relative">
+                          <select
+                            value={selectedRel}
+                            onChange={(e) => setSelectedRel(e.target.value)}
+                            className="w-full h-12 rounded-xl bg-white border-2 border-indigo-200 px-4 font-black text-indigo-600 appearance-none shadow-sm"
+                          >
+                            <option value="">请选择称呼</option>
+                            {["堂哥", "堂姐", "堂弟", "堂妹", "哥哥", "姐姐", "弟弟", "妹妹", "伯伯", "叔叔", "姑妈", "大伯", "其他"].map(r => (
+                              <option key={r} value={r}>{r}</option>
+                            ))}
+                          </select>
+                          <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-300">
+                            <ChevronDown size={16} />
                           </div>
                         </div>
                       </div>
