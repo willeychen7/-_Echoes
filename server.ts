@@ -566,6 +566,8 @@ export async function createApp() {
           member_type: memberType || 'human',
           generation_num: generationNum || null,
           logic_tag: logicTag || null,
+          origin_side: req.body.originSide || null,
+          is_placeholder: req.body.is_placeholder || false,
           added_by_member_id: createdByMemberId || null,  // 记录是谁把此人加入家族的
           sibling_order: req.body.siblingOrder || null    // 家中排行
         };
