@@ -754,6 +754,44 @@ export async function createApp() {
       return false;
     };
 
+    /**
+     * --- 🚨 Helper: Recursive Family Unification (归宗引擎) ---
+     * 当一个成员 ID 变更家族时，递归将其所有带入的人及其资产一并迁移
+     */
+    const syncFamilyRecursive = async (memberId: number, newFamilyId: number, visited = new Set<number>()) => {
+      if (visited.has(memberId)) return;
+      visited.add(memberId);
+
+      console.log(`[SYNC-FAMILY] 正在将成员 ${memberId} 及其子树递归迁移至家族 ${newFamilyId}`);
+
+      // 1. 更新成员自身的 family_id
+      await supabase.from("family_members").update({ family_id: newFamilyId }).eq("id", memberId);
+
+      // 2. 更新该成员名下的所有核心资产
+      await supabase.from("memories").update({ family_id: newFamilyId }).eq("member_id", memberId);
+      await supabase.from("messages").update({ family_id: newFamilyId }).eq("family_member_id", memberId);
+      await supabase.from("events").update({ family_id: newFamilyId }).eq("member_id", memberId);
+
+      // 2.5 核心补充：如果该档案已绑定真实用户，同步更新用户的 family_id 字段
+      await supabase.from("users").update({ family_id: newFamilyId }).eq("member_id", memberId);
+
+      // 3. 核心：递归寻找“我录入的人” (By added_by_member_id)
+      const { data: children } = await supabase.from("family_members").select("id").eq("added_by_member_id", memberId);
+      if (children && children.length > 0) {
+        for (const child of children) {
+          await syncFamilyRecursive(child.id, newFamilyId, visited);
+        }
+      }
+
+      // 4. 补充：寻找通过 archive_memory_creators 建立的创建关系（防止旧数据断链）
+      const { data: createdRefs } = await supabase.from("archive_memory_creators").select("member_id").eq("creator_member_id", memberId);
+      if (createdRefs && createdRefs.length > 0) {
+        for (const ref of createdRefs) {
+          if (ref.member_id) await syncFamilyRecursive(ref.member_id, newFamilyId, visited);
+        }
+      }
+    };
+
     // --- Helper: Rigorous Relationship Resolver ---
     const resolveRigorousRel = async (role: string, inviter: any, targetId: number, explicitGender?: "male" | "female" | null) => {
       let updateData: any = { id: targetId, gender: explicitGender || undefined };
@@ -1035,13 +1073,18 @@ export async function createApp() {
           userData = created;
         }
 
+        // 5. Persistence link & Recursive Sync (归宗)
         // 5. Persistence link
         if (userData) {
           await supabase.from("family_members").update({ user_id: userData.id }).eq("id", targetId);
         }
 
-        // 6. Final Sync
-        await syncMemberContent(targetId, name, target.name, avatarUrl, "我");
+        // 5. Recursive Sync (归宗)
+        // 确保认领者带入的所有子树和资产全量同步到新家族
+        await syncFamilyRecursive(data.id, inviter.family_id);
+
+        // 6. Final Logic Check
+        await syncMemberContent(data.id, name, target.name, avatarUrl, "我");
 
         console.log("[CLAIM] Success:", { memberId: data.id, familyId: inviter.family_id, userId: userData?.id });
         res.json({ success: true, memberId: data.id, familyId: inviter.family_id, userId: userData?.id });
@@ -1456,6 +1499,10 @@ export async function createApp() {
           name: finalTargetData.name,
           avatar_url: finalTargetData.avatar_url
         }).eq("id", currentUser.id);
+
+        // 6. Recursive Sync (归宗)
+        // 确保受邀者带入的所有子树和资产递归搬迁到大家族
+        await syncFamilyRecursive(finalMember.id, inviter.family_id);
 
         res.json({ success: true, memberId: finalMember.id, familyId: inviter.family_id, userId: currentUser.id });
       } catch (err: any) {
