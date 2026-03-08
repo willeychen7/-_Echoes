@@ -1154,6 +1154,13 @@ export async function createApp() {
         const { userId, phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl, mode, targetSiblingOrder, inviterAncestralHall, inviterGenerationNum, birthDate, gender } = req.body;
         // mode: "migrate" 迁移内容 | "clear" 清空内容 | "direct" 默认直接加入
         let effectiveMode: string = mode || "direct";
+
+        // --- 🚨 礼法防火墙：前置强校验 ---
+        // 在进行任何数据库操作前，先验证称谓与性别逻辑
+        if (gender && checkGenderConflict(relationshipToInviter, gender)) {
+          return res.status(400).json({ error: `礼法冲突：身份“${relationshipToInviter}”与系统选定的性别不符。` });
+        }
+
         if ((!userId && !phone) || !inviteCode) {
           console.error("[ACCEPT:ERROR] Missing fields:", { userId: !!userId, phone: !!phone, inviteCode: !!inviteCode });
           return res.status(400).json({ error: "Required fields missing" });
@@ -1419,10 +1426,7 @@ export async function createApp() {
         const finalTargetId = target.id;
         const finalGender = gender || target.gender;
 
-        // --- Kinship Firewall: Gender consistency check ---
-        if (finalGender && checkGenderConflict(relationshipToInviter, finalGender)) {
-          return res.status(400).json({ error: `礼法冲突：身份“${relationshipToInviter}”与系统记录的性别不符。` });
-        }
+        // --- Kinship Firewall: (Removed from here, moved to the top) ---
 
         // 1.9 Pre-sync inviter info from request to influence final resolution
         if (inviterAncestralHall && !inviter.ancestral_hall) {
