@@ -90,6 +90,7 @@ export const ProfilePage: React.FC = () => {
   const [isCroppingForInvite, setIsCroppingForInvite] = useState(false);
   const [isEditingTempName, setIsEditingTempName] = useState(false);
   const [customRelText, setCustomRelText] = useState("");
+  const [elderRel, setElderRel] = useState(""); // 新增：记录对邀请人父辈的称呼
   // 迁移对话框
   const [migrationInfo, setMigrationInfo] = useState<any>(null); // null = 不需要迁移，{} = 需要确认
   const [pendingAcceptParams, setPendingAcceptParams] = useState<any>(null);
@@ -1314,6 +1315,69 @@ export const ProfilePage: React.FC = () => {
                           </motion.div>
                         )}
                       </AnimatePresence>
+
+                      {/* === 🚀 核心新增：长辈称谓交叉验证 === */}
+                      <div className="space-y-4 p-5 bg-white rounded-3xl border border-slate-100 shadow-sm w-full">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest leading-none text-left">血脉核对：长辈称议</label>
+                          <span className="text-[10px] bg-indigo-50 text-indigo-500 px-2 py-0.5 rounded-full font-bold">反向验证</span>
+                        </div>
+
+                        <div className="space-y-3">
+                          <p className="text-xs text-slate-500 font-medium text-left leading-relaxed">
+                            您称呼 <span className="text-slate-800 font-bold">{inviteData.inviterName}</span> 的父亲（您的伯叔）为？
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {["大伯", "二伯", "三伯", "叔叔", "爸爸", "不知道"].map(btn => (
+                              <button
+                                key={btn}
+                                onClick={() => setElderRel(btn)}
+                                className={cn(
+                                  "px-4 py-2.5 rounded-2xl text-xs font-black transition-all border-2",
+                                  elderRel === btn
+                                    ? "bg-slate-800 text-white border-slate-800 shadow-lg scale-95"
+                                    : "bg-white text-slate-400 border-slate-100 hover:border-slate-200"
+                                )}
+                              >
+                                {btn}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* 校验反馈逻辑 */}
+                          {elderRel && elderRel !== "不知道" && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className={cn(
+                                "p-3 rounded-2xl flex items-start gap-3 border-2",
+                                (
+                                  (elderRel === "大伯" && inviteData.inviterAncestralHall === "大房") ||
+                                  (elderRel === "二伯" && inviteData.inviterAncestralHall === "二房") ||
+                                  (elderRel === "三伯" && inviteData.inviterAncestralHall === "三房") ||
+                                  (elderRel === "爸爸" && inviteData.inviterAncestralHall === inviteData.targetAncestralHall) ||
+                                  (elderRel === "叔叔" && ["三房", "四房", "五房", "六房", "七房", "八房", "九房", "十房", "小房"].includes(inviteData.inviterAncestralHall || ""))
+                                )
+                                  ? "bg-emerald-50 border-emerald-100/50 text-emerald-600"
+                                  : "bg-orange-50 border-orange-100/50 text-orange-600"
+                              )}
+                            >
+                              <div className="mt-0.5">
+                                {((elderRel === "大伯" && inviteData.inviterAncestralHall === "大房") || (elderRel === "二伯" && inviteData.inviterAncestralHall === "二房") || (elderRel === "三伯" && inviteData.inviterAncestralHall === "三房") || (elderRel === "爸爸" && inviteData.inviterAncestralHall === inviteData.targetAncestralHall) || (elderRel === "叔叔" && ["三房", "四房", "五房", "六房", "七房", "八房", "九房", "十房", "小房"].includes(inviteData.inviterAncestralHall || "")))
+                                  ? <CheckCircle size={14} />
+                                  : <Bell size={14} className="animate-pulse" />
+                                }
+                              </div>
+                              <div className="text-[10px] font-bold text-left leading-normal">
+                                {((elderRel === "大伯" && inviteData.inviterAncestralHall === "大房") || (elderRel === "二伯" && inviteData.inviterAncestralHall === "二房") || (elderRel === "三伯" && inviteData.inviterAncestralHall === "三房") || (elderRel === "爸爸" && inviteData.inviterAncestralHall === inviteData.targetAncestralHall) || (elderRel === "叔叔" && ["三房", "四房", "五房", "六房", "七房", "八房", "九房", "十房", "小房"].includes(inviteData.inviterAncestralHall || "")))
+                                  ? `验证吻合：您称呼${elderRel}，这与对方登记的“${inviteData.inviterAncestralHall}”身份完全匹配。`
+                                  : `信息不符：您称呼${elderRel}，但对方登记为“${inviteData.inviterAncestralHall}”。建议您核实对方或您自己的房分排行。`
+                                }
+                              </div>
+                            </motion.div>
+                          )}
+                        </div>
+                      </div>
 
                       {/* 第一部分：我是谁（确认或修正自己的排行） */}
                       <div className="space-y-3 p-5 bg-white rounded-3xl border border-slate-100 shadow-sm w-full">
