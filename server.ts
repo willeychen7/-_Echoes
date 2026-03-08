@@ -863,10 +863,10 @@ export async function createApp() {
 
     app.post("/api/register-claim", async (req, res) => {
       try {
-        const { inviteCode, name, avatarUrl, relationshipToInviter, standardRole, phone, password, birthDate } = req.body;
-        if (!inviteCode || !name || !phone || !password || !birthDate) {
-          console.error("[CLAIM:ERROR] Missing fields:", { inviteCode: !!inviteCode, name: !!name, phone: !!phone, password: !!password, birthDate: !!birthDate });
-          return res.status(400).json({ error: "Required fields missing (name, phone, password, birthDate)" });
+        const { inviteCode, name, avatarUrl, relationshipToInviter, standardRole, phone, password, birthDate, gender } = req.body;
+        if (!inviteCode || !name || !phone || !password) {
+          console.error("[CLAIM:ERROR] Missing fields:", { inviteCode: !!inviteCode, name: !!name, phone: !!phone, password: !!password });
+          return res.status(400).json({ error: "Required fields missing (name, phone, password)" });
         }
 
         let targetId: number | null = null;
@@ -902,7 +902,15 @@ export async function createApp() {
         const { updateData, invUpdate } = await resolveRigorousRel(standardRole, inviter, target.id);
 
         // Merge additional fields
-        const finalTargetData = { ...updateData, is_registered: true, name, avatar_url: avatarUrl, relationship: relationshipToInviter };
+        const finalTargetData = {
+          ...updateData,
+          is_registered: true,
+          name,
+          avatar_url: avatarUrl,
+          relationship: relationshipToInviter,
+          birth_date: birthDate || null,
+          gender: gender || null
+        };
 
         // 3. Update target member
         const { data, error } = await supabase.from("family_members").update(finalTargetData).eq("id", target.id).select().single();
@@ -1035,7 +1043,7 @@ export async function createApp() {
     app.post("/api/accept-invite", async (req, res) => {
       try {
         // NOTE: 优先使用 userId（UUID）识别用户，不再依赖容易丢失的 phone 字段
-        const { userId, phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl, mode, targetSiblingOrder, inviterAncestralHall, inviterGenerationNum } = req.body;
+        const { userId, phone, inviteCode, relationshipToInviter, standardRole, name, avatarUrl, mode, targetSiblingOrder, inviterAncestralHall, inviterGenerationNum, birthDate } = req.body;
         // mode: "migrate" 迁移内容 | "clear" 清空内容 | "direct" 默认直接加入
         let effectiveMode: string = mode || "direct";
         if ((!userId && !phone) || !inviteCode) {
@@ -1316,6 +1324,7 @@ export async function createApp() {
         // 核心逻辑：如果前端传了确认/修改后的姓名和头像，优先使用；否则保留用户当前资料
         finalTargetData.name = name || currentUser.name || target.name;
         finalTargetData.avatar_url = avatarUrl || currentUser.avatar_url || target.avatar_url;
+        finalTargetData.birth_date = birthDate || null;
 
         // 3. Update active family member (ID 456)
         if (targetSiblingOrder != null) {
@@ -1377,8 +1386,8 @@ export async function createApp() {
       console.log("[REGISTER-NEW] Start registration for:", req.body.phone);
       try {
         const { name, phone, password, avatar, birthDate } = req.body;
-        if (!name || !phone || !password || !birthDate) {
-          return res.status(400).json({ error: "Missing required fields (name, phone, password, birthDate)" });
+        if (!name || !phone || !password) {
+          return res.status(400).json({ error: "Missing required fields (name, phone, password)" });
         }
 
         // 先检查是否已存在
@@ -1408,7 +1417,7 @@ export async function createApp() {
             relationship: "创建者",
             avatar_url: avatar || "",
             gender: req.body.gender,
-            birth_date: birthDate,
+            birth_date: birthDate || null,
             is_registered: true,
             standard_role: "creator"
           })

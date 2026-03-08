@@ -44,6 +44,7 @@ export const RegisterPage: React.FC = () => {
   const [verificationError, setVerificationError] = useState("");
   const [showCropper, setShowCropper] = useState(false);
   const [tempImage, setTempImage] = useState<string | null>(null);
+  const [isBirthDateUnknown, setIsBirthDateUnknown] = useState(false);
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -54,7 +55,7 @@ export const RegisterPage: React.FC = () => {
     }
   }, []);
 
-  const canSubmit = name && phone && password && confirmPassword && verificationCode && birthDate;
+  const canSubmit = name && phone && password && confirmPassword && verificationCode && (birthDate || isBirthDateUnknown);
 
   const topRelationships = [
     { label: "儿子", value: "son" },
@@ -448,14 +449,41 @@ export const RegisterPage: React.FC = () => {
             <span className="text-[#1e293b] text-lg font-bold px-1 flex items-center gap-1">
               您的生日 <span className="text-rose-500 text-base">*</span>
             </span>
-            <input
-              className="w-full rounded-[2rem] border-none bg-white shadow-sm h-16 px-6 text-lg text-black placeholder:text-slate-400 focus:ring-2 focus:ring-[#eab308]/20 transition-all font-mono"
-              type="date"
-              value={birthDate}
-              onChange={(e) => setBirthDate(e.target.value)}
-              required
-            />
-            <p className="text-[10px] text-slate-400 px-2 italic">提示：生日将用于在家族大事记中为您举行庆生。</p>
+            <div className="relative">
+              <input
+                className={cn(
+                  "w-full rounded-[2rem] border-none bg-white shadow-sm h-16 px-6 text-lg text-black placeholder:text-slate-400 focus:ring-2 focus:ring-[#eab308]/20 transition-all font-mono",
+                  isBirthDateUnknown && "opacity-50 pointer-events-none bg-slate-50"
+                )}
+                type="date"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                disabled={isBirthDateUnknown}
+              />
+              {isBirthDateUnknown && (
+                <div className="absolute inset-0 flex items-center px-6">
+                  <span className="text-slate-400 font-bold italic">生日不详</span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between px-2">
+              <p className="text-[10px] text-slate-400 italic">提示：生日将用于在家族大事记中为您举行庆生。</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBirthDateUnknown(!isBirthDateUnknown);
+                  if (!isBirthDateUnknown) setBirthDate("");
+                }}
+                className={cn(
+                  "text-xs font-bold px-3 py-1.5 rounded-full transition-all",
+                  isBirthDateUnknown
+                    ? "bg-[#eab308] text-black"
+                    : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                )}
+              >
+                {isBirthDateUnknown ? "撤销“不知道”" : "不知道生日"}
+              </button>
+            </div>
           </label>
 
           <label className="flex flex-col gap-3">
@@ -577,13 +605,27 @@ export const RegisterPage: React.FC = () => {
                       </div>
 
                       <div className="space-y-1.5 text-left w-full">
-                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">出生日期</label>
-                        <input
-                          type="date"
-                          className="w-full h-12 rounded-2xl bg-white border-2 border-slate-100 px-5 font-bold"
-                          value={birthDate}
-                          onChange={(e) => setBirthDate(e.target.value)}
-                        />
+                        <div className="flex items-center justify-between ml-1">
+                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">出生日期</label>
+                          <button
+                            onClick={() => setIsBirthDateUnknown(!isBirthDateUnknown)}
+                            className="text-[10px] font-bold text-[#eab308]"
+                          >
+                            {isBirthDateUnknown ? "设为已知" : "不知道"}
+                          </button>
+                        </div>
+                        {isBirthDateUnknown ? (
+                          <div className="w-full h-12 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 px-5 font-bold flex items-center text-slate-400 italic">
+                            不详
+                          </div>
+                        ) : (
+                          <input
+                            type="date"
+                            className="w-full h-12 rounded-2xl bg-white border-2 border-slate-100 px-5 font-bold"
+                            value={birthDate}
+                            onChange={(e) => setBirthDate(e.target.value)}
+                          />
+                        )}
                       </div>
 
                       <div className="space-y-1.5 text-left w-full">
