@@ -829,6 +829,14 @@ export const ArchivePage: React.FC = () => {
                         </button>
                       )}
 
+                      {/* 房分标签：若录入时指定了几房，在此显示，方便追溯家族分支 */}
+                      {member.ancestralHall && (
+                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center gap-1 tracking-wider">
+                          <span className="text-[9px]">🏠</span>
+                          {member.ancestralHall}
+                        </span>
+                      )}
+
                       {member.isRegistered ? (
                         <span className="px-3 py-1 bg-emerald-50 text-emerald-500 rounded-full text-[10px] font-black inline-flex items-center gap-1">
                           <CheckCircle size={12} fill="currentColor" /> 已注册
