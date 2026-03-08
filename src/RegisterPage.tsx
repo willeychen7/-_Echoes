@@ -205,11 +205,19 @@ export const RegisterPage: React.FC = () => {
             name: finalName,
             avatarUrl: finalAvatar,
             relationshipToInviter: finalRole,
-            standardRole: overrideStdRole || relInfo?.value || "other",
+            standardRole: overrideStdRole || (() => {
+              if (relInfo?.value && relInfo.value !== "other") return relInfo.value;
+              if (finalRole.includes("堂") || finalRole.includes("表")) return "cousin";
+              if (finalRole.includes("侄") || finalRole.includes("外甥")) return "nephew";
+              if (finalRole.includes("叔") || finalRole.includes("伯") || finalRole.includes("舅") || finalRole.includes("姨")) return "uncle";
+              return "other";
+            })(),
             phone: phone.trim(),
             password: password.trim(),
             gender: gender,
-            birthDate: finalBirthDate
+            birthDate: finalBirthDate,
+            inviterAncestralHall: inviteData?.inviterAncestralHall,
+            inviterGenerationNum: inviteData?.inviterGenerationNum
           })
         });
 
@@ -226,7 +234,16 @@ export const RegisterPage: React.FC = () => {
         const response = await fetch("/api/register-new", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: finalName, phone, password, avatar: finalAvatar, gender, birthDate: finalBirthDate })
+          body: JSON.stringify({
+            name: finalName,
+            phone,
+            password,
+            avatar: finalAvatar,
+            gender,
+            birthDate: finalBirthDate,
+            inviterAncestralHall: inviteData?.inviterAncestralHall,
+            inviterGenerationNum: inviteData?.inviterGenerationNum
+          })
         });
 
         if (!response.ok) {

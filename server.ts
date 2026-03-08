@@ -737,27 +737,36 @@ export async function createApp() {
       // Get target's current data for reconciliation
       const { data: targetRecord } = await supabase.from("family_members").select("*").eq("id", targetId).single();
 
+      // 0. Robust Role Mapping (back-end fallback)
+      let effectiveRole = role;
+      if (effectiveRole === "other") {
+        const r = targetRecord?.relationship || "";
+        if (r.includes("堂") || r.includes("表")) effectiveRole = "cousin";
+        else if (r.includes("侄") || r.includes("外甥")) effectiveRole = "nephew";
+        else if (r.includes("叔") || r.includes("伯") || r.includes("舅") || r.includes("姨")) effectiveRole = "uncle";
+      }
+
       // 1. Generation Deduction (forward & inverse)
       if (inviter.generation_num != null) {
         const g = Number(inviter.generation_num);
-        if (["father", "mother", "uncle", "aunt"].includes(role)) updateData.generation_num = g - 1;
-        else if (["son", "daughter", "nephew", "niece"].includes(role)) updateData.generation_num = g + 1;
-        else if (["grandfather", "grandmother"].includes(role)) updateData.generation_num = g - 2;
-        else if (["grandson", "granddaughter"].includes(role)) updateData.generation_num = g + 2;
-        else if (["brother", "sister", "cousin", "spouse"].includes(role)) updateData.generation_num = g;
+        if (["father", "mother", "uncle", "aunt"].includes(effectiveRole)) updateData.generation_num = g - 1;
+        else if (["son", "daughter", "nephew", "niece"].includes(effectiveRole)) updateData.generation_num = g + 1;
+        else if (["grandfather", "grandmother"].includes(effectiveRole)) updateData.generation_num = g - 2;
+        else if (["grandson", "granddaughter"].includes(effectiveRole)) updateData.generation_num = g + 2;
+        else if (["brother", "sister", "cousin", "spouse"].includes(effectiveRole)) updateData.generation_num = g;
       } else if (targetRecord?.generation_num != null) {
         // Inverse deduction: if inviter's gen is missing but target's is known
         const g = Number(targetRecord.generation_num);
-        if (["father", "mother", "uncle", "aunt"].includes(role)) invUpdate.generation_num = g + 1;
-        else if (["son", "daughter", "nephew", "niece"].includes(role)) invUpdate.generation_num = g - 1;
-        else if (["grandfather", "grandmother"].includes(role)) invUpdate.generation_num = g + 2;
-        else if (["grandson", "granddaughter"].includes(role)) invUpdate.generation_num = g - 2;
-        else if (["brother", "sister", "cousin", "spouse"].includes(role)) invUpdate.generation_num = g;
+        if (["father", "mother", "uncle", "aunt"].includes(effectiveRole)) invUpdate.generation_num = g + 1;
+        else if (["son", "daughter", "nephew", "niece"].includes(effectiveRole)) invUpdate.generation_num = g - 1;
+        else if (["grandfather", "grandmother"].includes(effectiveRole)) invUpdate.generation_num = g + 2;
+        else if (["grandson", "granddaughter"].includes(effectiveRole)) invUpdate.generation_num = g - 2;
+        else if (["brother", "sister", "cousin", "spouse"].includes(effectiveRole)) invUpdate.generation_num = g;
       }
 
       // 2. Ancestral Hall (Paternal Branch) Propagation
       if (inviter.ancestral_hall && !targetRecord?.ancestral_hall) {
-        if (["father", "son", "brother", "grandfather", "grandson", "uncle", "nephew", "cousin"].includes(role)) {
+        if (["father", "son", "brother", "grandfather", "grandson", "uncle", "nephew", "cousin"].includes(effectiveRole)) {
           updateData.ancestral_hall = inviter.ancestral_hall;
         }
       }
@@ -785,33 +794,33 @@ export async function createApp() {
         return { fId, mId };
       };
 
-      if (role === "father") {
+      if (effectiveRole === "father") {
         invUpdate.father_id = targetId;
         updateData.gender = "male";
-      } else if (role === "mother") {
+      } else if (effectiveRole === "mother") {
         invUpdate.mother_id = targetId;
         updateData.gender = "female";
-      } else if (role === "son" || role === "daughter") {
-        updateData.gender = role === "son" ? "male" : "female";
+      } else if (effectiveRole === "son" || effectiveRole === "daughter") {
+        updateData.gender = effectiveRole === "son" ? "male" : "female";
         if (inviter.gender === "female") updateData.mother_id = inviter.id;
         else updateData.father_id = inviter.id;
-      } else if (role === "brother" || role === "sister") {
+      } else if (effectiveRole === "brother" || effectiveRole === "sister") {
         const { fId, mId } = await ensureSiblingParents(inviter.id);
         updateData.father_id = fId;
         updateData.mother_id = mId;
-        updateData.gender = role === "brother" ? "male" : "female";
-      } else if (role === "spouse") {
+        updateData.gender = effectiveRole === "brother" ? "male" : "female";
+      } else if (effectiveRole === "spouse") {
         updateData.spouse_id = inviter.id;
         invUpdate.spouse_id = targetId;
         updateData.gender = inviter.gender === "male" ? "female" : "male";
-      } else if (role === "grandfather" || role === "grandmother") {
+      } else if (effectiveRole === "grandfather" || effectiveRole === "grandmother") {
         const pId = await ensureParent(inviter.id, 'male');
         if (pId) {
-          if (role === "grandfather") await supabase.from("family_members").update({ father_id: targetId }).eq("id", pId);
+          if (effectiveRole === "grandfather") await supabase.from("family_members").update({ father_id: targetId }).eq("id", pId);
           else await supabase.from("family_members").update({ mother_id: targetId }).eq("id", pId);
         }
-        updateData.gender = role === "grandfather" ? "male" : "female";
-      } else if (role === "grandson" || role === "granddaughter") {
+        updateData.gender = effectiveRole === "grandfather" ? "male" : "female";
+      } else if (effectiveRole === "grandson" || effectiveRole === "granddaughter") {
         const { data: child } = await supabase.from("family_members").insert({
           family_id: inviter.family_id,
           name: `${inviter.name}的孩子`,
@@ -820,16 +829,16 @@ export async function createApp() {
           [inviter.gender === 'female' ? 'mother_id' : 'father_id']: inviter.id
         }).select().single();
         if (child) updateData[inviter.gender === 'female' ? 'mother_id' : 'father_id'] = child.id;
-        updateData.gender = role === "grandson" ? "male" : "female";
-      } else if (role === "uncle" || role === "aunt") {
+        updateData.gender = effectiveRole === "grandson" ? "male" : "female";
+      } else if (effectiveRole === "uncle" || effectiveRole === "aunt") {
         const parentId = await ensureParent(inviter.id, 'male');
         if (parentId) {
           const { fId, mId } = await ensureSiblingParents(parentId);
           updateData.father_id = fId;
           updateData.mother_id = mId;
         }
-        updateData.gender = role === "uncle" ? "male" : "female";
-      } else if (role === "nephew" || role === "niece") {
+        updateData.gender = effectiveRole === "uncle" ? "male" : "female";
+      } else if (effectiveRole === "nephew" || effectiveRole === "niece") {
         const gps = await ensureSiblingParents(inviter.id);
         const { data: sib } = await supabase.from("family_members").insert({
           family_id: inviter.family_id,
@@ -840,8 +849,8 @@ export async function createApp() {
           mother_id: gps.mId
         }).select().single();
         if (sib) updateData[inviter.gender === 'male' ? 'father_id' : 'mother_id'] = sib.id;
-        updateData.gender = role === "nephew" ? "male" : "female";
-      } else if (role === "cousin") {
+        updateData.gender = effectiveRole === "nephew" ? "male" : "female";
+      } else if (effectiveRole === "cousin") {
         const pId = await ensureParent(inviter.id, 'male');
         if (pId) {
           const gpId = await ensureParent(pId, 'male');
@@ -898,16 +907,22 @@ export async function createApp() {
         if (!target) return res.status(404).json({ error: "Target profile not found" });
         if (!inviter) return res.status(404).json({ error: "Inviter not found" });
 
+        let invUpdate: any = { id: inviter.id };
         // 1.9 Synchronize potential inviter info provided by claiming user
-        if (inviterAncestralHall && !inviter.ancestral_hall) inviter.ancestral_hall = inviterAncestralHall;
-        if (inviterGenerationNum && !inviter.generation_num) inviter.generation_num = inviterGenerationNum;
+        if (inviterAncestralHall && !inviter.ancestral_hall) {
+          inviter.ancestral_hall = inviterAncestralHall;
+          invUpdate.ancestral_hall = inviterAncestralHall;
+        }
+        if (inviterGenerationNum && !inviter.generation_num) {
+          inviter.generation_num = inviterGenerationNum;
+          invUpdate.generation_num = inviterGenerationNum;
+        }
 
         // 2. Perform rigorous relationship calculation & data update
-        const { updateData, invUpdate } = await resolveRigorousRel(standardRole, inviter, target.id);
+        const { updateData, invUpdate: derivedInvUpdate } = await resolveRigorousRel(standardRole, inviter, target.id);
 
-        // 2.5 Ensure the inviter's metadata is also queued for update if supplied manually
-        if (inviterAncestralHall && !inviter.ancestral_hall) invUpdate.ancestral_hall = inviterAncestralHall;
-        if (inviterGenerationNum && !inviter.generation_num) invUpdate.generation_num = inviterGenerationNum;
+        // Merge derived updates into our final invUpdate
+        invUpdate = { ...invUpdate, ...derivedInvUpdate };
 
         // Merge additional fields
         const finalTargetData = {
@@ -1319,13 +1334,20 @@ export async function createApp() {
         const finalTargetId = target.id;
 
         // 1.9 Pre-sync inviter info from request to influence final resolution
-        if (inviterAncestralHall && !inviter.ancestral_hall) inviter.ancestral_hall = inviterAncestralHall;
-        if (inviterGenerationNum && !inviter.generation_num) inviter.generation_num = inviterGenerationNum;
+        if (inviterAncestralHall && !inviter.ancestral_hall) {
+          inviter.ancestral_hall = inviterAncestralHall;
+          invUpdate.ancestral_hall = inviterAncestralHall;
+        }
+        if (inviterGenerationNum && !inviter.generation_num) {
+          inviter.generation_num = inviterGenerationNum;
+          invUpdate.generation_num = inviterGenerationNum;
+        }
 
         // 2. Perform rigorous relationship calculation
         const resolved = await resolveRigorousRel(standardRole, inviter, finalTargetId);
         updateData = resolved.updateData;
-        invUpdate = resolved.invUpdate;
+        // Merge derived invUpdate from resolver
+        invUpdate = { ...invUpdate, ...resolved.invUpdate };
 
         const finalTargetData: any = {
           ...updateData,
@@ -1350,7 +1372,8 @@ export async function createApp() {
         if ((inviterAncestralHall && !inviter.ancestral_hall) || (inviterGenerationNum && !inviter.generation_num)) {
           if (inviterAncestralHall && !inviter.ancestral_hall) invUpdate.ancestral_hall = inviterAncestralHall;
           if (inviterGenerationNum && !inviter.generation_num) invUpdate.generation_num = inviterGenerationNum;
-          if (inviter.id === target.id) delete invUpdate.ancestral_hall; // Guard against self-update logic loops
+          // Only guard ancestral_hall in self-update loop, but allow properties set by user
+          if (inviter.id === target.id && !inviterAncestralHall) delete invUpdate.ancestral_hall;
 
           // === 核心新增：发送协作确认通知给邀请人 ===
           try {
