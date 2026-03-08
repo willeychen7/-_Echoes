@@ -729,6 +729,17 @@ export async function createApp() {
       });
     });
 
+    // --- Helper: Get Inverse Relationship Label ---
+    const getInverseLabel = async (relText: string, targetGender: string) => {
+      // 简单硬编码反转，作为 mumuy 桥接的补充
+      const g = (targetGender || 'male') === 'female' ? '女' : '男';
+      if (relText === "堂姐" || relText === "堂哥") return g === '女' ? "堂妹" : "堂弟";
+      if (relText === "表姐" || relText === "表哥") return g === '女' ? "表妹" : "表弟";
+      if (relText === "姐姐" || relText === "哥哥") return g === '女' ? "妹妹" : "弟弟";
+      if (relText === "叔叔" || relText === "伯伯" || relText === "舅舅" || relText === "姑姑") return g === '女' ? "侄女" : "侄子";
+      return relText; // 兜底
+    };
+
     // --- Helper: Rigorous Relationship Resolver ---
     const resolveRigorousRel = async (role: string, inviter: any, targetId: number, explicitGender?: "male" | "female" | null) => {
       let updateData: any = { id: targetId, gender: explicitGender || undefined };
@@ -943,7 +954,7 @@ export async function createApp() {
           is_registered: true,
           name,
           avatar_url: avatarUrl,
-          relationship: relationshipToInviter,
+          relationship: await getInverseLabel(relationshipToInviter, gender),
           birth_date: birthDate || null,
           gender: gender || null
         };
@@ -1366,7 +1377,7 @@ export async function createApp() {
           ...updateData,
           is_registered: true,
           user_id: currentUser.id,
-          relationship: relationshipToInviter // 关键：更新档案中的备注关系，防止旧的手动备注干扰推导
+          relationship: await getInverseLabel(relationshipToInviter, updateData.gender || target.gender) // 关键：反转称谓视角，存入受邀者档案
         };
         // 核心逻辑：如果前端传了确认/修改后的姓名和头像，优先使用；否则保留用户当前资料
         finalTargetData.name = name || currentUser.name || target.name;
