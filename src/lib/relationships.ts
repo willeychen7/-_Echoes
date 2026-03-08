@@ -306,8 +306,8 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
     if (type === 'affinal') return `【姻】${hallSuffix}`;
 
     // 2. 核心判定：判定是否为“至亲” (相对视角下的核心直系)
-    // 无论从谁的视角看，只要对方是自己的 父母/子女/手足/祖辈，即为【至亲】
-    const isDirect = /^(本人|爷爷|奶奶|外公|外婆|爸爸|妈妈|哥哥|弟弟|姐姐|妹妹|儿子|女儿|父亲|母亲|祖父|祖母|外祖父|外祖母)$/.test(rel);
+    // 允许带有排行前缀 (如：二姐、三妹) 并兼容单字称呼 (姐、哥)
+    const isDirect = /^(大|二|三|四|五|六|七|八|九|十|小|老|幺)?(本人|爷爷|奶奶|外公|外婆|爸爸?|妈妈?|哥哥?|弟弟?|姐姐?|妹妹?|儿子|女儿|父亲|母亲|祖父|祖母|外祖父|外祖母)$/.test(rel);
     if (isDirect) return "【至亲】";
 
     // 3. 相对支脉判定：根据相对称谓中的关键字决定“宗”还是“外”
@@ -511,5 +511,3 @@ export function getRelationshipChain(viewer: any, target: any, members: any[]): 
 
     return null;
 }
-
-

@@ -285,7 +285,7 @@ export const FamilyMapView: React.FC<{ members: any[] }> = ({ members }) => {
                                     src={member.avatarUrl || member.avatar_url || (isVirtual ? (member.gender === 'female' ? '/avatars/female_v.png' : '/avatars/male_v.png') : `https://picsum.photos/seed/${member.id}/200/200`)}
                                     alt={member.name}
                                     className={`w-full h-full object-cover ${isVirtual ? 'opacity-40' : ''}`}
-                                    onError={(e: any) => { e.target.src = isVirtual ? 'https://via.placeholder.com/100?text=V' : `https://picsum.photos/seed/${member.id}/200/200`; }}
+                                    onError={(e: any) => { e.target.src = isVirtual ? `https://ui-avatars.com/api/?name=V&background=f1f5f9&color=cbd5e1` : `https://picsum.photos/seed/${member.id}/200/200`; }}
                                 />
                                 {(!isVirtual && member.isRegistered) && (
                                     <div className={`absolute bottom-0 inset-x-0 h-4 ${isMaternal ? 'bg-purple-500' : 'bg-emerald-500'} flex justify-center items-center shadow-inner`}>
