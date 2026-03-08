@@ -109,29 +109,59 @@ export function computeKinshipViaMumuy(
 
     let isMaternal = viewerMaternal || targetMaternal || isSibOfMother;
     const isRealSib = (tFatherId && String(tFatherId) === String(effectiveVFatherId)) ||
-        (tMotherId && String(tMotherId) === String(effectiveVMotherId));
+        (tMotherId && String(tMotherId) === String(effectiveVMotherId)) ||
+        (targetNode.ancestral_hall && targetNode.ancestral_hall === effectiveVH);
 
-    const rank = (tS >= 1 && tS <= 10) ? (tS === 1 ? '大' : NUM_CHAR[tS]) : '';
+    // 🚀 核心：亲手足生日排序诱导排行 (针对未明确设置排行的情况)
+    let finalTS = tS;
+    let finalVS = vS;
+    if (members && isRealSib) {
+        const getBirthRank = (node: any, fId: any, mId: any) => {
+            const bd = node.birth_date || node.birthDate;
+            if (!bd) return 99;
+            const sibs = members.filter(m =>
+                (fId && String(m.father_id) === String(fId)) ||
+                (mId && String(m.mother_id) === String(mId)) ||
+                (targetNode.ancestral_hall && m.ancestral_hall === targetNode.ancestral_hall)
+            );
+            const sortedBDs = sibs.filter(s => s.birth_date || s.birthDate)
+                .sort((a, b) => new Date(a.birth_date || a.birthDate).getTime() - new Date(b.birth_date || b.birthDate).getTime());
+            const idx = sortedBDs.findIndex(s => String(s.id) === String(node.id));
+            return idx !== -1 ? idx + 1 : 99;
+        };
+        if (finalTS === 99) finalTS = getBirthRank(targetNode, tFatherId, tMotherId);
+        if (finalVS === 99) finalVS = getBirthRank(viewerNode, effectiveVFatherId, effectiveVMotherId);
+    }
+
+    const rank = (finalTS >= 1 && finalTS <= 20) ? (finalTS === 1 ? '大' : NUM_CHAR[finalTS] || finalTS) : '';
 
     // --- 2. 代际生成 ---
 
     // 同辈
     if (genDiff === 0) {
         // 🚀 核心纠偏：长幼逻辑
-        // 如果 viewer 没有排行 (99)，而 target 有排行，且 target 关系曾经是“弟/妹”或“姐/哥”，我们应该尊重原倾向
-        // 这里采用更稳健的逻辑：如果 viewer 是 99，不要轻易判定 target 为 "哥/姐"
-        let isO = isRealSib ? (tS < vS) : ((hT < hV) || (hT === hV && tS < vS));
+        let isO = isRealSib ? (finalTS < finalVS) : ((hT < hV) || (hT === hV && tS < vS));
 
-        if (vS === 99 && tS !== 99) {
+        // 如果通过排行/房分无法区分，且有生日数据，则由生日确认为准
+        if (finalTS === finalVS) {
+            const tB = targetNode.birth_date || targetNode.birthDate;
+            const vB = viewerNode.birth_date || viewerNode.birthDate;
+            if (tB && vB) {
+                isO = new Date(tB).getTime() < new Date(vB).getTime();
+            }
+        }
+
+        // 启发式：如果最终还是无法确定 viewer 的排行 (仍然是 99)，参考原始倾向
+        if (finalVS === 99 && finalTS !== 99) {
             const oldRel = targetNode.relationship || "";
             if (oldRel.includes("弟") || oldRel.includes("妹")) {
                 isO = false;
             } else if (oldRel.includes("哥") || oldRel.includes("姐")) {
                 isO = true;
             } else {
-                // 如果没有明确称谓背景，且主账号未设排行：1 为长；>1 为幼
-                isO = (tS === 1);
-                if (tS > 1) isO = false;
+                // 默认视角：1为长，>1为幼
+                isO = (finalTS === 1);
+                if (finalTS > 1) isO = false;
             }
         }
 
