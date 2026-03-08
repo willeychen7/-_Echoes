@@ -646,11 +646,18 @@ export async function createApp() {
           inviterName: inviter.name,
           inviterRole: inviter.standard_role || inviter.relationship,
           inviterId: inviter.id,
+          inviterGender: inviter.gender,
+          inviterAncestralHall: inviter.ancestral_hall,
+          inviterGenerationNum: inviter.generation_num,
+          inviterSiblingOrder: inviter.sibling_order,
           targetName: target.name,
           targetId: target.id,
           targetRole: target.relationship,
           targetStandardRole: target.standard_role,
           targetAvatar: target.avatar_url,
+          targetAncestralHall: target.ancestral_hall,
+          targetGenerationNum: target.generation_num,
+          targetSiblingOrder: target.sibling_order,
           inviterFamilyId: inviter.family_id
         });
       } else {

@@ -22,6 +22,47 @@ const getRelativeTime = (dateStr: string) => {
   return date.toLocaleDateString();
 };
 
+/** 核心功能：基于双方 DNA (房分/排行/代数) 自动计算称谓推荐 */
+const getIdentityRecommendation = (data: any) => {
+  if (!data || !data.inviterAncestralHall || !data.targetAncestralHall) return null;
+
+  const iH = data.inviterAncestralHall;
+  const tH = data.targetAncestralHall;
+  const iG = data.inviterGenerationNum;
+  const tG = data.targetGenerationNum;
+  const iS = data.inviterSiblingOrder;
+  const tS = data.targetSiblingOrder;
+  const iSex = data.inviterGender === 'female' || data.inviterGender === '女' ? 'F' : 'M';
+
+  const hallMap: any = { '大房': 1, '二房': 2, '三房': 3, '四房': 4, '五房': 5, '六房': 6, '七房': 7, '八房': 8, '九房': 9, '十房': 10 };
+  const hI = hallMap[iH] || 99;
+  const hT = hallMap[tH] || 99;
+
+  // 1. 代际差判定
+  const genDiff = Number(tG) - Number(iG);
+
+  if (genDiff === 0) {
+    // 同辈：比房分或排行
+    let isOlder = false;
+    if (hI < hT) isOlder = true; // 房分在前为长
+    else if (hI === hT && Number(iS) < Number(tS)) isOlder = true; // 同房排行在前为长
+
+    const rel = isOlder ? (iSex === 'F' ? '堂姐' : '堂哥') : (iSex === 'F' ? '堂妹' : '堂弟');
+    const reason = hI < hT ? `邀请人在${iH}，您在${tH}，对方所属支脉更长，故称${rel}。` :
+      hI === hT ? `同属${iH}，但邀请人排行更前，故称${rel}。` :
+        `邀请人在${iH}，您在${tH}，您所属支脉更长，故称${rel}。`;
+
+    return { title: rel, reason };
+  } else if (genDiff === 1) {
+    const rel = iSex === 'F' ? '姑妈' : (hI === 1 ? '大伯' : '叔叔');
+    return { title: rel, reason: "系统检测到对方高您一辈，由于是父系同宗关系，锁定为长辈。" };
+  } else if (genDiff === -1) {
+    return { title: "长辈", reason: "系统检测到您高对方一辈，对方应称呼您为长辈。" };
+  }
+
+  return null;
+};
+
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const [showEditModal, setShowEditModal] = useState(false);
@@ -431,7 +472,19 @@ export const ProfilePage: React.FC = () => {
       // 预设确认为 A 填写的资料
       setTempName(data.targetName || user.name);
       setTempAvatar(data.targetAvatar || user.avatar);
-      setSelectedRel(data.targetRole || "");
+
+      // === 核心逻辑修复：推导 B 对 A 的反向称呼 ===
+      const recommendation = getIdentityRecommendation(data);
+      if (recommendation) {
+        setSelectedRel(recommendation.title);
+      } else {
+        // 降级逻辑：如果无法智能推导，尝试通过 standard_role 进行简单的性别反转
+        const inviterGender = data.inviterGender === 'female' || data.inviterGender === '女' ? 'female' : 'male';
+        const targetRole = data.targetRole || "";
+        // 这里可以调用现有的反转逻辑，或者简单设置
+        setSelectedRel(targetRole.includes("弟") ? (inviterGender === 'female' ? "姐姐" : "哥哥") : "");
+      }
+
       setIsEditingInvite(false);
     } catch (e) {
       setInviteError("网络错误");
@@ -1175,9 +1228,37 @@ export const ProfilePage: React.FC = () => {
                       </div>
                       <h3 className="text-xl font-black text-slate-800 tracking-tight">确认身份档案</h3>
                       <p className="text-sm text-slate-500 font-medium px-4">
-                        <span className="font-bold text-[#eab308]">{inviteData.inviterName}</span> 为您预设了以下档案。您可以直接点击下方进行修改：
+                        <span className="font-bold text-[#eab308]">{inviteData.inviterName}</span> 为您预设了以下档案。您可以直接点击下方进行确认：
                       </p>
                     </div>
+
+                    {/* === 🚀 核心新增：智能识别卡片 === */}
+                    {getIdentityRecommendation(inviteData) && (
+                      <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-[2rem] p-5 text-white shadow-xl shadow-indigo-200/50 space-y-3 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                          <Sparkles size={64} />
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="size-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-md">
+                            <Users size={20} className="text-white" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black opacity-80 uppercase tracking-widest">系统智能血脉定位</h4>
+                            <div className="text-lg font-black flex items-center gap-2">
+                              {inviteData.inviterAncestralHall} <ChevronRight size={14} className="opacity-50" /> {inviteData.targetAncestralHall || "未定"}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-md border border-white/10">
+                          <p className="text-[10px] font-black opacity-70 mb-1">您应称呼邀请人为：</p>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-3xl font-black">{getIdentityRecommendation(inviteData)?.title}</span>
+                            <span className="text-[10px] font-bold opacity-60">自动锁定成功</span>
+                          </div>
+                          <p className="text-[10px] mt-2 leading-relaxed opacity-80">{getIdentityRecommendation(inviteData)?.reason}</p>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="bg-slate-50 p-6 rounded-[2.5rem] border-2 border-slate-100/50 flex flex-col items-center gap-4 relative">
                       <div
@@ -1264,9 +1345,17 @@ export const ProfilePage: React.FC = () => {
                         </div>
 
                         <div className="space-y-1.5 text-left w-full">
-                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">您的身份（邀请人对您的称呼）</label>
-                          <div className="w-full h-14 rounded-2xl bg-slate-50 border-2 border-slate-100 px-5 font-bold text-slate-500 shadow-sm flex items-center">
-                            <span>{selectedRel || (inviteData && inviteData.targetRole) || "未知身份"}</span>
+                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">邀请人对您的称呼</label>
+                          <div className="w-full h-14 rounded-2xl bg-slate-50 border-2 border-slate-100 px-5 font-bold text-slate-400 shadow-sm flex items-center">
+                            <span>{inviteData && inviteData.targetRole || "未知"}</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5 text-left w-full">
+                          <label className="text-[11px] font-black text-indigo-500 uppercase tracking-widest ml-1">您对邀请人 <span className="text-slate-800">{inviteData.inviterName}</span> 的称呼</label>
+                          <div className="w-full h-14 rounded-2xl bg-indigo-50 border-2 border-indigo-100 px-5 font-bold text-indigo-600 shadow-sm flex items-center justify-between">
+                            <span>{selectedRel || "尚未确定"}</span>
+                            <div className="text-[10px] bg-indigo-500 text-white px-2 py-0.5 rounded-full">智能推导</div>
                           </div>
                         </div>
                       </div>
