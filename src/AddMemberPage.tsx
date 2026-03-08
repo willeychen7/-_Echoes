@@ -27,7 +27,7 @@ export const AddMemberPage: React.FC = () => {
   const [meGender, setMeGender] = useState<'male' | 'female'>('male');
   const [members, setMembers] = useState<any[]>([]);
   const [parentId, setParentId] = useState<number | null>(null);
-  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4>(1); // 1-4步阶梯式引导
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4 | 5>(1); // 1-5步引导
   const [generation, setGeneration] = useState<'elder' | 'peer' | 'junior' | null>(null); // 代际
   const [lineageSide, setLineageSide] = useState<'paternal' | 'maternal' | null>(null); // 方位
   const [connectorNode, setConnectorNode] = useState<string | null>(null); // 衔接点
@@ -478,7 +478,9 @@ export const AddMemberPage: React.FC = () => {
             (selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : null)
           ),
           logicTag: currentLogicTag,
-          siblingOrder: siblingOrder || null
+          siblingOrder: siblingOrder || null,
+          kinshipType: kinshipType,
+          kinship_type: kinshipType
         })
       });
       const data = await response.json().catch(() => ({}));
@@ -604,25 +606,66 @@ export const AddMemberPage: React.FC = () => {
 
       <main className="flex-1 px-6 py-8 max-w-md mx-auto w-full space-y-10 relative">
         <div className="flex items-center justify-between mb-8">
-          {[1, 2, 3, 4].map(step => (
-            <div key={step} className={`flex-1 h-2 rounded-full mx-1 ${wizardStep >= step ? 'bg-[#eab308]' : 'bg-slate-200'}`} />
-          ))}
+          {[1, 2, 3, 4, 5].map(step => {
+            const maxSteps = (memberType === 'human' && kinshipType === 'blood') ? 5 : 2;
+            if (step > maxSteps) return null;
+            return (
+              <div key={step} className={`flex-1 h-2 rounded-full mx-1 ${wizardStep >= step ? 'bg-[#eab308]' : 'bg-slate-200'}`} />
+            );
+          })}
         </div>
 
         {wizardStep === 1 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
             <div className="text-center space-y-4">
-              <h2 className="text-3xl font-bold">基础信息录入</h2>
-              <p className="text-slate-500 italic text-lg">第1步：建立档案基础配置</p>
+              <h2 className="text-3xl font-bold">选择成员大类</h2>
+              <p className="text-slate-500 italic text-lg">第1步：确定要记录的人物或伙伴类型</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              {[
+                { type: 'human', kType: 'blood', label: '家族成员', sub: '父母、子女、手足及亲友', icon: <Landmark className="size-6" />, color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
+                { type: 'human', kType: 'social', label: '知心好友', sub: '战友、同学、挚友等社会关系', icon: <Users className="size-6" />, color: 'bg-blue-50 text-blue-600 border-blue-100' },
+                { type: 'pet', kType: 'social', label: '忠诚宠物', sub: '陪伴家族成长的毛孩子', icon: <PawPrint className="size-6" />, color: 'bg-amber-50 text-amber-600 border-amber-100' },
+              ].map((item) => (
+                <button
+                  key={item.label}
+                  onClick={() => {
+                    setMemberType(item.type as any);
+                    setKinshipType(item.kType as any);
+                    setWizardStep(2);
+                  }}
+                  className={cn(
+                    "p-6 rounded-[2.5rem] border-2 text-left transition-all hover:scale-[1.02] flex items-center gap-5 shadow-sm active:scale-95",
+                    item.color
+                  )}
+                >
+                  <div className="p-4 bg-white rounded-2xl shadow-sm">{item.icon}</div>
+                  <div className="flex-1">
+                    <h3 className="font-black text-xl">{item.label}</h3>
+                    <p className="opacity-60 text-sm font-medium">{item.sub}</p>
+                  </div>
+                  <ChevronRight />
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {wizardStep === 2 && (
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
+            <div className="text-center space-y-4">
+              <h2 className="text-3xl font-bold">{memberType === 'pet' ? '伙伴信息' : '基础信息'}</h2>
+              <p className="text-slate-500 italic text-lg">第2步：完善档案基本名分</p>
             </div>
 
             <div className="space-y-6">
               <div className="space-y-3">
-                <label className="text-xl font-black px-1 block">成员姓名</label>
+                <label className="text-xl font-black px-1 block">{memberType === 'pet' ? '宠物昵称' : '成员姓名'}</label>
                 <input
                   type="text"
                   className="w-full h-16 px-6 rounded-2xl border-none bg-white shadow-md text-xl font-bold focus:ring-2 focus:ring-[#eab308]/20 transition-all"
-                  placeholder="请输入家人的姓名"
+                  placeholder={memberType === 'pet' ? "请输入宠物的名字" : "请输入姓名"}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
@@ -650,35 +693,62 @@ export const AddMemberPage: React.FC = () => {
               </div>
 
               <div className="space-y-3">
-                <label className="text-xl font-black px-1 block">成员类型</label>
-                <div className="flex gap-4">
-                  {['human', 'pet'].map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setMemberType(t as 'human' | 'pet')}
-                      className={cn(
-                        "flex-1 h-16 rounded-2xl font-bold transition-all border-2 flex items-center justify-center gap-2",
-                        memberType === t
-                          ? "bg-slate-800 border-slate-800 text-white shadow-xl scale-[1.02]"
-                          : "bg-white border-slate-50 text-slate-400 hover:border-slate-200 shadow-sm"
-                      )}
-                    >
-                      {t === 'human' ? <><UserCircle2 size={20} />人类</> : <><PawPrint size={20} />宠物</>}
-                    </button>
-                  ))}
+                <label className="text-xl font-black px-1 block">
+                  {memberType === 'pet' ? '品种或类型' : (kinshipType === 'social' ? '所属关系' : '您称呼TA为？')}
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(memberType === 'pet' ? ["狗狗", "猫咪", "小鸟", "鱼儿", "其他"] :
+                    (kinshipType === 'social' ? ["战友", "老同学", "发小", "故友", "恩师", "其他"] : []))
+                    .map(rel => (
+                      <button
+                        key={rel}
+                        onClick={() => { setRelationship(rel); if (rel !== '其他') setCustomRelationship(""); }}
+                        className={`h-12 border-2 rounded-xl font-bold text-sm ${relationship === rel ? 'bg-black text-[#eab308] border-black' : 'bg-white border-slate-100'}`}
+                      >
+                        {rel}
+                      </button>
+                    ))}
+                  {(memberType === 'human' && kinshipType === 'blood') && (
+                    <div className="col-span-2 text-center p-4 bg-slate-50 rounded-2xl text-slate-400 font-bold border-2 border-dashed">
+                      将进入代际路径选择 →
+                    </div>
+                  )}
                 </div>
+
+                {(relationship === '其他' || (memberType === 'human' && kinshipType === 'blood')) && kinshipType !== 'blood' && (
+                  <input
+                    type="text"
+                    placeholder={memberType === 'pet' ? "例如: 金毛, 拉布拉多" : "请输入详细称谓 (如: 忘年交)"}
+                    className="w-full h-14 px-5 rounded-xl border-none shadow-inner bg-white font-bold text-lg mt-2"
+                    value={customRelationship}
+                    onChange={e => setCustomRelationship(e.target.value)}
+                  />
+                )}
               </div>
             </div>
-
-            <Button size="lg" className="w-full h-14 text-lg font-bold bg-[#eab308] text-black hover:bg-[#d9a306]" onClick={() => {
-              if (!name) { alert("请填写姓名"); return; }
-              setWizardStep(2);
-            }}>下一步：选择代际归属</Button>
+            <div className="flex gap-4">
+              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(1)}>
+                上一步
+              </Button>
+              <Button
+                size="lg"
+                className="flex-1 h-14 text-lg font-bold bg-[#eab308] text-black hover:bg-[#d9a306]"
+                onClick={() => {
+                  if (!name) { alert("请填写姓名"); return; }
+                  if (kinshipType === 'social') {
+                    handleAdd();
+                  } else {
+                    setWizardStep(3);
+                  }
+                }}
+              >
+                {kinshipType === 'social' ? "立即建立专属档案" : "下一步：选择代际分支"}
+              </Button>
+            </div>
           </motion.div>
         )}
 
-        {wizardStep === 2 && (
+        {wizardStep === 3 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
             <div className="text-center space-y-4">
               <h2 className="text-3xl font-bold">代际与衔接点</h2>
@@ -751,7 +821,7 @@ export const AddMemberPage: React.FC = () => {
               </div>
             </div>
             <div className="flex gap-4">
-              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(1)}>上一步</Button>
+              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(2)}>上一步</Button>
               <Button className="flex-1 h-14 bg-[#eab308] text-black hover:bg-[#d9a306] font-bold" onClick={() => {
                 if (connectorNode && (lineageSide || (!lineageSide && kinshipType === 'blood'))) {
                   // 🚀 核心优化：至亲模式 (lineageSide 为空) 直接跳过称谓选择，进入排名确认
@@ -769,9 +839,9 @@ export const AddMemberPage: React.FC = () => {
                       setLineageSide('paternal');
                       // 此时不设具体称谓，由下一步的排行差自动算出
                     }
-                    setWizardStep(4); // 直接跳到排名步骤
+                    setWizardStep(5); // 直接跳到排名步骤
                   } else {
-                    setWizardStep(3); // 父系/母系走常规流程
+                    setWizardStep(4); // 父系/母系走常规流程
                   }
                 } else {
                   alert("请选择方位和分支");
@@ -783,7 +853,7 @@ export const AddMemberPage: React.FC = () => {
           </motion.div>
         )}
 
-        {wizardStep === 3 && (
+        {wizardStep === 4 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
             <div className="text-center space-y-4">
               <h2 className="text-3xl font-bold">称谓与逻辑守卫</h2>
@@ -841,21 +911,21 @@ export const AddMemberPage: React.FC = () => {
             </div>
 
             <div className="flex gap-4">
-              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => {
-                // 如果是从至亲跳过来的，上一步回第2步，否则回第3步
-                const isCore = ['father', 'mother', 'sibling', 'child_p'].includes(connectorNode as string);
-                setWizardStep(isCore ? 2 : 3);
-              }}>上一步</Button>
+              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(3)}>
+                上一步
+              </Button>
               <Button disabled={correctionType === 'error'} className="flex-1 h-14 bg-[#eab308] text-black hover:bg-[#d9a306] font-bold disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => {
                 const relText = relationship === '其他' ? customRelationship : relationship;
                 if (!relText) { alert("请录入称谓"); return; }
-                setWizardStep(4);
-              }}>下一步：确认房分排行</Button>
+                setWizardStep(5);
+              }}>
+                下一步：确认房分排行
+              </Button>
             </div>
           </motion.div>
         )}
 
-        {wizardStep === 4 && (
+        {wizardStep === 5 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
             <div className="text-center space-y-4">
               <h2 className="text-3xl font-bold">互称与核准提交</h2>
@@ -994,13 +1064,20 @@ export const AddMemberPage: React.FC = () => {
             </div>
 
             <div className="flex gap-4">
-              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(connectorNode === 'sibling' ? 2 : 3)}>上一步</Button>
-              <Button disabled={isSubmitting} className="flex-1 h-14 bg-black text-[#eab308] hover:bg-slate-800 font-bold" onClick={handleAdd}>建立专属档案</Button>
+              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => {
+                const isCore = ['father', 'mother', 'sibling', 'child_p'].includes(connectorNode as string);
+                setWizardStep(isCore ? 3 : 4);
+              }}>
+                上一步
+              </Button>
+              <Button disabled={isSubmitting} className="flex-1 h-14 bg-black text-[#eab308] hover:bg-slate-800 font-bold" onClick={handleAdd}>
+                建立专属档案
+              </Button>
             </div>
           </motion.div>
         )}
 
       </main>
-    </div>
+    </div >
   );
 };

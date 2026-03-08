@@ -781,14 +781,18 @@ export const FamilySquare: React.FC = () => {
                       })()}
 
 
-                      {/* 6. 社会关系 */}
+                      {/* 6. 社会与伙伴 */}
                       {(() => {
-                        const social = allReal.filter(m => getRelationType(getRigorousRelationship(meNode, m, members)) === 'social');
+                        const social = allReal.filter(m =>
+                          getRelationType(getRigorousRelationship(meNode, m, members)) === 'social' ||
+                          m.memberType === 'pet' || m.member_type === 'pet' ||
+                          m.kinshipType === 'social' || m.kinship_type === 'social'
+                        );
                         if (social.length === 0) return null;
                         return (
                           <div className="space-y-4 mb-8">
                             <h3 className="text-sm font-black text-slate-300 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
-                              <div className="size-1.5 bg-slate-200 rounded-full" /> 社会关系
+                              <div className="size-1.5 bg-slate-200 rounded-full" /> 社会与伙伴
                             </h3>
                             <div className="grid grid-cols-2 gap-4">{social.map(renderMemberCard)}</div>
                           </div>

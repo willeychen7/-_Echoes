@@ -248,8 +248,11 @@ export function createKinshipSearchFilter(query: string) {
  * Generate SVG coordinates for members using an elastic collision-free layout.
  */
 export function generateSmartLayout(rawMembers: any[]) {
-    // 过滤掉宠物，宠物不参与家族谱的计算力
-    const members = (rawMembers || []).filter(m => m.memberType !== 'pet' && m.member_type !== 'pet');
+    // 过滤掉宠物和社交关系，它们不参与家族谱的计算
+    const members = (rawMembers || []).filter(m =>
+        m.memberType !== 'pet' && m.member_type !== 'pet' &&
+        m.kinshipType !== 'social' && m.kinship_type !== 'social'
+    );
 
     // Canvas settings
     const CENTER_X = 500;

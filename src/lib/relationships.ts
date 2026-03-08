@@ -302,7 +302,12 @@ export function getKinshipLabel(vNode: any, tNode: any, members: any[]): string 
     const hallSuffix = hall ? ` · ${hall}` : "";
 
     // 1. 公共非血缘分类
-    if (type === 'social') return "【友】";
+    if (type === 'social' || tNode.memberType === 'pet' || tNode.member_type === 'pet' || tNode.kinship_type === 'social' || tNode.kinshipType === 'social') {
+        const chain = getRelationshipChain(vNode, tNode, members);
+        const prefix = (tNode.memberType === 'pet' || tNode.member_type === 'pet') ? "【宠】" : "【友】";
+        if (chain) return `${prefix}${chain}`;
+        return `${prefix}${rel || (tNode.memberType === 'pet' ? "宠物" : "朋友")}`;
+    }
     if (type === 'affinal') return `【姻】${hallSuffix}`;
 
     // 2. 核心判定：判定是否为“至亲” (相对视角下的核心直系)

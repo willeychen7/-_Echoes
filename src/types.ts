@@ -36,6 +36,9 @@ export interface FamilyMember {
   memberType?: 'human' | 'pet'; // 成员类型：人类或宠物
   logicTag?: string; // 逻辑坐标 (比如 "[F]-f,f-o大")
   logic_tag?: string; // 数据库蛇形命名兼容
+  kinshipType?: string; // 亲疏类型：blood (血亲), social (社交)
+  kinship_type?: string;
+  member_type?: string;
   mapX?: number; // 家族树地图横坐标
   mapY?: number; // 家族树地图纵坐标
 }
