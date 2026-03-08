@@ -723,10 +723,10 @@ export const AddMemberPage: React.FC = () => {
                 <div className="grid grid-cols-1 gap-3">
                   {!lineageSide && kinshipType === 'blood' && (
                     <>
-                      <button onClick={() => { setConnectorNode('father'); setLineageSide('paternal'); }} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'father' ? 'border-indigo-600 bg-indigo-50' : 'border-slate-100 bg-white'}`}>父亲本人 (或父亲的手足分支)</button>
-                      <button onClick={() => { setConnectorNode('mother'); setLineageSide('maternal'); }} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'mother' ? 'border-indigo-600 bg-indigo-50' : 'border-slate-100 bg-white'}`}>母亲本人 (或母亲的手足分支)</button>
-                      <button onClick={() => { setConnectorNode('sibling'); setLineageSide('paternal'); }} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'sibling' ? 'border-indigo-600 bg-indigo-50' : 'border-slate-100 bg-white'}`}>亲兄弟姐妹 (同父同母/同脉)</button>
-                      <button onClick={() => { setConnectorNode('child_p'); setLineageSide('paternal'); }} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'child_p' ? 'border-indigo-600 bg-indigo-50' : 'border-slate-100 bg-white'}`}>我的子女 / 晚辈 (亲子孙辈)</button>
+                      <button onClick={() => setConnectorNode('father')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'father' ? 'border-indigo-600 bg-indigo-50 shadow-sm' : 'border-slate-100 bg-white'}`}>父亲本人 (或父亲的手足分支)</button>
+                      <button onClick={() => setConnectorNode('mother')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'mother' ? 'border-indigo-600 bg-indigo-50 shadow-sm' : 'border-slate-100 bg-white'}`}>母亲本人 (或母亲的手足分支)</button>
+                      <button onClick={() => setConnectorNode('sibling')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'sibling' ? 'border-indigo-600 bg-indigo-50 shadow-sm' : 'border-slate-100 bg-white'}`}>亲兄弟姐妹 (同父同母/同脉)</button>
+                      <button onClick={() => setConnectorNode('child_p')} className={`p-4 rounded-xl text-left font-bold transition-all border-2 ${connectorNode === 'child_p' ? 'border-indigo-600 bg-indigo-50 shadow-sm' : 'border-slate-100 bg-white'}`}>我的子女 / 晚辈 (亲子孙辈)</button>
                     </>
                   )}
                   {lineageSide === 'paternal' && (
@@ -752,7 +752,12 @@ export const AddMemberPage: React.FC = () => {
             <div className="flex gap-4">
               <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(1)}>上一步</Button>
               <Button className="flex-1 h-14 bg-[#eab308] text-black hover:bg-[#d9a306] font-bold" onClick={() => {
-                if (lineageSide && connectorNode) {
+                if (connectorNode && (lineageSide || (!lineageSide && kinshipType === 'blood'))) {
+                  // 自动补齐 lineageSide 以适配后续逻辑
+                  if (!lineageSide) {
+                    if (connectorNode === 'mother') setLineageSide('maternal');
+                    else setLineageSide('paternal');
+                  }
                   setWizardStep(3);
                 } else {
                   alert("请选择方位和分支");
