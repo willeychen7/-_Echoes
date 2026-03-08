@@ -748,22 +748,34 @@ export const AddMemberPage: React.FC = () => {
                 </div>
               </div>
             </div>
-
             <div className="flex gap-4">
               <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(1)}>上一步</Button>
               <Button className="flex-1 h-14 bg-[#eab308] text-black hover:bg-[#d9a306] font-bold" onClick={() => {
                 if (connectorNode && (lineageSide || (!lineageSide && kinshipType === 'blood'))) {
-                  // 自动补齐 lineageSide 以适配后续逻辑
+                  // 🚀 核心优化：至亲模式 (lineageSide 为空) 直接跳过称谓选择，进入排名确认
                   if (!lineageSide) {
-                    if (connectorNode === 'mother') setLineageSide('maternal');
-                    else setLineageSide('paternal');
+                    if (connectorNode === 'father') {
+                      setRelationship('父亲');
+                      setLineageSide('paternal');
+                    } else if (connectorNode === 'mother') {
+                      setRelationship('母亲');
+                      setLineageSide('maternal');
+                    } else if (connectorNode === 'child_p') {
+                      setRelationship(gender === 'female' ? '女儿' : '儿子');
+                      setLineageSide('paternal');
+                    } else if (connectorNode === 'sibling') {
+                      setLineageSide('paternal');
+                      // 此时不设具体称谓，由下一步的排行差自动算出
+                    }
+                    setWizardStep(4); // 直接跳到排名步骤
+                  } else {
+                    setWizardStep(3); // 父系/母系走常规流程
                   }
-                  setWizardStep(3);
                 } else {
                   alert("请选择方位和分支");
                 }
               }}>
-                下一步：确认称谓明细
+                下一步：确认排行建议
               </Button>
             </div>
           </motion.div>
@@ -827,7 +839,11 @@ export const AddMemberPage: React.FC = () => {
             </div>
 
             <div className="flex gap-4">
-              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => setWizardStep(2)}>上一步</Button>
+              <Button variant="outline" className="flex-1 h-14 font-bold" onClick={() => {
+                // 如果是从至亲跳过来的，上一步回第2步，否则回第3步
+                const isCore = ['father', 'mother', 'sibling', 'child_p'].includes(connectorNode as string);
+                setWizardStep(isCore ? 2 : 3);
+              }}>上一步</Button>
               <Button disabled={correctionType === 'error'} className="flex-1 h-14 bg-[#eab308] text-black hover:bg-[#d9a306] font-bold disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => {
                 const relText = relationship === '其他' ? customRelationship : relationship;
                 if (!relText) { alert("请录入称谓"); return; }
@@ -907,8 +923,9 @@ export const AddMemberPage: React.FC = () => {
                       key={rk}
                       onClick={() => {
                         setSelectedRank(rk);
-                        // 亲手足自动判定逻辑
-                        if (connectorNode === 'sibling' && myRank && myRank !== '不知道' && rk !== '不知道') {
+                        // 🚀 核心逻辑：亲手足/至亲自动判定
+                        const isCoreSibling = connectorNode === 'sibling';
+                        if (isCoreSibling && myRank && myRank !== '不知道' && rk !== '不知道') {
                           const myN = ['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(myRank);
                           const taN = ['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小'].indexOf(rk);
                           if (myN !== -1 && taN !== -1) {
