@@ -396,6 +396,27 @@ export function getRelationshipChain(viewer: any, target: any, members: any[]): 
     const isDirectRel = /^(本人|爸爸|妈妈|父亲|母亲|哥哥|弟弟|姐姐|妹妹|儿子|女儿|爷爷|奶奶|外公|外婆|孙子|孙女|曾祖父|曾祖母|老公|老婆|丈夫|妻子)$/.test(directRel);
     if (isDirectRel) return null;
 
+    const isAncestor = /^(本人|爸爸|妈妈|父亲|母亲|爷爷|奶奶|外公|外婆|曾祖父|曾祖母|高祖父|高祖母)$/;
+
+    // === 策略 1（最高优先）：创建者路径 ===
+    // target.createdByMemberId = 谁建了这个档案
+    // target.relationship = 创建者如何称呼 target（这才是 relationship 字段的真正语义）
+    const creatorId = target.createdByMemberId || target.created_by_member_id;
+    const creatorRelLabel = (target.relationship || '').trim(); // 创建者眼中的 target 称谓
+    if (creatorId && creatorRelLabel && Number(creatorId) !== vId && Number(creatorId) !== tId) {
+        const creatorNode = ctx.membersMap.get(Number(creatorId));
+        if (creatorNode) {
+            const viewerCallsCreator = getRigorousRelationship(viewer, creatorNode, members);
+            if (viewerCallsCreator && !['家人', '亲戚', '本人', ''].includes(viewerCallsCreator)
+                && !isAncestor.test(viewerCallsCreator)) {
+                const cName = creatorNode.name || '';
+                return cName
+                    ? `${cName}（我${viewerCallsCreator}）的${creatorRelLabel}`
+                    : `我${viewerCallsCreator}的${creatorRelLabel}`;
+            }
+        }
+    }
+
     // --- 构建无向邻接表（基于 father_id / mother_id / spouse_id 结构字段）---
     // 边：(fromId, toId)，双向
     const adj = new Map<number, Set<number>>();
