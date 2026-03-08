@@ -21,6 +21,7 @@ export const RegisterPage: React.FC = () => {
   const [showDefaultAvatars, setShowDefaultAvatars] = useState(false);
   const [avatar, setAvatar] = useState(DEFAULT_AVATAR);
   const [gender, setGender] = useState<"male" | "female" | null>(null);
+  const [birthDate, setBirthDate] = useState("");
   const [showModalAvatarPicker, setShowModalAvatarPicker] = useState(false);
 
   const [invitationCode, setInvitationCode] = useState("");
@@ -53,7 +54,7 @@ export const RegisterPage: React.FC = () => {
     }
   }, []);
 
-  const canSubmit = name && phone && password && confirmPassword && verificationCode;
+  const canSubmit = name && phone && password && confirmPassword && verificationCode && birthDate;
 
   const topRelationships = [
     { label: "儿子", value: "son" },
@@ -127,7 +128,7 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
-    setIsEditingInvite(false); // 关键修复：确保每次点击“下一步”时，弹窗都是先进入“确认”视图，而不是直接跳到“选择关系”
+    setIsEditingInvite(false);
     setIsValidatingCode(true);
     setInviteError("");
     setVerificationError("");
@@ -162,16 +163,14 @@ export const RegisterPage: React.FC = () => {
         return;
       }
       const data = await res.json();
-      console.log("[Debug] Invite Data Received:", data); // 调试日志：确认 Vercel 已更新
       setInviterName(data.inviterName);
       setInviterRole(data.inviterRole);
       setInviterId(data.inviterId);
       setInviteData(data);
 
-      // 进入确认环节：展示 A 创建的信息供 B 确认或修改
-      // 预填修改视图所需的状态
       if (data.targetName) setName(data.targetName);
       if (data.targetAvatar) setAvatar(data.targetAvatar);
+      if (data.targetBirthDate) setBirthDate(data.targetBirthDate);
 
       setSelectedRelationship(data.targetRole || "");
       setShowVerificationModal(true);
@@ -183,7 +182,7 @@ export const RegisterPage: React.FC = () => {
     }
   };
 
-  const handleCompleteRegistration = async (overrideRole?: string, overrideStdRole?: string, overrideInviterId?: number, overrideName?: string, overrideAvatar?: string) => {
+  const handleCompleteRegistration = async (overrideRole?: string, overrideStdRole?: string, overrideInviterId?: number, overrideName?: string, overrideAvatar?: string, overrideBirthDate?: string) => {
     let currentFamilyId = 1;
     let currentMemberId = null;
     let currentUserId = null;
@@ -192,10 +191,10 @@ export const RegisterPage: React.FC = () => {
     const finalRole = overrideRole || selectedRelationship;
     const finalName = overrideName || name;
     const finalAvatar = overrideAvatar || avatar;
+    const finalBirthDate = overrideBirthDate || birthDate;
 
     try {
       if ((invitationCode.trim() && finalInviterId) || overrideRole) {
-        // 加入已有家族
         const relInfo = allRelationships.find(r => r.label === finalRole);
         const response = await fetch("/api/register-claim", {
           method: "POST",
@@ -208,7 +207,8 @@ export const RegisterPage: React.FC = () => {
             standardRole: overrideStdRole || relInfo?.value || "other",
             phone: phone.trim(),
             password: password.trim(),
-            gender: gender // Pass gender to claim
+            gender: gender,
+            birthDate: finalBirthDate
           })
         });
 
@@ -222,11 +222,10 @@ export const RegisterPage: React.FC = () => {
         currentMemberId = resData.memberId;
         currentUserId = resData.userId;
       } else {
-        // 创建新家族
         const response = await fetch("/api/register-new", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: finalName, phone, password, avatar: finalAvatar, gender })
+          body: JSON.stringify({ name: finalName, phone, password, avatar: finalAvatar, gender, birthDate: finalBirthDate })
         });
 
         if (!response.ok) {
@@ -259,12 +258,8 @@ export const RegisterPage: React.FC = () => {
       isRegistered: true
     };
     localStorage.setItem("currentUser", JSON.stringify(userData));
-
-    // 导向到注册成功页面（小树页面），保持原有优雅的体验
     navigate("/register-success");
   };
-
-  const defaultAvatars = SYSTEM_AVATARS;
 
   const handleAvatarClick = () => {
     setShowDefaultAvatars(!showDefaultAvatars);
@@ -294,15 +289,12 @@ export const RegisterPage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#fdfbf0] text-[#1a1a1a] pb-12 font-sans">
-      {/* Top Bar */}
       <div className="flex items-center p-4 justify-between bg-transparent">
         <button onClick={() => navigate(-1)} className="p-2 hover:bg-black/5 rounded-full transition-colors">
           <ArrowLeft size={28} />
         </button>
-        <div className="flex-1"></div>
       </div>
 
-      {/* Header Section */}
       <div className="flex flex-col items-center px-6 py-8">
         <div className="relative mb-6">
           <div
@@ -316,13 +308,7 @@ export const RegisterPage: React.FC = () => {
               </div>
             )}
           </div>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            className="hidden"
-            accept="image/*"
-          />
+          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
           <button
             onClick={handleUploadClick}
             className="absolute bottom-1 right-1 p-2 rounded-full shadow-md border border-slate-100 transition-all bg-white text-[#eab308] hover:scale-110"
@@ -330,7 +316,6 @@ export const RegisterPage: React.FC = () => {
             <Camera size={20} className="text-[#eab308]" />
           </button>
 
-          {/* Default Avatars Popover */}
           {showDefaultAvatars && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -338,7 +323,7 @@ export const RegisterPage: React.FC = () => {
               className="absolute top-full mt-4 left-1/2 -translate-x-1/2 bg-white p-4 rounded-3xl shadow-2xl border border-slate-100 z-50 min-w-[280px]"
             >
               <div className="grid grid-cols-4 gap-3">
-                {defaultAvatars.map((url, i) => (
+                {SYSTEM_AVATARS.map((url, i) => (
                   <button
                     key={i}
                     onClick={() => selectDefaultAvatar(url)}
@@ -363,7 +348,6 @@ export const RegisterPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Form Section */}
       <div className="flex flex-col gap-8 px-6 max-w-md mx-auto w-full">
         <div className="space-y-5">
           <label className="flex flex-col gap-3">
@@ -415,9 +399,7 @@ export const RegisterPage: React.FC = () => {
                 {countdown > 0 ? `${countdown}s` : "获取验证码"}
               </button>
             </div>
-            {verificationError && (
-              <p className="text-red-500 text-sm font-bold px-2">{verificationError}</p>
-            )}
+            {verificationError && <p className="text-red-500 text-sm font-bold px-2">{verificationError}</p>}
           </label>
 
           <label className="flex flex-col gap-3">
@@ -433,10 +415,7 @@ export const RegisterPage: React.FC = () => {
                   setPasswordError("");
                 }}
               />
-              <button
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-6 text-slate-400"
-              >
+              <button onClick={() => setShowPassword(!showPassword)} className="absolute right-6 text-slate-400">
                 {showPassword ? <EyeOff size={24} /> : <Eye size={24} />}
               </button>
             </div>
@@ -458,16 +437,25 @@ export const RegisterPage: React.FC = () => {
                   setPasswordError("");
                 }}
               />
-              <button
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-6 text-slate-400"
-              >
+              <button onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-6 text-slate-400">
                 {showConfirmPassword ? <EyeOff size={24} /> : <Eye size={24} />}
               </button>
             </div>
-            {passwordError && (
-              <p className="text-red-500 text-sm font-bold px-2">{passwordError}</p>
-            )}
+            {passwordError && <p className="text-red-500 text-sm font-bold px-2">{passwordError}</p>}
+          </label>
+
+          <label className="flex flex-col gap-3">
+            <span className="text-[#1e293b] text-lg font-bold px-1 flex items-center gap-1">
+              您的生日 <span className="text-rose-500 text-base">*</span>
+            </span>
+            <input
+              className="w-full rounded-[2rem] border-none bg-white shadow-sm h-16 px-6 text-lg text-black placeholder:text-slate-400 focus:ring-2 focus:ring-[#eab308]/20 transition-all font-mono"
+              type="date"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+              required
+            />
+            <p className="text-[10px] text-slate-400 px-2 italic">提示：生日将用于在家族大事记中为您举行庆生。</p>
           </label>
 
           <label className="flex flex-col gap-3">
@@ -477,25 +465,21 @@ export const RegisterPage: React.FC = () => {
                 type="button"
                 onClick={() => setGender("male")}
                 className={cn(
-                  "flex-1 h-14 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 shadow-sm",
-                  gender === "male"
-                    ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20 text-base"
-                    : "bg-white text-slate-400 border-2 border-slate-50 text-base"
+                  "flex-1 h-14 rounded-2xl font-bold transition-all border-2",
+                  gender === "male" ? "bg-blue-500 text-white shadow-lg" : "bg-white text-slate-400 border-slate-50"
                 )}
               >
-                <span>男</span>
+                男
               </button>
               <button
                 type="button"
                 onClick={() => setGender("female")}
                 className={cn(
-                  "flex-1 h-14 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 shadow-sm",
-                  gender === "female"
-                    ? "bg-rose-500 text-white shadow-lg shadow-rose-500/20 text-base"
-                    : "bg-white text-slate-400 border-2 border-slate-50 text-base"
+                  "flex-1 h-14 rounded-2xl font-bold transition-all border-2",
+                  gender === "female" ? "bg-rose-500 text-white shadow-lg" : "bg-white text-slate-400 border-slate-50"
                 )}
               >
-                <span>女</span>
+                女
               </button>
             </div>
           </label>
@@ -510,9 +494,7 @@ export const RegisterPage: React.FC = () => {
                 value={invitationCode}
                 onChange={(e) => { setInvitationCode(e.target.value); setInviteError(""); }}
               />
-              {inviteError && (
-                <p className="text-red-500 text-sm font-bold px-2">{inviteError}</p>
-              )}
+              {inviteError && <p className="text-red-500 text-sm font-bold px-2">{inviteError}</p>}
             </label>
           ) : (
             <div className="bg-[#eab308]/10 p-5 rounded-3xl border border-[#eab308]/20 flex items-center justify-between shadow-sm">
@@ -525,23 +507,20 @@ export const RegisterPage: React.FC = () => {
           )}
         </div>
 
-        {/* Action Button */}
         <div className="mt-4">
           <Button
             size="xl"
             disabled={!canSubmit || isValidatingCode}
             className={`w-full h-16 rounded-[2rem] text-xl font-bold shadow-lg transition-all ${canSubmit && !isValidatingCode
-              ? "bg-[#eab308] hover:bg-[#d9a306] text-black shadow-[#eab308]/20"
-              : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+              ? "bg-[#eab308] hover:bg-[#d9a306] text-black"
+              : "bg-slate-200 text-slate-400 cursor-not-allowed"
               }`}
             onClick={handleNext}
           >
             {isValidatingCode ? "验证中..." : "下一步"}
           </Button>
-          <p className="text-center text-[10px] text-slate-300 mt-2 font-mono">v1.2.9-ConfirmFlow</p>
         </div>
 
-        {/* 身份确认与修改弹窗 */}
         <AnimatePresence>
           {showVerificationModal && inviteData && (
             <div className="fixed inset-0 bg-black/60 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6 backdrop-blur-sm">
@@ -558,7 +537,7 @@ export const RegisterPage: React.FC = () => {
                     </div>
                     <h3 className="text-2xl font-black text-slate-800 tracking-tight">确认您的身份</h3>
                     <p className="text-slate-500 font-medium text-sm">
-                      <span className="font-bold text-[#eab308]">{inviterName}</span> 邀请您加入家族。您可以直接点击下方修改档案：
+                      <span className="font-bold text-[#eab308]">{inviterName}</span> 邀请您加入家族。
                     </p>
                   </div>
 
@@ -567,48 +546,11 @@ export const RegisterPage: React.FC = () => {
                       className="w-24 h-24 rounded-full border-4 border-white shadow-md overflow-hidden bg-white relative group cursor-pointer shrink-0"
                       onClick={() => setShowModalAvatarPicker(!showModalAvatarPicker)}
                     >
-                      <img
-                        src={avatar || inviteData.targetAvatar}
-                        alt="Avatar"
-                        className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                      />
+                      <img src={avatar} alt="Avatar" className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                         <Camera className="text-white" size={20} />
                       </div>
                     </div>
-
-                    {/* Inline Modal Avatar Selection */}
-                    <AnimatePresence>
-                      {showModalAvatarPicker && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="w-full overflow-hidden"
-                        >
-                          <div className="grid grid-cols-4 gap-2 bg-slate-100/50 p-3 rounded-[1.5rem] mt-2 mb-4">
-                            {defaultAvatars.map((url, i) => (
-                              <button
-                                key={i}
-                                onClick={(e) => { e.stopPropagation(); setAvatar(url); setIsAvatarUploaded(true); setShowModalAvatarPicker(false); }}
-                                className={cn(
-                                  "aspect-square rounded-full border-2 overflow-hidden transition-all",
-                                  avatar === url ? "border-[#eab308] scale-90" : "border-white"
-                                )}
-                              >
-                                <img src={url} alt={`Default ${i}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                              </button>
-                            ))}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); setShowModalAvatarPicker(false); }}
-                              className="aspect-square rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308] transition-all bg-white"
-                            >
-                              <Camera size={20} />
-                            </button>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
 
                     <div className="w-full flex flex-col gap-4 mt-2">
                       <div className="space-y-1.5 text-left w-full">
@@ -618,20 +560,15 @@ export const RegisterPage: React.FC = () => {
                             <input
                               autoFocus
                               type="text"
-                              className="w-full h-14 rounded-2xl bg-white border-2 border-[#eab308] ring-4 ring-[#eab308]/10 px-5 font-bold text-slate-800 placeholder:text-slate-300 transition-all shadow-sm"
+                              className="w-full h-12 rounded-2xl bg-white border-2 border-[#eab308] px-5 font-bold"
                               value={name}
                               onChange={(e) => setName(e.target.value)}
                               onBlur={() => setIsEditingName(false)}
-                              placeholder="请输入您的姓名"
                             />
                           ) : (
-                            <div className="w-full h-14 rounded-2xl bg-white border-2 border-slate-100 px-5 font-bold text-slate-800 shadow-sm flex items-center justify-between">
-                              <span className={name ? "text-slate-800" : "text-slate-300"}>{name || "请输入您的姓名"}</span>
-                              <button
-                                type="button"
-                                onClick={() => setIsEditingName(true)}
-                                className="p-1.5 rounded-full hover:bg-[#eab308]/10 text-slate-300 hover:text-[#eab308] transition-all"
-                              >
+                            <div className="w-full h-12 rounded-2xl bg-white border-2 border-slate-100 px-5 font-bold flex items-center justify-between">
+                              <span>{name}</span>
+                              <button onClick={() => setIsEditingName(true)} className="text-slate-300">
                                 <Edit2 size={16} />
                               </button>
                             </div>
@@ -640,70 +577,37 @@ export const RegisterPage: React.FC = () => {
                       </div>
 
                       <div className="space-y-1.5 text-left w-full">
-                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">性别 (用于精准关系推导)</label>
-                        <div className="grid grid-cols-2 gap-3 mt-1">
-                          <button
-                            type="button"
-                            onClick={() => setGender("male")}
-                            className={cn(
-                              "h-12 rounded-2xl font-bold transition-all border-2",
-                              gender === "male" ? "bg-blue-50 border-blue-200 text-blue-600 shadow-sm" : "bg-white border-slate-100 text-slate-400"
-                            )}
-                          >
-                            男
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setGender("female")}
-                            className={cn(
-                              "h-12 rounded-2xl font-bold transition-all border-2",
-                              gender === "female" ? "bg-pink-50 border-pink-200 text-pink-600 shadow-sm" : "bg-white border-slate-100 text-slate-400"
-                            )}
-                          >
-                            女
-                          </button>
-                        </div>
+                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">出生日期</label>
+                        <input
+                          type="date"
+                          className="w-full h-12 rounded-2xl bg-white border-2 border-slate-100 px-5 font-bold"
+                          value={birthDate}
+                          onChange={(e) => setBirthDate(e.target.value)}
+                        />
                       </div>
 
                       <div className="space-y-1.5 text-left w-full">
-                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">您的身份（邀请人对您的称呼）</label>
-                        <div className="w-full h-14 rounded-2xl bg-slate-50 border-2 border-slate-100 px-5 font-bold text-slate-500 shadow-sm flex items-center">
-                          <span>{selectedRelationship || (inviteData && inviteData.targetRole) || "未知身份"}</span>
+                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">您的身份</label>
+                        <div className="w-full h-12 rounded-2xl bg-slate-100 px-5 font-bold flex items-center">
+                          <span>{selectedRelationship || inviteData.targetRole}</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid gap-4 pt-2 px-2">
+                  <div className="grid gap-4 pt-2">
                     <Button
                       size="xl"
-                      className="w-full h-16 rounded-2xl bg-[#eab308] text-black font-black shadow-lg shadow-[#eab308]/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                      onClick={() => {
-                        // 当选择"其他"且有自定义文字时，使用自定义文字作为关系标签
-                        const effectiveRel = (selectedRelationship === "其他" && customRelText.trim())
-                          ? customRelText.trim()
-                          : (selectedRelationship || inviteData.targetRole);
-                        const stdRole = allRelationships.find(r => r.label === selectedRelationship)?.value || "other";
-                        const finalName = name || inviteData.targetName;
-                        const finalAvatar = avatar || inviteData.targetAvatar;
-
-                        setName(finalName);
-                        setAvatar(finalAvatar);
-
-                        handleCompleteRegistration(effectiveRel, stdRole, undefined, finalName, finalAvatar);
-                      }}
+                      className="w-full h-16 rounded-2xl bg-[#eab308] text-black font-black"
+                      onClick={() => handleCompleteRegistration()}
                     >
                       <Check size={20} /> 是的，确认加入
                     </Button>
                     <button
-                      className="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
-                      onClick={() => {
-                        setInvitationCode("");
-                        setInviteData(null);
-                        setShowVerificationModal(false);
-                      }}
+                      className="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold"
+                      onClick={() => setShowVerificationModal(false)}
                     >
-                      <X size={16} /> 这不是我，返回重新输入
+                      <X size={16} /> 取消
                     </button>
                   </div>
                 </div>
@@ -712,46 +616,22 @@ export const RegisterPage: React.FC = () => {
           )}
         </AnimatePresence>
 
-        {/* Footer */}
         <div className="text-center">
           <p className="text-slate-500 text-lg">
-            已有账号？ <button onClick={() => navigate("/login")} className="text-[#eab308] font-bold underline underline-offset-8 decoration-2">去登录</button>
-          </p>
-        </div>
-
-        {/* Accessibility Note */}
-        <div className="mt-8 px-6 text-center">
-          <p className="text-slate-400 text-sm leading-relaxed italic">
-            提示：如果您在操作中遇到困难，可以请您的子女或孙辈协助完成注册。
+            已有账号？ <button onClick={() => navigate("/login")} className="text-[#eab308] font-bold underline underline-offset-8">去登录</button>
           </p>
         </div>
       </div>
+
       {showCropper && tempImage && (
         <ImageCropper
           image={tempImage}
           onCropComplete={(croppedImage) => {
-            // 压缩图片：避免 base64 过大导致 Vercel 413 错误
-            const img = new Image();
-            img.onload = () => {
-              const canvas = document.createElement("canvas");
-              const ctx = canvas.getContext("2d");
-              const MAX_WIDTH = 500;
-              const scale = Math.min(1, MAX_WIDTH / img.width);
-              canvas.width = img.width * scale;
-              canvas.height = img.height * scale;
-              ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-              const compressed = canvas.toDataURL("image/jpeg", 0.7); // 质量降到 0.7 显著减小体积
-              setAvatar(compressed);
-              setIsAvatarUploaded(true);
-              setShowCropper(false);
-              setTempImage(null);
-            };
-            img.src = croppedImage;
-          }}
-          onClose={() => {
+            setAvatar(croppedImage);
+            setIsAvatarUploaded(true);
             setShowCropper(false);
-            setTempImage(null);
           }}
+          onClose={() => setShowCropper(false)}
         />
       )}
     </div>

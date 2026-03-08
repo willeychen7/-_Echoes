@@ -731,10 +731,10 @@ export async function createApp() {
 
     app.post("/api/register-claim", async (req, res) => {
       try {
-        const { inviteCode, name, avatarUrl, relationshipToInviter, standardRole, phone, password } = req.body;
-        if (!inviteCode || !name || !phone || !password) {
-          console.error("[CLAIM:ERROR] Missing fields:", { inviteCode: !!inviteCode, name: !!name, phone: !!phone, password: !!password });
-          return res.status(400).json({ error: "Required fields missing" });
+        const { inviteCode, name, avatarUrl, relationshipToInviter, standardRole, phone, password, birthDate } = req.body;
+        if (!inviteCode || !name || !phone || !password || !birthDate) {
+          console.error("[CLAIM:ERROR] Missing fields:", { inviteCode: !!inviteCode, name: !!name, phone: !!phone, password: !!password, birthDate: !!birthDate });
+          return res.status(400).json({ error: "Required fields missing (name, phone, password, birthDate)" });
         }
 
         let targetId: number | null = null;
@@ -1464,9 +1464,9 @@ export async function createApp() {
       if (!supabase) return res.status(500).json({ error: "服务器初始化失败：数据库未连接" });
       console.log("[REGISTER-NEW] Start registration for:", req.body.phone);
       try {
-        const { name, phone, password, avatar } = req.body;
-        if (!name || !phone || !password) {
-          return res.status(400).json({ error: "Missing required fields" });
+        const { name, phone, password, avatar, birthDate } = req.body;
+        if (!name || !phone || !password || !birthDate) {
+          return res.status(400).json({ error: "Missing required fields (name, phone, password, birthDate)" });
         }
 
         // 先检查是否已存在
@@ -1496,6 +1496,7 @@ export async function createApp() {
             relationship: "创建者",
             avatar_url: avatar || "",
             gender: req.body.gender,
+            birth_date: birthDate,
             is_registered: true,
             standard_role: "creator"
           })
@@ -1512,7 +1513,8 @@ export async function createApp() {
           relationship: "我",
           member_id: member.id,
           family_id: family.id,
-          avatar_url: avatar || ""
+          avatar_url: avatar || "",
+          birth_date: birthDate
         }).select("id").single();
         if (uError) throw uError;
 
@@ -2154,7 +2156,7 @@ export async function createApp() {
           .single();
 
         if (otpError || !otpData) return res.status(400).json({ error: "验证码无效或未发送" });
-        if (otpData.code !== code) return res.status(400).json({ error: "验证码错误" });
+        if (otpData.code !== code) return res.status(400).json({ error: "验证码不正确" });
         if (new Date(otpData.expires_at) < new Date()) return res.status(400).json({ error: "验证码已过期" });
 
         const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
@@ -2480,7 +2482,8 @@ export async function createApp() {
         if (memberId) {
           await supabase.from("family_members").update({
             name: name || undefined,
-            avatar_url: avatarUrl || undefined
+            avatar_url: avatarUrl || undefined,
+            birth_date: birthDate || undefined // Add birthDate here
           }).eq("id", memberId);
           await syncMemberContent(memberId, name, null, avatarUrl, null);
         }
