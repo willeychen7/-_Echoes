@@ -38,9 +38,19 @@ const TAG_TO_MUMUY_MAP: Record<string, string> = {
 };
 
 /**
- * 路径反转逻辑：如 "爸爸的爸爸" 反转为 "儿子的儿子"
- * @param path 原始路径
- * @param dSex 目标节点的性别 (0:女, 1:男)
+ * 获取排行权重
+ */
+function getRankWeight(rank: string): number {
+    const map: Record<string, number> = {
+        '大': 1, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
+        '十一': 11, '十二': 12, '十三': 13, '十四': 14, '十五': 15, '十六': 16, '十七': 17, '十八': 18, '十九': 19, '二十': 20,
+        '小': 98, '老': 99
+    };
+    return map[rank] || 0;
+}
+
+/**
+ * 路径反转逻辑
  */
 function inversePath(path: string, vSex: 0 | 1): string {
     if (!path) return '';
@@ -72,13 +82,24 @@ function normalizePath(tag: string): string {
 }
 
 /**
+ * 获取 logicTag 中的排行
+ */
+function getTagRank(tag: string): string | null {
+    const match = tag.toUpperCase().match(/-O(二十|十一|十二|十三|十四|十五|十六|十七|十八|十九|一|二|三|四|五|六|七|八|九|十|大|小|幺|老)$/);
+    return match ? match[1] : null;
+}
+
+/**
  * 计算相对中文链
  */
 function getRelativeChainText(vTag: string, tTag: string, targetSex: 0 | 1 = 1, viewerSex: 0 | 1 = 1): string {
     const vPath = normalizePath(vTag);
     const tPath = normalizePath(tTag);
+    const vRank = getTagRank(vTag);
+    const tRank = getTagRank(tTag);
 
-    if (vPath === tPath) return '';
+    // 🚀 核心纠偏：即使路径相同，如果排行不同，则不是同一人
+    if (vPath === tPath && vRank === tRank) return '';
 
     const vSegs = vPath ? vPath.split(',') : [];
     const tSegs = tPath ? tPath.split(',') : [];
@@ -91,9 +112,6 @@ function getRelativeChainText(vTag: string, tTag: string, targetSex: 0 | 1 = 1, 
     const fromAncestor = tSegs.slice(commonIdx);
 
     const relPathParts = [];
-    // 向上走：使用 Viewer 的性别来决定反转后的称呼 (因为是回到公共祖先)
-    // 错误！应该是回到公共祖先的路径中，最后一步回到的是谁？
-    // 实际上 inversePath 应该逐级决定。但简化处理：回到 Viewer 时使用 viewerSex
     if (toAncestor.length > 0) relPathParts.push(inversePath(toAncestor.join(','), viewerSex));
     if (fromAncestor.length > 0) relPathParts.push(fromAncestor.join(','));
 
@@ -104,7 +122,28 @@ function getRelativeChainText(vTag: string, tTag: string, targetSex: 0 | 1 = 1, 
         'f': '爸爸', 'm': '妈妈', 's': '儿子', 'd': '女儿',
         'xb': '兄弟', 'xs': '姐妹', 'h': '丈夫', 'w': '妻子'
     };
-    return relPath.split(',').filter(Boolean).map(seg => map[seg] || '亲戚').join('的');
+
+    const segments = relPath.split(',').filter(Boolean);
+
+    // 💡 针对堂/表亲的排行注入逻辑 (Branch-Aware Injection)
+    // 寻找链条中的“兄弟/姐妹”节点，将其替换为带排行的称呼（如：三叔）
+    let chain = segments.map((seg, idx) => {
+        let base = map[seg] || '亲戚';
+
+        // 如果是去往 Target 的最后一段路径或者是父辈节点
+        if (tRank && tRank !== '不知道') {
+            const isLastSiblingInPath = (seg === 'xb' || seg === 'xs') && idx === segments.length - 2;
+            const isFatherLevel = (seg === 'f' || seg === 'm') && idx === segments.length - 2;
+
+            if (isLastSiblingInPath || isFatherLevel) {
+                // 注入房分排行
+                return tRank + base;
+            }
+        }
+        return base;
+    }).join('的');
+
+    return chain;
 }
 
 /**
