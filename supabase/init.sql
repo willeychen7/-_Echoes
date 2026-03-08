@@ -78,8 +78,13 @@ CREATE TABLE family_members (
     ancestral_hall TEXT,    -- 房头/房份 (例如：大房、二房)
     is_adopted BOOLEAN DEFAULT FALSE, -- 是否为继嗣/祧子
     member_type TEXT DEFAULT 'human',  -- 成员类型：human | pet
+    added_by_member_id INTEGER REFERENCES family_members(id) ON DELETE SET NULL, -- 记录是谁把此人加入家族的
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 索引：方便查询「某个成员是谁带进来的」
+CREATE INDEX IF NOT EXISTS idx_family_members_added_by
+    ON family_members(added_by_member_id);
 
 -- 档案创建维护表 (Archive Memory Creators)
 -- NOTE: 记录哪个成员创建了谁的档案，实现权限和归属的分离

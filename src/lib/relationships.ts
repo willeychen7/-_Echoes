@@ -467,15 +467,20 @@ export function getRelationshipChain(viewer: any, target: any, members: any[]): 
     }
 
     // === 策略 2（兜底）：创建者链路回溯 ===
-    // BFS 图找不到路径时，用「谁建了这个档案」来追溯
+    // BFS 图找不到路径时，用「谁把这个人加入家族」来追溯
+    //
+    // 数据来源优先级：
+    //   1. added_by_member_id（直接在 family_members 表，最可靠）
+    //   2. createdByMemberId（来自 archive_memory_creators，备用）
     //
     // 双跳逻辑：
-    //   target.createdByMemberId = 堂弟  （堂弟创建了二姨）
+    //   target.added_by_member_id = 堂弟  （堂弟加入了二姨）
     //   target.relationship = "阿姨"       （堂弟眼中的二姨）
-    //   堂弟.createdByMemberId = 我       （我创建了堂弟的档案）
+    //   堂弟.added_by_member_id = 我       （我把堂弟加入家族）
     //   堂弟.relationship = "堂弟"         （我眼中的堂弟）
     //   → 生成：「小明（我堂弟）的阿姨」✅
-    const creatorId = target.createdByMemberId || target.created_by_member_id;
+    const creatorId = target.addedByMemberId || target.added_by_member_id ||
+        target.createdByMemberId || target.created_by_member_id;
     const creatorRelLabel = (target.relationship || '').trim();
     if (creatorId && creatorRelLabel && Number(creatorId) !== vId && Number(creatorId) !== tId) {
         const creatorNode = ctx.membersMap.get(Number(creatorId));

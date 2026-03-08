@@ -284,7 +284,8 @@ export async function createApp() {
           generationNum: m.generation_num,
           memberType: m.member_type,
           logicTag: m.logic_tag,
-          createdByMemberId: createdByMemberId || null
+          createdByMemberId: createdByMemberId || null,
+          addedByMemberId: m.added_by_member_id || null
         };
       });
       res.json(members);
@@ -563,7 +564,8 @@ export async function createApp() {
           gender: gender || null,
           member_type: memberType || 'human',
           generation_num: generationNum || null,
-          logic_tag: logicTag || null
+          logic_tag: logicTag || null,
+          added_by_member_id: createdByMemberId || null  // 记录是谁把此人加入家族的
         };
 
         console.log("[API:MEMBER] Attempting primary insert...");
@@ -1206,6 +1208,7 @@ export async function createApp() {
               await supabase.from("family_members").update({ father_id: target.id }).eq("father_id", oldMemberId);
               await supabase.from("family_members").update({ mother_id: target.id }).eq("mother_id", oldMemberId);
               await supabase.from("family_members").update({ spouse_id: target.id }).eq("spouse_id", oldMemberId);
+              await supabase.from("family_members").update({ added_by_member_id: target.id }).eq("added_by_member_id", oldMemberId);
             }
           }
 
