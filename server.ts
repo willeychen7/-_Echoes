@@ -1291,6 +1291,18 @@ export async function createApp() {
                   // 把所有把 vNode 当爸/妈的成员，改指向 realNode
                   await supabase.from("family_members").update({ father_id: realNode.id }).eq("father_id", vNode.id);
                   await supabase.from("family_members").update({ mother_id: realNode.id }).eq("mother_id", vNode.id);
+
+                  // === 核心增强：配偶/姻亲对齐 ===
+                  // 如果 vNode 本身是一个代表姻亲的对象（如 B 录的大伯母镜像），尝试与真实的血亲（A 录的大伯）连线
+                  const vRel = (vNode.relationship || '').toLowerCase();
+                  const isVNodeAffinal = affinalKeywords.some(k => vRel.includes(k));
+
+                  if (isVNodeAffinal) {
+                    // vNode（迁移来的伯母虚拟镜像）指向 realNode（主家真实大伯）为配偶
+                    // 在真实场景中，我们直接更新迁移过来的、基于 vNode 关系的成员
+                    await supabase.from("family_members").update({ spouse_id: realNode.id }).eq("spouse_id", vNode.id);
+                  }
+
                   // 删除虚拟节点
                   await supabase.from("family_members").delete().eq("id", vNode.id);
                 } else if (finalMatches.length > 1) {
