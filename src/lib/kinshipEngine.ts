@@ -170,6 +170,12 @@ export function getReverseKinship(
     const coreRel = getCleanRelationship(rel);
     const isMale = normalizeGender(myGender) === 'male';
 
+    // 🚀 [Logic Upgrade] 增加对标准 role key 的直接支持，防止翻译混淆
+    const stdRoleKey = (relText || '').toLowerCase();
+    if (stdRoleKey === 'son' || stdRoleKey === 'daughter' || stdRoleKey === 'child') return isMale ? '父亲' : '母亲';
+    if (stdRoleKey === 'father' || stdRoleKey === 'mother' || stdRoleKey === 'parent') return isMale ? '儿子' : '女儿';
+    if (stdRoleKey === 'brother' || stdRoleKey === 'sister' || stdRoleKey === 'sibling') return isMale ? '哥哥/弟弟' : '姐姐/妹妹';
+
     // 提取前缀 (堂、表、再从、三从、族)
     const prefixes = ['再从', '三从', '堂', '表', '族'];
     const prefix = prefixes.find(p => rel.includes(p)) || '';
@@ -178,7 +184,7 @@ export function getReverseKinship(
     // --- 🌟 Fallback: 启发式内置规则 (用于只有文本标签的场景) ---
     // =====================================================================
     if (['grandfather', 'grandmother', 'm_grandfather', 'm_grandmother', 'g_grandfather', 'm_g_grandfather'].includes(connector)) {
-        if (/^(爷爷|奶奶|外公|外婆|曾祖|太爷|太奶|外太公|外太婆)$/.test(coreRel)) {
+        if (/^(爷爷|奶奶|外公|外婆|曾祖|太爷|太奶|外太公|外太婆|公|爷|奶|姥)$/.test(coreRel)) {
             if (side === 'paternal') {
                 if (coreRel.includes('曾') || coreRel.includes('太')) return isMale ? '曾孙' : '曾孙女';
                 return isMale ? '孙子' : '孙女';
@@ -189,12 +195,13 @@ export function getReverseKinship(
     }
 
     if (connector === 'grandchild_p') {
+        if (coreRel.includes('玄')) return isMale ? '高祖父' : '高祖母';
         if (coreRel.includes('曾')) return isMale ? '曾祖父' : '曾祖母';
         return isMale ? '爷爷' : '奶奶';
     }
 
     if (/叔|伯/.test(coreRel)) return prefix + (isMale ? '侄子' : '侄女');
-    if (/姑/.test(coreRel)) return prefix + (isMale ? '外甥' : '外甥女');
+    if (/姑/.test(coreRel)) return prefix + (isMale ? '侄子' : '侄女'); // 姑姑的侄子/女
     if (/舅|姨/.test(coreRel)) return prefix + (isMale ? '外甥' : '外甥女');
     if (/哥|姐|弟|妹/.test(coreRel)) {
         const isOlder = /哥|姐/.test(coreRel);
@@ -202,6 +209,21 @@ export function getReverseKinship(
         return isOlder ? prefix + '妹' : prefix + '姐';
     }
     if (coreRel === '父亲' || coreRel === '母亲' || /爸|妈/.test(coreRel)) return isMale ? '儿子' : '女儿';
+    if (coreRel === '儿子' || coreRel === '女儿' || /子|女/.test(coreRel)) return isMale ? '父亲' : '母亲';
+
+    if (/孙/.test(coreRel)) {
+        if (coreRel.includes('玄') || coreRel.includes('耳')) return isMale ? '高祖父' : '高祖母';
+        if (coreRel.includes('曾')) return isMale ? '曾祖父' : '曾祖母';
+        if (coreRel.includes('外')) return isMale ? '外公' : '外婆';
+        return isMale ? '爷爷' : '奶奶';
+    }
+
+    if (/侄|甥/.test(coreRel)) {
+        if (prefix === '堂') return isMale ? '堂叔' : '堂姑';
+        if (prefix === '表') return isMale ? '表舅' : '表姨';
+        if (/外甥/.test(coreRel)) return isMale ? '舅舅/姨丈' : '姨妈/舅妈';
+        return isMale ? '叔/舅' : '姑/姨';
+    }
 
     return '亲属';
 }

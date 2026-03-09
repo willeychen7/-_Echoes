@@ -389,13 +389,15 @@ export function computeKinshipViaMumuy(
 
         const distV = getGenerationDistance(viewerNode, lca, members);
 
-        // --- 核心修正：识别“堂舅 / 堂姨” (母亲的堂兄弟姐妹) ---
-        const distToLCAFromViewer = lca ? getGenerationDistance(viewerNode, lca, members) : 0;
-        const distToLCAFromTarget = lca ? getGenerationDistance(targetNode, lca, members) : 0;
-
-        // 如果路径是从母亲向上的 (viewerMaternal) 且 target 是母亲的父系堂亲 (target 没有 maternal 记录)
-        if (viewerMaternal && !targetMaternal) {
-            return tIsFemale ? rank + "堂姨" : rank + "堂舅";
+        // --- 核心修正：判断是否为母亲的堂/表兄弟姐妹 (堂舅/表舅/堂姨/表姨) ---
+        // 1. 如果路径是从母亲向上的 (viewerMaternal)
+        if (viewerMaternal) {
+            const distToLCAFromTarget = getGenerationDistance(targetNode, lca, members);
+            if (distToLCAFromTarget >= 2) {
+                // 目标是通过其祖辈链接到 LCA 的，所以是母亲的堂/表亲
+                const prefix = targetMaternal ? '表' : '堂';
+                return tIsFemale ? rank + prefix + "姨" : rank + prefix + "舅";
+            }
         }
 
         let prefix = (isRealSib || targetNode.ancestral_hall === effectiveVH) ? '' : (isMaternal ? '表' : '堂');
@@ -429,59 +431,67 @@ export function computeKinshipViaMumuy(
         const prefixStr = isPast ? ANCESTOR_PREFIX[depthIdx] : DESCENDANT_PREFIX[depthIdx];
 
         if (isPast) {
-            if (absGen === 2) {
-                if (isBioAncestor) {
-                    // 精准判断祖父母方向：通过父亲一侧 → 爷爷/奶奶，通过母亲一侧 → 外公/外婆
-                    // 直接检查：viewer 的父亲是否是 target 的后代（即 target 是父系祖辈）
-                    const viewerFather = vFatherId ? members?.find(m => String(m.id) === String(vFatherId)) : null;
-                    const throughFather = viewerFather ? isDescendantRecursive(viewerFather, targetNode, members) || isAncestorRecursive(targetNode, viewerFather, members) : false;
-                    if (throughFather) return (tIsFemale ? "奶奶" : "爷爷");
-                    return (tIsFemale ? "外婆" : "外公");
-                }
+            if (isBioAncestor) {
+                const viewerFather = vFatherId ? getFullNode(vFatherId) : null;
+                const throughFather = viewerFather ? isAncestorRecursive(targetNode, viewerFather, members) : false;
+                const suffix = absGen === 2 ? (tIsFemale ? "奶奶" : "爷爷") : (tIsFemale ? "祖母" : "祖父");
+                if (throughFather) return prefixStr + suffix;
+                return "外" + prefixStr + suffix;
+            }
 
-                // 旁系祖辈精准术语
-                // 查找 target 的兄弟姐妹中谁是 viewer 的直系祖代
-                const ancSib = members?.find(m => areSiblings(m.id, targetNode.id) && isAncestorRecursive(m, viewerNode, members));
+            // 旁系祖辈及其配偶（如：婶婆、舅婆、姨公、姑爷）
+            // 如果 target 是配偶，则解析到其丈夫/妻子
+            const spouseId = getVal(targetNode, ['spouse_id', 'spouseId']);
+            const effectiveTarget = spouseId ? getFullNode(spouseId) : targetNode;
+            const isTargetSpouse = !!spouseId;
 
-                // 判断是父系还是母系 (通过该直系祖代判断)
-                const lineageNode = ancSib || targetNode;
-                const throughMother = isDescendantThroughDaughter(viewerNode, lineageNode, members);
-                const isFemaleTarget = tIsFemale;
+            const ancSib = members?.find(m => areSiblings(m.id, effectiveTarget.id) && isAncestorRecursive(m, viewerNode, members));
+            const lineageNode = ancSib || effectiveTarget;
+            const lcaOfLineage = findLCA(lineageNode, viewerNode, members);
+            const throughMother = lcaOfLineage ? isDescendantThroughDaughter(viewerNode, lcaOfLineage, members) : false;
 
-                if (ancSib) {
-                    const ancSibIsFemale = normalizeGender(ancSib.gender) === 'female';
+            if (ancSib) {
+                const ancSibIsFemale = normalizeGender(ancSib.gender) === 'female';
+                const bloodIsFemale = normalizeGender(effectiveTarget.gender) === 'female';
+
+                if (absGen === 2) {
                     if (throughMother) {
                         // 母系 (外公/外婆一侧)
-                        if (ancSibIsFemale) {
-                            // 外婆的兄弟姐妹
-                            return isFemaleTarget ? rank + "姨外婆" : rank + "舅外婆";
+                        if (bloodIsFemale) {
+                            // 姐妹
+                            if (isTargetSpouse) return rank + "姨外公";
+                            return rank + "姨外婆";
                         } else {
-                            // 外公的兄弟姐妹
-                            return isFemaleTarget ? rank + "姑外婆" : (tS < getExplicitOrder(ancSib) ? rank + "伯外公" : rank + "叔外公");
+                            // 兄弟
+                            if (isTargetSpouse) return rank + "舅外婆";
+                            return rank + "舅外公";
                         }
                     } else {
                         // 父系 (爷爷/奶奶一侧)
-                        if (ancSibIsFemale) {
-                            // 奶奶的兄弟姐妹
-                            return isFemaleTarget ? rank + "姨奶奶" : rank + "舅公";
+                        if (bloodIsFemale) {
+                            // 姐妹
+                            if (isTargetSpouse) return rank + "姑爷爷";
+                            return rank + "姑奶奶";
                         } else {
-                            // 爷爷的兄弟姐妹
-                            return isFemaleTarget ? rank + "姑奶奶" : (tS < getExplicitOrder(ancSib) ? rank + "伯公" : rank + "叔公");
+                            // 兄弟
+                            if (isTargetSpouse) {
+                                const bloodOrder = getExplicitOrder(effectiveTarget);
+                                const ancOrder = getExplicitOrder(ancSib);
+                                return bloodOrder < ancOrder ? rank + "伯婆" : rank + "婶婆";
+                            }
+                            return (getExplicitOrder(effectiveTarget) < getExplicitOrder(ancSib) ? rank + "伯公" : rank + "叔公");
                         }
                     }
                 }
-
-                // 默认兜底
-                const sidePrefix = throughMother ? "外" : "";
-                return sidePrefix + rank + (isFemaleTarget ? '奶奶' : '爷爷');
             }
-            // 曾祖辈及以上旁系
-            const throughMother = isDescendantThroughDaughter(viewerNode, targetNode, members);
-            const sidePrefix = throughMother ? "外" : "";
-            return sidePrefix + prefixStr + (tIsFemale ? '奶奶' : '爷爷');
+
+            const suffix = absGen === 2 ? (tIsFemale ? "奶奶" : "爷爷") : (tIsFemale ? "祖母" : "祖父");
+            return (throughMother ? "外" : "") + prefixStr + suffix;
         } else {
-            const sidePrefix = (isBioDescendant || hT === hV) ? "" : (isMaternal ? "外" : "堂");
-            return sidePrefix + prefixStr + (tIsFemale ? '孙女' : '孙子');
+            // 晚辈 (孙子、曾孙、玄孙...)
+            const suffix = tIsFemale ? "孙女" : "孙子";
+            const sidePrefix = (isBioDescendant || targetNode.ancestral_hall === effectiveVH) ? "" : (isMaternal ? "外" : "堂");
+            return sidePrefix + prefixStr + suffix;
         }
     }
 

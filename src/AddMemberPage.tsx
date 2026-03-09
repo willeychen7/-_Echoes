@@ -138,6 +138,15 @@ export const AddMemberPage: React.FC = () => {
     }
   }, [members, myRank]);
 
+  const meNode = React.useMemo(() => {
+    const savedUser = localStorage.getItem("currentUser");
+    const currentUser = savedUser ? JSON.parse(savedUser) : null;
+    return members.find(m =>
+      (m.id && currentUser?.memberId && String(m.id) === String(currentUser.memberId)) ||
+      (m.userId && currentUser?.id && String(m.userId) === String(currentUser.id))
+    );
+  }, [members]);
+
   const candidateParents = React.useMemo(() => {
     const rel = relationship === "其他" ? customRelationship : relationship;
     if (!rel || members.length === 0) return [];
@@ -618,87 +627,90 @@ export const AddMemberPage: React.FC = () => {
 
       <main className="flex-1 px-6 py-8 max-w-md mx-auto w-full space-y-10 relative">
         <div className="flex items-center justify-between mb-8 px-4">
-          {[1, 2, 3, 4, 5, 6].map(step => {
+          {[1, 2, 3, 4, 5].map(step => {
             const isFamily = memberType === 'human' && kinshipType === 'blood';
-            const maxSteps = isFamily ? 6 : 2;
+            const maxSteps = isFamily ? 5 : 2;
             if (step > maxSteps) return null;
             return (
-              <div key={step} className={`flex-1 h-1.5 rounded-full mx-0.5 ${wizardStep >= step ? 'bg-[#eab308]' : 'bg-slate-200'} transition-all duration-300`} />
+              <div key={step} className={`flex-1 h-1.5 rounded-full mx-0.5 ${wizardStep >= (step === 1 ? 1 : step + 1) ? 'bg-[#eab308]' : 'bg-slate-200'} transition-all duration-300`} />
             );
           })}
         </div>
 
-        {/* 第 1 步：大类选择 */}
+        {/* 第 1 步：大类与代际整合界面 */}
         {wizardStep === 1 && (
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-8">
             <div className="text-center space-y-4">
-              <h2 className="text-3xl font-bold text-slate-800">选择成员大类</h2>
-              <p className="text-slate-500 italic text-base">第 1 步：确定人物或伙伴的基本关系属性</p>
+              <h2 className="text-3xl font-bold text-slate-800">建立新的档案</h2>
+              <p className="text-slate-500 italic text-base">第一步：请选择您与 TA 的关系坐标</p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
-              {[
-                { type: 'human', kType: 'blood', label: '家族至亲', sub: '祖辈、父辈、手足及子孙晚辈', icon: <Landmark className="size-6" />, color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
-                { type: 'human', kType: 'social', label: '知心好友', sub: '战友、老同学、恩师等社会关系', icon: <Users className="size-6" />, color: 'bg-blue-50 text-blue-600 border-blue-100' },
-                { type: 'pet', kType: 'social', label: '忠诚宠物', sub: '陪伴家族成长的毛孩子', icon: <PawPrint className="size-6" />, color: 'bg-amber-50 text-amber-600 border-amber-100' },
-              ].map((item) => (
-                <button
-                  key={item.label}
-                  onClick={() => {
-                    setMemberType(item.type as any);
-                    setKinshipType(item.kType as any);
-                    setWizardStep(2);
-                  }}
-                  className={cn(
-                    "p-6 rounded-[2.5rem] border-2 text-left transition-all hover:scale-[1.02] flex items-center gap-5 shadow-sm active:scale-95",
-                    item.color
-                  )}
-                >
-                  <div className="p-4 bg-white rounded-2xl shadow-sm">{item.icon}</div>
-                  <div className="flex-1">
-                    <h3 className="font-black text-xl">{item.label}</h3>
-                    <p className="opacity-60 text-sm font-medium">{item.sub}</p>
-                  </div>
-                  <ChevronRight />
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        )}
+            <div className="space-y-8">
+              {/* 家族血脉分组 */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 px-1">
+                  <Landmark className="size-4 text-emerald-600" />
+                  <span className="text-sm font-black text-slate-400 uppercase tracking-widest">家族至亲 (血脉)</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { type: 'ancestor', label: '祖辈', sub: '爷爷奶奶/外公外婆...', color: 'bg-emerald-50 text-emerald-700' },
+                    { type: 'elder', label: '父辈', sub: '父母/叔伯/舅姨...', color: 'bg-indigo-50 text-indigo-700' },
+                    { type: 'peer', label: '平辈', sub: '兄弟姐妹/堂表亲...', color: 'bg-blue-50 text-blue-700' },
+                    { type: 'junior', label: '晚辈', sub: '子女/侄甥/孙辈...', color: 'bg-amber-50 text-amber-700' },
+                  ].map((gen) => (
+                    <button
+                      key={gen.type}
+                      onClick={() => {
+                        setMemberType('human');
+                        setKinshipType('blood');
+                        setGeneration(gen.type as any);
+                        setWizardStep(3); // 直接跳过原 Step 2，进入分支选择
+                      }}
+                      className={cn(
+                        "p-5 rounded-[2rem] border-2 border-transparent text-left transition-all hover:scale-[1.02] active:scale-95 shadow-sm",
+                        gen.color
+                      )}
+                    >
+                      <h3 className="font-black text-xl mb-1">{gen.label}</h3>
+                      <p className="opacity-60 text-[10px] font-bold leading-tight">{gen.sub}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-        {/* 第 2 步：选择代际辈子 (家族成员专用) */}
-        {wizardStep === 2 && memberType === 'human' && kinshipType === 'blood' && (
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
-            <div className="text-center space-y-4">
-              <h2 className="text-3xl font-bold text-slate-800">判定辈分关系</h2>
-              <p className="text-slate-500 italic text-base">第 2 步：TA 在家族长幼中处于哪一环？</p>
+              {/* 其他伙伴分组 - 恢复原来的横向横格样式 */}
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2 px-1">
+                  <Heart className="size-4 text-rose-500" />
+                  <span className="text-sm font-black text-slate-400 uppercase tracking-widest">其他重要伙伴</span>
+                </div>
+                {[
+                  { type: 'human', kType: 'social', label: '知心好友', sub: '战友、老同学、恩师等', icon: <Users className="size-6" />, color: 'bg-blue-50 text-blue-600 border-blue-100' },
+                  { type: 'pet', kType: 'social', label: '忠诚宠物', sub: '陪伴家族成长的毛孩子', icon: <PawPrint className="size-6" />, color: 'bg-amber-50 text-amber-600 border-amber-100' },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    onClick={() => {
+                      setMemberType(item.type as any);
+                      setKinshipType(item.kType as any);
+                      setWizardStep(2);
+                    }}
+                    className={cn(
+                      "w-full p-6 rounded-[2.5rem] border-2 text-left transition-all hover:scale-[1.02] flex items-center gap-5 shadow-sm active:scale-95",
+                      item.color
+                    )}
+                  >
+                    <div className="p-4 bg-white rounded-2xl shadow-sm">{item.icon}</div>
+                    <div className="flex-1">
+                      <h3 className="font-black text-xl">{item.label}</h3>
+                      <p className="opacity-60 text-sm font-medium">{item.sub}</p>
+                    </div>
+                    <ChevronRight />
+                  </button>
+                ))}
+              </div>
             </div>
-
-            <div className="grid grid-cols-1 gap-4">
-              {[
-                { type: 'ancestor', label: '祖辈及以上', sub: '爷爷奶奶、外公外婆、曾祖、高祖等', icon: <div className="p-1 px-2 border rounded font-bold text-[10px] bg-slate-800 text-white">G-2+</div> },
-                { type: 'elder', label: '父辈', sub: '父亲、母亲、叔伯、舅姨等长辈', icon: <div className="p-1 px-2 border rounded font-bold text-[10px] bg-indigo-600 text-white">G-1</div> },
-                { type: 'peer', label: '平辈', sub: '自己的亲/堂/表 兄弟姐妹', icon: <div className="p-1 px-2 border rounded font-bold text-[10px] bg-emerald-600 text-white">G0</div> },
-                { type: 'junior', label: '晚辈', sub: '子女、孙辈、侄儿、外甥等', icon: <div className="p-1 px-2 border rounded font-bold text-[10px] bg-amber-500 text-white">G+1+</div> },
-              ].map((gen) => (
-                <button
-                  key={gen.type}
-                  onClick={() => {
-                    setGeneration(gen.type as any);
-                    setWizardStep(3);
-                  }}
-                  className="p-6 rounded-[2.5rem] bg-white border-2 border-slate-100 text-left transition-all hover:translate-x-2 flex items-center gap-5 shadow-sm active:scale-95"
-                >
-                  <div className="p-4 bg-slate-50 rounded-2xl shadow-sm">{gen.icon}</div>
-                  <div className="flex-1">
-                    <h3 className="font-black text-xl text-slate-800">{gen.label}</h3>
-                    <p className="opacity-60 text-sm font-medium text-slate-500">{gen.sub}</p>
-                  </div>
-                  <ChevronRight className="text-slate-300" />
-                </button>
-              ))}
-            </div>
-            <Button variant="outline" className="w-full h-14 font-bold rounded-2xl" onClick={() => setWizardStep(1)}>上一步</Button>
           </motion.div>
         )}
 
@@ -851,7 +863,19 @@ export const AddMemberPage: React.FC = () => {
                 <p className="text-indigo-900 font-bold text-lg leading-relaxed">
                   关系校验成功。TA 会称呼您为：
                   <span className="text-white bg-indigo-600 px-3 py-1 rounded-lg ml-2 shadow-sm whitespace-nowrap">
-                    {getReverseKinship(relationship === '其他' ? customRelationship : relationship, lineageSide as 'paternal' | 'maternal', connectorNode as string, meGender)}
+                    {getReverseKinship(
+                      relationship === '其他' ? customRelationship : relationship,
+                      lineageSide as 'paternal' | 'maternal',
+                      connectorNode as string,
+                      meGender,
+                      {
+                        relationship: relationship === '其他' ? customRelationship : relationship,
+                        gender,
+                        ancestralHall: selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : null
+                      },
+                      meNode,
+                      members
+                    )}
                   </span>
                 </p>
               </div>

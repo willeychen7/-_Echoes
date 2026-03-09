@@ -1401,7 +1401,8 @@ export async function createApp() {
         await supabase.from("users").update({
           family_id: inviter.family_id,
           member_id: finalMember.id,
-          gender: effectiveGender
+          gender: effectiveGender,
+          generation_num: finalMember.generation_num // 🚀 纠偏：确保用户表的代际字段与档案同步
         }).eq("id", currentUser.id);
 
         // 8. Execute Migration Logic (recursive)
