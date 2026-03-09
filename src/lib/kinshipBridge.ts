@@ -36,8 +36,12 @@ export function computeKinshipViaMumuy(
     viewerNode: any,
     members?: any[]
 ): string | null {
-    if (!targetNode || !viewerNode) return null;
-    if (targetNode.id === viewerNode.id) return "本人";
+    const eq = (a: any, b: any) => {
+        if (a === undefined || a === null || b === undefined || b === null) return false;
+        return String(a) === String(b);
+    };
+
+    if (eq(targetNode.id, viewerNode.id)) return "本人";
 
     const getFullNode = (id: any) => id ? members?.find(m => String(m.id) === String(id)) : null;
 
@@ -69,9 +73,9 @@ export function computeKinshipViaMumuy(
     const genDiff = tG - vG;
 
     // --- 0. 直系优先 ---
-    if (String(targetNode.id) === String(vFatherId)) return "父亲";
-    if (String(targetNode.id) === String(vMotherId)) return "母亲";
-    if (String(tFatherId) === String(viewerNode.id) || String(tMotherId) === String(viewerNode.id)) return tIsFemale ? "女儿" : "儿子";
+    if (eq(targetNode.id, vFatherId)) return "父亲";
+    if (eq(targetNode.id, vMotherId)) return "母亲";
+    if (eq(tFatherId, viewerNode.id) || eq(tMotherId, viewerNode.id)) return tIsFemale ? "女儿" : "儿子";
 
     if (isSpouse(targetNode, viewerNode)) return tIsFemale ? '妻子' : '丈夫';
 

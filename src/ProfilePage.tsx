@@ -36,21 +36,34 @@ const getIdentityRecommendation = (data: any, currentUserGender?: string) => {
   const tSex = effectiveGender === 'female' || effectiveGender === '女' ? 'F' : 'M';
 
   // 🚀 [Logic Upgrade] 优先使用邀请时确定的标准角色，结合性别生成精准称谓
-  const targetRole = data.targetRole || ""; // 邀请人给被邀请人定的称谓，如“二叔”
-  const stdRole = data.targetStandardRole;   // 映射的标准代码，如“uncle”
+  const targetRole = (data.targetRole || "").trim(); // 邀请人给被邀请人定的称谓，如“四叔叔”
+  let stdRole = data.targetStandardRole;
+
+  // 如果标准角色缺失，尝试从称谓文本推导 (增强鲁棒性)
+  if (!stdRole || stdRole === "other" || stdRole === "family") {
+    if (targetRole.includes("父") || targetRole.endsWith("爸")) stdRole = "father";
+    else if (targetRole.includes("母") || targetRole.endsWith("妈")) stdRole = "mother";
+    else if (targetRole.includes("子") || targetRole.endsWith("儿")) stdRole = "son";
+    else if (targetRole.includes("女")) stdRole = "daughter";
+    else if (targetRole.includes("叔") || targetRole.includes("伯") || targetRole.includes("舅") || targetRole.includes("姨")) stdRole = "uncle";
+    else if (targetRole.includes("姑")) stdRole = "aunt";
+    else if (targetRole.includes("公") || targetRole.includes("爷") || targetRole.includes("婆") || targetRole.includes("奶")) stdRole = "grandfather";
+    else if (targetRole.includes("侄") || targetRole.includes("外甥")) stdRole = "nephew";
+  }
+
+  const roleStr = (stdRole || "").toLowerCase();
   const inviterName = data.inviterName || "邀请人";
 
   // 1. 确定“我是谁” (Identity: What the inviter calls me)
   const identity = targetRole || "家人";
 
   // 2. 判定“对方是谁” (Title: What I should call the inviter)
-  // 我们逆向推导：如果我是对方的 stdRole，那对方是我的什么？
+  // 我们逆流推导：如果我是对方的 stdRole，那对方是我的什么？
   let title = "亲属";
   let reason = `系统检测到 ${inviterName} 将您收归为“${identity}”。`;
 
   // 直接使用简化的逆向映射，确保 onboarding 阶段即便没有完整成员树也能给出满意的结果
   const inviterIsFemale = iSex === 'F';
-  const roleStr = (stdRole || "").toLowerCase();
 
   if (roleStr === 'father' || roleStr === 'mother') {
     title = inviterIsFemale ? '女儿' : '儿子';
@@ -59,22 +72,25 @@ const getIdentityRecommendation = (data: any, currentUserGender?: string) => {
     title = inviterIsFemale ? '母亲' : '父亲';
     reason = `作为档案中的子嗣，您与 ${inviterName} 属于直系亲缘。`;
   } else if (roleStr.includes('uncle') || roleStr.includes('aunt')) {
+    // 我是对方的长辈 -> 对方是我的晚辈
     title = inviterIsFemale ? '外甥女' : '外甥';
     if (targetRole.includes('侄')) title = inviterIsFemale ? '侄女' : '侄子';
     reason = `作为档案中的长辈，${inviterName} 是您的晚辈。`;
   } else if (roleStr.includes('grand')) {
+    // 我是对方的祖辈 -> 对方是我的孙辈
     title = inviterIsFemale ? '外孙女' : '孙子'; // 统称
-    reason = `作为档案中的祖辈，您正见证着家族的薪火相传。`;
+    reason = `作为档案中的祖辈，${inviterName} 是您的晚辈。`;
   } else if (roleStr.includes('nephew') || roleStr.includes('niece')) {
+    // 我是对方的晚辈 -> 对方是我的长辈
     title = inviterIsFemale ? '阿姨' : '叔叔'; // 统称
     if (targetRole.includes('外甥')) title = inviterIsFemale ? '姨妈' : '舅舅';
     reason = `作为档案中的晚辈，${inviterName} 是您的长辈。`;
-  } else if (roleStr === 'cousin' || roleStr === 'sibling') {
+  } else if (roleStr === 'cousin' || roleStr === 'sibling' || targetRole.includes("堂") || targetRole.includes("表")) {
     // 同辈逻辑：利用 inviteData 里的房分对比
     const hallMap: any = { '大房': 1, '二房': 2, '三房': 3, '四房': 4, '五房': 5, '六房': 6, '七房': 7, '八房': 8, '九房': 9, '十房': 10 };
     const hI = hallMap[data.inviterAncestralHall] || 99;
     const hT = hallMap[data.targetAncestralHall] || 99;
-    const isMaternal = data.targetRole?.includes('表');
+    const isMaternal = targetRole.includes('表');
 
     let isOlder = false;
     if (hI < hT) isOlder = true;
@@ -82,7 +98,7 @@ const getIdentityRecommendation = (data: any, currentUserGender?: string) => {
 
     const prefix = isMaternal ? "表" : (hI === hT ? "" : "堂");
     title = isOlder ? (inviterIsFemale ? `${prefix}姐` : `${prefix}哥`) : (inviterIsFemale ? `${prefix}妹` : `${prefix}弟`);
-    reason = isOlder ? `由于邀请人支脉/排行更长，您应称呼对方为${title}。` : `由于您的支脉/排行更长，对方应称呼您为${prefix}${tSex === 'F' ? '姐' : '哥'}。`;
+    reason = isOlder ? `由于对方支脉/排行更长，您应称呼其为${title}。` : `由于您的支脉/排行更长，对方应称呼您为${prefix}${tSex === 'F' ? '姐' : '哥'}。`;
   }
 
   return { title, identity, reason };

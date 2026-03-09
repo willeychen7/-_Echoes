@@ -388,21 +388,21 @@ export const AddMemberPage: React.FC = () => {
       isSameSurname
     );
 
-    const myGen = currentUser?.generationNum ?? 30;
+    const myGen = Number(currentUser?.generationNum ?? 30);
     const rel = (relationship === '其他' ? customRelationship : relationship) || "";
     let targetGen = myGen;
 
     if (connectorNode === 'father' || connectorNode === 'mother') targetGen = myGen - 1;
     else if (['grandfather', 'grandmother', 'm_grandfather', 'm_grandmother'].includes(connectorNode!)) targetGen = myGen - 2;
     else if (['g_grandfather', 'm_g_grandfather'].includes(connectorNode!)) {
-      if (rel.includes('高祖') || rel.includes('四')) targetGen = myGen - 5;
-      else if (rel.includes('曾') || rel.includes('太') || rel.includes('三')) targetGen = myGen - 3;
-      else targetGen = myGen - 2; // fallback
+      if (rel.includes('高祖')) targetGen = myGen - 4;
+      else if (rel.includes('曾') || rel.includes('太')) targetGen = myGen - 3;
+      else targetGen = myGen - 2;
     }
     else if (['child_p', 'child_m'].includes(connectorNode!)) targetGen = myGen + 1;
     else if (connectorNode === 'grandchild_p') {
-      if (rel.includes('曾') || rel.includes('曾孙')) targetGen = myGen + 3;
-      else if (rel.includes('玄') || rel.includes('耳')) targetGen = myGen + 4;
+      if (rel.includes('曾')) targetGen = myGen + 3;
+      else if (rel.includes('玄')) targetGen = myGen + 4;
       else targetGen = myGen + 2;
     }
     else targetGen = myGen;
@@ -494,8 +494,13 @@ export const AddMemberPage: React.FC = () => {
           ancestralHall: (
             parent?.ancestralHall ||
             parent?.ancestral_hall ||
-            (connectorNode === 'sibling' ? (currentUser.ancestralHall || currentUser.ancestral_hall) : null) ||
+            // 堂/表亲：由连接点排行决定房分
             (connectingRank && connectingRank !== '不知道' ? `${connectingRank}房` : null) ||
+            // 亲兄弟姐妹：建立自己的房分
+            (connectorNode === 'sibling' && selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : null) ||
+            // 晚辈：继承父辈房分
+            (['child_p', 'grandchild_p'].includes(connectorNode!) ? (currentUser.ancestralHall || currentUser.ancestral_hall) : null) ||
+            // 其它情况：回退到选择排行
             (selectedRank && selectedRank !== '不知道' ? `${selectedRank}房` : null)
           ),
           logicTag: currentLogicTag,
@@ -738,8 +743,8 @@ export const AddMemberPage: React.FC = () => {
               <div className="grid grid-cols-1 gap-3">
                 {generation === 'ancestor' && lineageSide === 'paternal' && (
                   <>
-                    <button onClick={() => { setConnectorNode('grandfather'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">爷爷的分支 (从伯公/叔公等)</button>
-                    <button onClick={() => { setConnectorNode('g_grandfather'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">太爷爷或更高 (曾祖、祖宗系统)</button>
+                    <button onClick={() => { setConnectorNode('grandfather'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">爷爷及其手足 (伯公/叔公/堂爷爷)</button>
+                    <button onClick={() => { setConnectorNode('g_grandfather'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">太爷爷或更高 (曾祖、族系祖先)</button>
                   </>
                 )}
                 {generation === 'ancestor' && lineageSide === 'maternal' && (
@@ -750,8 +755,8 @@ export const AddMemberPage: React.FC = () => {
                 )}
                 {generation === 'elder' && lineageSide === 'paternal' && (
                   <>
-                    <button onClick={() => { setConnectorNode('father'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">父亲的手足兄弟 (叔伯/姑)</button>
-                    <button onClick={() => { setConnectorNode('grandfather'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">堂系长辈 (爷爷家族的叔伯/姑辈)</button>
+                    <button onClick={() => { setConnectorNode('father'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">父亲的手足兄弟 (亲叔伯/姑)</button>
+                    <button onClick={() => { setConnectorNode('grandfather'); setWizardStep(4); }} className="p-5 rounded-2xl text-left bg-white border-2 border-slate-100 font-bold hover:border-slate-300 transition-all">堂系长辈 (堂叔/堂伯/堂姑)</button>
                   </>
                 )}
                 {generation === 'elder' && lineageSide === 'maternal' && (
@@ -832,18 +837,27 @@ export const AddMemberPage: React.FC = () => {
         {wizardStep === 5 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
             <div className="text-center space-y-4">
-              <h2 className="text-3xl font-bold text-slate-800">确认房分座次</h2>
-              <p className="text-slate-500 italic text-base">第 5 步：TA 在自家兄弟姐妹中排行老几？</p>
+              <h2 className="text-3xl font-bold text-slate-800">确认房分排行</h2>
+              <p className="text-slate-500 italic text-base">第 5 步：TA 属于哪一房？亦或在自家排行老几？</p>
             </div>
 
             <div className="space-y-6">
               <div className="space-y-4">
-                <label className="text-xl font-black px-1 block text-slate-700">选择排行</label>
+                <label className="text-xl font-black px-1 block text-slate-700">
+                  {['self_p', 'self_m'].includes(connectorNode!) || (relationship || customRelationship).includes('堂') || (relationship || customRelationship).includes('表')
+                    ? "请选择 TA 的房分 (如：大房、二房)"
+                    : "请选择 TA 的出生排行 (如：长子/次女)"}
+                </label>
                 <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
                   {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小', '不知道'].map(rk => (
                     <button
                       key={rk}
-                      onClick={() => setSelectedRank(rk)}
+                      onClick={() => {
+                        setSelectedRank(rk);
+                        if (['self_p', 'self_m'].includes(connectorNode!) || (relationship || customRelationship).includes('堂') || (relationship || customRelationship).includes('表')) {
+                          setConnectingRank(rk);
+                        }
+                      }}
                       className={`h-11 border-2 rounded-xl font-bold text-sm transition-all ${selectedRank === rk ? 'bg-black text-[#eab308] border-black shadow-lg scale-105' : 'bg-white border-slate-100 text-slate-500 hover:border-slate-200'}`}
                     >
                       {rk}
