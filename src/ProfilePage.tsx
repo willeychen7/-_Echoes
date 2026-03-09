@@ -50,20 +50,26 @@ const getIdentityRecommendation = (data: any, currentUserGender?: string) => {
 
   // 直接使用简化的逆向映射，确保 onboarding 阶段即便没有完整成员树也能给出满意的结果
   const inviterIsFemale = iSex === 'F';
-  if (stdRole === 'father' || stdRole === 'mother') {
+  const roleStr = (stdRole || "").toLowerCase();
+
+  if (roleStr === 'father' || roleStr === 'mother') {
     title = inviterIsFemale ? '女儿' : '儿子';
     reason = `作为档案中的父母辈，您与 ${inviterName} 属于直系亲缘。`;
-  } else if (stdRole === 'son' || stdRole === 'daughter') {
+  } else if (roleStr === 'son' || roleStr === 'daughter') {
     title = inviterIsFemale ? '母亲' : '父亲';
     reason = `作为档案中的子嗣，您与 ${inviterName} 属于直系亲缘。`;
-  } else if (stdRole === 'uncle' || stdRole === 'aunt') {
-    title = inviterIsFemale ? '外甥女' : '外甥'; // 这里用“外甥”作为宽泛统称，因为不知道 inviter 的具体分支
+  } else if (roleStr.includes('uncle') || roleStr.includes('aunt')) {
+    title = inviterIsFemale ? '外甥女' : '外甥';
     if (targetRole.includes('侄')) title = inviterIsFemale ? '侄女' : '侄子';
     reason = `作为档案中的长辈，${inviterName} 是您的晚辈。`;
-  } else if (stdRole === 'grandfather' || stdRole === 'grandmother') {
+  } else if (roleStr.includes('grand')) {
     title = inviterIsFemale ? '外孙女' : '孙子'; // 统称
     reason = `作为档案中的祖辈，您正见证着家族的薪火相传。`;
-  } else if (stdRole === 'cousin' || stdRole === 'sibling') {
+  } else if (roleStr.includes('nephew') || roleStr.includes('niece')) {
+    title = inviterIsFemale ? '阿姨' : '叔叔'; // 统称
+    if (targetRole.includes('外甥')) title = inviterIsFemale ? '姨妈' : '舅舅';
+    reason = `作为档案中的晚辈，${inviterName} 是您的长辈。`;
+  } else if (roleStr === 'cousin' || roleStr === 'sibling') {
     // 同辈逻辑：利用 inviteData 里的房分对比
     const hallMap: any = { '大房': 1, '二房': 2, '三房': 3, '四房': 4, '五房': 5, '六房': 6, '七房': 7, '八房': 8, '九房': 9, '十房': 10 };
     const hI = hallMap[data.inviterAncestralHall] || 99;
