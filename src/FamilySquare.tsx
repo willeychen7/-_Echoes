@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Card } from "./components/Card";
-import { Calendar as CalendarIcon, Phone, Gift, Plus, FolderOpen, Home, CheckCircle, Trash2, Mic, MessageSquare, Camera, Video, Send, X, Heart, Play, Sparkles, ChevronDown, ChevronUp, Share2, Copy, PawPrint } from "lucide-react";
+import { Calendar as CalendarIcon, Phone, Gift, Plus, FolderOpen, Home, CheckCircle, Trash2, Mic, MessageSquare, Camera, Video, Send, X, Heart, Play, Sparkles, ChevronDown, ChevronUp, Share2, Copy, PawPrint, Clock, Users, ChevronLeft, ChevronRight } from "lucide-react";
 import { FamilyMember, FamilyEvent, Message, MessageType } from "./types";
 import { useNavigate, useLocation } from "react-router-dom";
 import { cn, getRelativeTime } from "./lib/utils";
@@ -14,11 +14,12 @@ import { AudioBar, WallMessages, InlineBlessingPanel } from "./components/Family
 import { updateAvatarCache } from "./lib/useAvatarCache";
 import { createKinshipSearchFilter, generateSmartLayout } from "./lib/kinshipEngine";
 import { FamilyMapView } from "./FamilyMapView";
+import { BigCalendar } from "./components/BigCalendar";
+import { VoiceAssistant } from "./components/VoiceAssistant";
+import { BottomNav } from "./components/BottomNav";
+import { getLunarDay, getZodiac, formatEventDate } from "./lib/calendarUtils";
 
-const getZodiac = (year: number) => {
-  const zodiacs = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"];
-  return zodiacs[(year - 4) % 12];
-};
+
 
 const Header: React.FC<{
   userAvatar: string;
@@ -61,6 +62,12 @@ const Header: React.FC<{
           </div>
           <span className="text-sm font-black tracking-wide">家族档案</span>
         </button>
+        <button
+          onClick={() => navigate("/family-tree")}
+          className="size-11 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308]/20 transition-all active:scale-90 shadow-sm shrink-0"
+        >
+          <Users size={20} />
+        </button>
       </div>
     </header>
   );
@@ -85,9 +92,9 @@ export const FamilySquare: React.FC = () => {
     { id: 4, user: "陈兴华", action: "更新了个人资料", target: "爷爷", time: "2小时前", icon: "👤" }
   ]);
   const [activeActivityIndex, setActiveActivityIndex] = useState(0);
-  const [activeTab, setActiveTab] = useState<"events" | "archive">("events");
+  const [activeTab, setActiveTab] = useState<"events" | "archive">("archive");
   const [archiveView, setArchiveView] = useState<"list" | "map">("list");
-  const [eventRange, setEventRange] = useState<"week" | "month" | "year">("month");
+  const [eventRange, setEventRange] = useState<"today" | "week" | "month" | "year">("today");
   const [archiveSearchQuery, setArchiveSearchQuery] = useState("");
   // NOTE: 记录当前展开祝福面板的事件 ID，null 表示全部收起
   const [openBlessingEventId, setOpenBlessingEventId] = useState<number | null>(null);
@@ -96,6 +103,28 @@ export const FamilySquare: React.FC = () => {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [sentEventIds, setSentEventIds] = useState<number[]>([]);
   const [expandedNoteIds, setExpandedNoteIds] = useState<number[]>([]);
+  const [selectedDay, setSelectedDay] = useState(new Date().getDate());
+  const [calendarDate, setCalendarDate] = useState(new Date());
+  const [isVoiceAssistantOpen, setIsVoiceAssistantOpen] = useState(false);
+  const [homeMode, setHomeMode] = useState<"normal" | "gallery" | "voice">("normal");
+
+  useEffect(() => {
+    // 🚀 核心：监听同步事件，实时刷新定制首页模式
+    const syncMode = () => {
+        const saved = localStorage.getItem("currentUser");
+        const parsed = saved ? JSON.parse(saved) : null;
+        if (parsed?.homeMode) {
+            setHomeMode(parsed.homeMode);
+        }
+    };
+    syncMode();
+    window.addEventListener("sync-user", syncMode);
+    return () => window.removeEventListener("sync-user", syncMode);
+  }, []);
+
+  const onHomeClick = () => {
+    navigate("/");
+  };
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -111,6 +140,7 @@ export const FamilySquare: React.FC = () => {
     const loadUser = () => {
       const currentSavedUser = localStorage.getItem("currentUser");
       const currentParsed = currentSavedUser ? JSON.parse(currentSavedUser) : null;
+      const modeParsed = currentParsed || parsed;
 
       if (currentParsed) {
         setCurrentUser(currentParsed);
@@ -120,7 +150,6 @@ export const FamilySquare: React.FC = () => {
         setUserAvatar(getSafeAvatar(DEMO_DEFAULT_USER.avatar));
       }
 
-      const modeParsed = currentParsed || parsed;
       if (isDemoMode(modeParsed)) {
         const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
         const allDemoMembers = [...DEMO_MEMBERS, ...customMembers];
@@ -131,6 +160,7 @@ export const FamilySquare: React.FC = () => {
         const familyId = parseInt(String(modeParsed.familyId));
         fetch(`/api/family-members?familyId=${familyId}`).then(res => res.json()).then(data => {
           if (Array.isArray(data)) {
+            // Keep all members in state for relationship logic and tree integrity
             setMembers(data);
             data.forEach((m: any) => {
               if (m.id && (m.avatar_url || m.avatarUrl)) {
@@ -224,7 +254,7 @@ export const FamilySquare: React.FC = () => {
       else setArchiveView("list");
       setTimeout(() => document.getElementById("archive-section")?.scrollIntoView({ behavior: "smooth" }), 100);
     } else {
-      setActiveTab("events");
+      setActiveTab("archive");
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [location.hash, location.pathname]);
@@ -246,7 +276,11 @@ export const FamilySquare: React.FC = () => {
         return { ...event, daysRemaining: getDaysRemaining(event.date, !!event.isRecurring) };
       })
       .filter(event => {
-        if (eventRange === "week") return event.daysRemaining <= 7;
+        const targetDate = formatEventDate(calendarDate.getFullYear(), calendarDate.getMonth() + 1, selectedDay);
+        if (eventRange === "today" || eventRange === "week") {
+          if (eventRange === "today") return event.date === targetDate || (event.isRecurring && event.date.endsWith(`-${String(calendarDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`));
+          return event.daysRemaining <= 7;
+        }
         if (eventRange === "month") return event.daysRemaining <= 31;
         return true;
       })
@@ -299,6 +333,7 @@ export const FamilySquare: React.FC = () => {
     }
   };
 
+
   return (
     <>
       <header className="sticky top-0 z-50 glass-morphism px-6 py-4 flex items-center shadow-sm shrink-0 transition-colors">
@@ -318,95 +353,283 @@ export const FamilySquare: React.FC = () => {
         </button>
       </header>
 
-      <main className="px-6 py-6 space-y-4">
+      <main className="px-6 pt-6 pb-32 space-y-4">
         {/* Toggle - Made Sticky */}
         <div className="sticky top-[64px] z-40 bg-[#fdfbf7] -mx-6 px-6 pt-2 pb-2 backdrop-blur-md rounded-b-[2.5rem]">
           <div className="flex bg-slate-100/80 p-1.5 rounded-2xl gap-1 shadow-sm">
-            <button onClick={() => setActiveTab("events")} className={cn("flex-1 py-3 px-4 rounded-xl text-xl font-black transition-all", activeTab === "events" ? "bg-white text-[#eab308] shadow-sm" : "text-slate-400")}>家族大事记</button>
             <button onClick={() => setActiveTab("archive")} className={cn("flex-1 py-3 px-4 rounded-xl text-xl font-black transition-all", activeTab === "archive" ? "bg-white text-[#eab308] shadow-sm" : "text-slate-400")}>记忆档案</button>
+            <button onClick={() => setActiveTab("events")} className={cn("flex-1 py-3 px-4 rounded-xl text-xl font-black transition-all", activeTab === "events" ? "bg-white text-[#eab308] shadow-sm" : "text-slate-400")}>家族日历</button>
           </div>
         </div>
 
         {activeTab === "events" && (
-          <section className="animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20 pt-4">
-            <div className="sticky top-[132px] z-30 bg-[#fdfbf7]/90 backdrop-blur-md -mx-6 px-6 mb-6 shadow-sm border-b border-slate-100 divide-y divide-slate-100 flex flex-col">
-              <div className="py-2 flex items-center justify-between">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  <CalendarIcon className="text-[#eab308]" size={20} /> 大事记
-                  <span className="text-base font-black text-slate-400 ml-1">{new Date().getFullYear()}</span>
-                </h2>
-                <button onClick={() => navigate("/add-event")} className="bg-[#eab308] text-white px-6 py-2 rounded-full text-lg font-black shadow-lg shadow-[#eab308]/20 flex items-center gap-2 transition-transform active:scale-95">
-                  <Plus size={22} strokeWidth={4} /> 添加
-                </button>
-              </div>
-              <div className="pb-4 pt-0">
+          <section className="animate-in fade-in slide-in-from-bottom-2 duration-500 pb-32 pt-4">
+            <div className="bg-[#fdfbf7] -mx-6 px-6 mb-6 flex flex-col">
+              <div className="py-2 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <CalendarIcon className="text-[#eab308]" size={20} /> 大事记
+                    <span className="text-base font-black text-slate-400 ml-1">{new Date().getFullYear()}</span>
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => setIsVoiceAssistantOpen(true)}
+                      className="size-9 rounded-full bg-amber-50 text-[#eab308] flex items-center justify-center transition-all active:scale-95 hover:bg-amber-100"
+                    >
+                      <Mic size={18} strokeWidth={3} />
+                    </button>
+                    <button onClick={() => navigate("/add-event")} className="bg-[#eab308] text-white px-4 py-2 rounded-full text-base font-black shadow-lg shadow-[#eab308]/20 flex items-center gap-1.5 transition-transform active:scale-95">
+                      <Plus size={18} strokeWidth={4} /> 添加
+                    </button>
+                  </div>
+                </div>
+                
+
                 <div className="flex bg-slate-100/50 p-1.5 rounded-2xl gap-1">
-                  {(["week", "month", "year"] as const).map(range => (
-                    <button key={range} onClick={() => { setEventRange(range); window.scrollTo({ top: 0, behavior: "smooth" }); }} className={cn("flex-1 py-2.5 rounded-xl text-sm font-black transition-all", eventRange === range ? "bg-white text-[#eab308] shadow-sm" : "text-slate-400")}>
-                      {range === "week" ? "本周" : range === "month" ? "本月" : "本年"}
+                  {(["today", "month", "year"] as const).map(range => (
+                    <button 
+                      key={range} 
+                      onClick={() => { setEventRange(range as any); window.scrollTo({ top: 0, behavior: "smooth" }); }} 
+                      className={cn(
+                        "flex-1 py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center", 
+                        (eventRange === range) ? "bg-white text-[#eab308] shadow-sm" : "text-slate-400"
+                      )}
+                    >
+                      {range === "today" ? "本日" : range === "month" ? "本月" : "本年"}
                     </button>
                   ))}
                 </div>
-              </div>
-            </div>
 
-            <div className="mb-6">
-              <button
-                onClick={generateEventsSummary}
-                disabled={summaryLoading}
-                className="w-full py-4 bg-gradient-to-r from-[#eab308]/5 to-transparent border-2 border-dashed border-[#eab308]/30 rounded-[2rem] flex items-center justify-center gap-2 text-[#eab308] font-black group hover:bg-[#eab308]/10 transition-all active:scale-[0.98]"
-              >
-                <Sparkles size={20} className={cn(summaryLoading && "animate-spin")} />
-                {summaryLoading ? "AI 总结中..." : `本${eventRange === "week" ? "周" : eventRange === "month" ? "月" : "年"}事件总结`}
-              </button>
+                {/* AI 总结按钮 - 已上挪且支持动态显隐 */}
+                {(() => {
+                   const hasEventsInRange = events.some(event => {
+                      if (eventRange === "today") {
+                         const targetDate = formatEventDate(calendarDate.getFullYear(), calendarDate.getMonth() + 1, selectedDay);
+                         return event.date === targetDate || (event.isRecurring && event.date.endsWith(`-${String(calendarDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`));
+                      }
+                      if (eventRange === "month") {
+                         const [, em] = event.date.split("-").map(Number);
+                         return em === (calendarDate.getMonth() + 1);
+                      }
+                      return true;
+                   });
 
-              <AnimatePresence>
-                {eventsSummary && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                    className="mt-4 p-6 bg-amber-50 rounded-[2rem] border border-[#eab308]/20 relative"
-                  >
-                    <button onClick={() => setEventsSummary(null)} className="absolute top-4 right-4 text-amber-300 hover:text-amber-500"><X size={18} /></button>
-                    <div className="flex gap-3">
-                      <div className="size-10 rounded-full bg-white flex items-center justify-center text-[#eab308] shadow-sm shrink-0 border border-amber-100">
-                        <Sparkles size={20} />
+                   if (!hasEventsInRange) return null;
+
+                   return (
+                      <div className="mt-2 animate-in fade-in slide-in-from-top-1">
+                        <button
+                          onClick={generateEventsSummary}
+                          disabled={summaryLoading}
+                          className="w-full py-3 bg-gradient-to-r from-[#eab308]/5 to-transparent border-2 border-dashed border-[#eab308]/20 rounded-2xl flex items-center justify-center gap-2 text-[#eab308] font-black group hover:bg-[#eab308]/10 transition-all active:scale-[0.98] text-xs"
+                        >
+                          <Sparkles size={16} className={cn(summaryLoading && "animate-spin")} />
+                          {summaryLoading ? "AI 总结中..." : `本${eventRange === "today" ? "日" : eventRange === "month" ? "月" : "年"}大事记 AI 智能总结`}
+                        </button>
+
+                        <AnimatePresence>
+                          {eventsSummary && (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                              className="mt-4 p-5 bg-amber-50/50 rounded-3xl border border-[#eab308]/10 relative backdrop-blur-sm"
+                            >
+                              <button onClick={() => setEventsSummary(null)} className="absolute top-4 right-4 text-amber-300 hover:text-amber-500"><X size={16} /></button>
+                              <div className="flex gap-3">
+                                <div className="size-8 rounded-full bg-white flex items-center justify-center text-[#eab308] shadow-sm shrink-0 border border-amber-100">
+                                  <Sparkles size={16} />
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-[10px] font-black text-amber-700/60 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                                    AI 智能总结
+                                  </p>
+                                  <p className="text-slate-700 font-bold leading-relaxed text-xs">
+                                    {eventsSummary}
+                                  </p>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-black text-amber-700/60 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                          AI 智能总结
-                        </p>
-                        <p className="text-slate-700 font-bold leading-relaxed text-sm">
-                          {eventsSummary}
-                        </p>
+                   );
+                })()}
+              </div>
+              
+              {/* === 📅 空状态引导 - 已挪至黄历上方 === */}
+              {eventRange === "today" && (() => {
+                const targetDate = formatEventDate(calendarDate.getFullYear(), calendarDate.getMonth() + 1, selectedDay);
+                const todayEvents = events.filter(e => e.date === targetDate || (e.isRecurring && e.date.endsWith(`-${String(calendarDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`)));
+                if (todayEvents.length === 0) {
+                  return (
+                    <div className="mb-4 px-1 animate-in fade-in slide-in-from-bottom-1">
+                      <button 
+                        onClick={() => navigate("/add-event", { state: { initialDate: targetDate } })}
+                        className="w-full bg-white/60 backdrop-blur-sm rounded-3xl p-4 border border-[#eab308]/10 flex items-center justify-between group active:scale-[0.98] transition-all shadow-sm"
+                      >
+                        <div className="flex items-center px-1">
+                           <p className="text-slate-400 font-black text-sm">今天还没有记录哦～</p>
+                        </div>
+                        <div className="size-9 rounded-xl bg-slate-100 text-[#eab308] flex items-center justify-center group-hover:bg-[#eab308] group-hover:text-white transition-all">
+                          <Plus size={18} strokeWidth={4} />
+                        </div>
+                      </button>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
+              {/* === 📅 精炼时光视界 (非适老化，标准模式) === */}
+              {eventRange === "today" && (() => {
+                const year = calendarDate.getFullYear();
+                const month = calendarDate.getMonth() + 1;
+                const { lunar, festival } = getLunarDay(year, month, selectedDay);
+                const dateObj = new Date(year, month - 1, selectedDay);
+                const weekDayStr = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"][dateObj.getDay()];
+                const handlePrevDay = () => { const d = new Date(year, month - 1, selectedDay - 1); setCalendarDate(new Date(d.getFullYear(), d.getMonth(), 1)); setSelectedDay(d.getDate()); };
+                const handleNextDay = () => { const d = new Date(year, month - 1, selectedDay + 1); setCalendarDate(new Date(d.getFullYear(), d.getMonth(), 1)); setSelectedDay(d.getDate()); };
+
+                return (
+                  <div className="mb-6 px-1">
+                    <div className="bg-white rounded-[2.5rem] border-4 border-white shadow-xl relative overflow-hidden group">
+                      {/* Top Tear Edge Pattern */}
+                      <div className="absolute top-0 inset-x-0 h-1.5 flex gap-1 px-1 opacity-20">
+                        {Array.from({ length: 20 }).map((_, i) => (
+                          <div key={i} className="flex-1 h-full bg-slate-200 rounded-b-full" />
+                        ))}
+                      </div>
+
+                      <div className="p-6 flex flex-col items-center">
+                        {/* Status Header */}
+                        <div className="w-full flex justify-between items-center mb-4">
+                          <button onClick={handlePrevDay} className="p-2 text-slate-300 hover:text-emerald-500 transition-colors"><ChevronLeft size={24} /></button>
+                          <div className="flex flex-col items-center">
+                            <span className="text-base font-black text-emerald-600 tracking-tight font-mono">{year}年 {month}月</span>
+                          </div>
+                          <button onClick={handleNextDay} className="p-2 text-slate-300 hover:text-emerald-500 transition-colors"><ChevronRight size={24} /></button>
+                        </div>
+
+                        {/* Central Day Number & Weekday */}
+                        <div className="flex flex-col items-center my-2">
+                          <motion.span 
+                            key={selectedDay}
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className="text-[110px] font-black leading-none text-emerald-500 tracking-tighter"
+                          >
+                            {selectedDay}
+                          </motion.span>
+                          <span className="text-xl font-black text-slate-400 -mt-2 uppercase tracking-widest">{weekDayStr}</span>
+                          {festival && (
+                            <div className="mt-6 flex flex-col items-center gap-1 scale-110">
+                              <span className="text-3xl font-black text-rose-500 tracking-tighter drop-shadow-sm">{festival}</span>
+                              <div className="h-1 w-12 bg-rose-500 rounded-full opacity-30" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Lunar Footer */}
+                        <div className="w-full mt-4 pt-4 border-t-2 border-dashed border-slate-50 flex flex-col items-center">
+                          <div className="flex items-center gap-2">
+                             <div className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                             <span className="text-lg font-black text-slate-700 tracking-widest">{lunar}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  </div>
+                );
+              })()}
+
+              {eventRange === "month" && (
+                <div className="mb-6">
+                  <div className="bg-white/40 rounded-3xl border border-slate-100 p-4 shadow-sm">
+                    <BigCalendar 
+                      events={events}
+                      members={members}
+                      selectedDay={selectedDay}
+                      onSelectDay={(day) => { 
+                        setSelectedDay(day); 
+                        // 自动滚动到对应卡片或空状态
+                        setTimeout(() => {
+                           const element = document.getElementById(`event-card-${day}`);
+                           if (element) {
+                              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                           } else {
+                              const listTop = document.getElementById('event-list-top');
+                              if (listTop) {
+                                 listTop.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              }
+                           }
+                        }, 100);
+                      }}
+                      currentDate={calendarDate}
+                      onMonthChange={setCalendarDate}
+                      currentUserId={currentUser.id}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {eventRange === "year" && (
+                <div className="mb-6 px-1">
+                  <div className="bg-white/60 rounded-3xl border border-amber-100/50 p-8 flex flex-col items-center shadow-sm backdrop-blur-sm">
+                    <p className="text-xs font-bold text-slate-300 uppercase tracking-[0.2em] mb-1">年度大事记</p>
+                    <p className="text-2xl font-black text-slate-800 tracking-tighter">{calendarDate.getFullYear()}</p>
+                  </div>
+                </div>
+              )}
+
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
-              {[...events]
-                .map(event => {
-                  const getDaysRemaining = (dStr: string, isRec: boolean) => {
-                    if (!dStr) return 999;
-                    const today = new Date(); today.setHours(0, 0, 0, 0);
-                    const [y, m, d] = dStr.split('-').map(Number);
-                    const target = new Date(y, m - 1, d);
-                    if (isRec) { target.setFullYear(today.getFullYear()); if (target < today) target.setFullYear(today.getFullYear() + 1); }
-                    return Math.max(0, Math.ceil((target.getTime() - today.getTime()) / 86400000));
-                  };
-                  return { ...event, daysRemaining: getDaysRemaining(event.date, !!event.isRecurring) };
-                })
-                .filter(event => {
-                  if (eventRange === "week") return event.daysRemaining <= 7;
-                  if (eventRange === "month") return event.daysRemaining <= 31;
-                  return true;
-                })
-                .sort((a, b) => a.daysRemaining - b.daysRemaining)
-                .map(event => {
+            <div id="event-list-top" className="grid grid-cols-1 gap-4">
+              {(() => {
+                const filteredEvents = [...events]
+                  .map(event => {
+                    const getDaysRemaining = (dStr: string, isRec: boolean) => {
+                      if (!dStr) return 999;
+                      const today = new Date(); today.setHours(0, 0, 0, 0);
+                      const [y, m, d] = dStr.split('-').map(Number);
+                      const target = new Date(y, m - 1, d);
+                      if (isRec) { target.setFullYear(today.getFullYear()); if (target < today) target.setFullYear(today.getFullYear() + 1); }
+                      return Math.floor((target.getTime() - today.getTime()) / 86400000);
+                    };
+                    return { ...event, daysRemaining: getDaysRemaining(event.date, !!event.isRecurring) };
+                  })
+                  .filter(event => {
+                    if (eventRange === "today") {
+                      const targetDate = formatEventDate(calendarDate.getFullYear(), calendarDate.getMonth() + 1, selectedDay);
+                      return event.date === targetDate || (event.isRecurring && event.date.endsWith(`-${String(calendarDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`));
+                    }
+                    if (eventRange === "month") {
+                      const [ey, em, ed] = event.date.split("-").map(Number);
+                      return em === (calendarDate.getMonth() + 1);
+                    }
+                    return true;
+                  })
+                  .sort((a, b) => {
+                    if (eventRange === "year") return b.daysRemaining - a.daysRemaining;
+                    return a.daysRemaining - b.daysRemaining;
+                  });
+
+                if (filteredEvents.length === 0) {
+                  return eventRange === "today" ? null : (
+                    <div className="py-20 flex flex-col items-center justify-center gap-6 animate-in fade-in slide-in-from-bottom-2">
+                       <p className="text-sm font-black text-slate-300">今天还没有记录哦，快来记一笔吧！</p>
+                       <button
+                          onClick={() => navigate("/add-event", { state: { initialDate: formatEventDate(calendarDate.getFullYear(), calendarDate.getMonth() + 1, selectedDay) } })}
+                          className="px-8 py-4 bg-[#eab308] text-black font-black rounded-2xl shadow-xl shadow-[#eab308]/20 flex items-center gap-2 active:scale-95 transition-all"
+                       >
+                          <Plus size={20} />
+                          添加家族大事记
+                       </button>
+                    </div>
+                  );
+                }
+
+                return filteredEvents.map(event => {
                   const linkedMember = event.memberId ? members.find(m => m.id == event.memberId) : null;
                   const linkedMembers = (event.memberIds && event.memberIds.length > 0)
                     ? members.filter(m => event.memberIds!.includes(m.id))
@@ -420,142 +643,116 @@ export const FamilySquare: React.FC = () => {
                   const isNoteTooLong = fullNotes.length > 40;
                   const isNoteExpanded = expandedNoteIds.includes(Number(event.id));
                   const displayTip = (isNoteTooLong && !isNoteExpanded) ? fullNotes.slice(0, 38) + "..." : fullNotes;
-                  const getEventInfo = (type: string, title: string) => {
-                    if (type === "birthday") return { label: "生日", color: "bg-pink-50 text-pink-500" };
-                    if (type === "graduation") return { label: "毕业礼", color: "bg-blue-50 text-blue-500" };
-                    if (title.includes("纪念日") || type === "anniversary") return { label: "纪念日", color: "bg-amber-50 text-amber-500" };
+                  const eventInfo = (() => {
+                    if (event.type === "birthday") return { label: "生日", color: "bg-pink-50 text-pink-500" };
+                    if (event.type === "graduation") return { label: "毕业礼", color: "bg-blue-50 text-blue-500" };
+                    if (event.title.includes("纪念日") || event.type === "anniversary") return { label: "纪念日", color: "bg-amber-50 text-amber-500" };
                     return { label: "大事记", color: "bg-emerald-50 text-emerald-500" };
-                  };
-                  const eventInfo = getEventInfo(event.type || "", event.title);
+                  })();
                   const isOpen = openBlessingEventId === event.id;
 
                   return (
-                    <div key={event.id} className={cn("rounded-3xl overflow-hidden shadow-md bg-white transition-shadow", isOpen && "shadow-xl shadow-[#eab308]/10 ring-2 ring-[#eab308]/20")}>
-                      {/* 卡片主体 —— 不再整张可点击跳转 */}
-                      <div className="p-3">
-                        <div className="relative z-10 flex flex-col h-full">
-                          {/* Row 1: Avatar & Name & Trash */}
-                          <div className="flex items-center justify-between mb-3">
+                    <div key={event.id} id={`event-card-${event.date.split("-")[2]}`} className={cn("rounded-[2rem] overflow-hidden shadow-xl bg-white border border-slate-50 relative pb-2 transition-all hover:scale-[1.01]", isOpen && "ring-4 ring-[#eab308]/20 shadow-[#eab308]/10")}>
+                      <div className="p-5">
+                        <div className="flex flex-col h-full gap-4">
+                          <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4 min-w-0">
-                              <div className="flex -space-x-4">
-                                {linkedMembers.length > 0 ? (
-                                  linkedMembers.slice(0, 3).map((m, idx) => {
-                                    const isMee = currentUser && m.id == currentUser.memberId;
-                                    const mAvatar = isMee ? currentUser.avatar : m.avatarUrl;
-                                    return (
-                                      <div key={m.id} className="size-16 rounded-full border-4 border-white shadow-md overflow-hidden shrink-0 bg-slate-50 relative" style={{ zIndex: 10 - idx }}>
-                                        <img src={mAvatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                               <div className="flex -space-x-4">
+                                  {linkedMembers.length > 0 ? (
+                                    linkedMembers.slice(0, 3).map((m, idx) => (
+                                      <div key={m.id} className="size-14 rounded-full border-4 border-white shadow-lg overflow-hidden shrink-0 bg-slate-50 relative z-10" style={{ transform: `scale(${1 - idx * 0.1})` }}>
+                                        <img src={getSafeAvatar(m.avatarUrl)} alt="" className="w-full h-full object-cover" />
                                       </div>
-                                    );
-                                  })
-                                ) : (
-                                  <div className="size-16 rounded-full border-4 border-white shadow-md overflow-hidden shrink-0 flex items-center justify-center bg-slate-50">
-                                    <span className="text-[20px] font-black text-[#eab308]">{displayName?.charAt(0) || "?"}</span>
+                                    ))
+                                  ) : (
+                                     <div className="size-14 rounded-full bg-slate-100 flex items-center justify-center text-[#eab308] border-2 border-white">
+                                        <span className="text-xl font-black">{displayName?.charAt(0) || "?"}</span>
+                                     </div>
+                                  )}
+                               </div>
+                               <div className="min-w-0 overflow-hidden">
+                                  <h3 className="text-lg font-black text-slate-800 tracking-tight truncate leading-tight mb-1">{event.title}</h3>
+                                  <div className="flex items-center gap-2 text-slate-400 font-bold">
+                                     <span className="text-[10px] tracking-wide">{event.date}</span>
                                   </div>
-                                )}
-                                {linkedMembers.length > 3 && (
-                                  <div className="size-16 rounded-full border-4 border-white shadow-md flex items-center justify-center bg-slate-100 text-slate-400 text-xs font-black" style={{ zIndex: 5 }}>
-                                    +{linkedMembers.length - 3}
-                                  </div>
-                                )}
-                              </div>
-                              <p className={cn("font-black text-slate-800 truncate", (displayName || "").length > 6 ? "text-2xl" : "text-4xl")}>{displayName}</p>
+                               </div>
                             </div>
-                            <button onClick={() => handleDeleteEvent(event.id)} className="size-12 flex items-center justify-center text-slate-300 hover:text-red-400 transition-colors">
-                              <Trash2 size={28} />
+                            <button onClick={() => handleDeleteEvent(event.id)} className="size-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 hover:text-red-500 transition-all">
+                               <Trash2 size={20} />
                             </button>
                           </div>
 
-                          {/* Row 2: Tag & Days Remaining */}
-                          <div className="flex items-center justify-between mb-3">
-                            <div className={cn("px-5 py-2 rounded-full text-lg font-black tracking-tight", eventInfo.color)}>
-                              {displayName ? (event.title.replace(new RegExp(`^${displayName}(的)?`), '') || eventInfo.label) : eventInfo.label}
-                            </div>
-                            <div className="text-lg font-black text-[#eab308] bg-[#eab308]/5 px-5 py-2 rounded-full whitespace-nowrap">
-                              {event.daysRemaining === 0 ? "今天" : `剩${event.daysRemaining}天`}
-                            </div>
+                          {/* Detail Info Bar */}
+                          <div className="flex items-center justify-between border-y border-slate-50 py-3">
+                             <div className={cn("flex items-center gap-2 px-4 py-2 rounded-full font-black text-xs", eventInfo.color)}>
+                                <Sparkles size={14} />
+                                {eventInfo.label}
+                             </div>
+                             {event.daysRemaining !== undefined && (
+                                <div className="text-right">
+                                   <div className="flex items-baseline gap-1">
+                                      {event.daysRemaining === 0 ? (
+                                        <span className="text-2xl font-black italic text-rose-500">今天</span>
+                                      ) : event.daysRemaining < 0 ? (
+                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">已结束</span>
+                                      ) : (
+                                        <>
+                                          <span className="text-2xl font-black italic text-[#eab308]">{event.daysRemaining}</span>
+                                          <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">天后</span>
+                                        </>
+                                      )}
+                                   </div>
+                                </div>
+                             )}
                           </div>
 
-                          {/* Row 3: 日期信息（月/日/星期）+ 打电话按钮 */}
-                          {event.date && (() => {
-                            const [y, m, d] = event.date.split('-').map(Number);
-                            const dateObj = new Date(y, m - 1, d);
-                            const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
-                            return (
-                              <div className="flex items-center justify-between mb-3 ml-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-2xl font-black text-slate-700">{m}月{d}日</span>
-                                  <span className="text-lg font-bold text-slate-400">{weekdays[dateObj.getDay()]}</span>
-                                </div>
-                                {isOpen && (
-                                  <button
-                                    onClick={() => window.location.href = 'tel:10086'}
-                                    className="flex items-center gap-2 px-5 py-2 bg-[#eab308]/5 text-[#eab308] rounded-full text-lg font-black shadow-sm transition-transform active:scale-95"
-                                  >
-                                    <Phone size={20} /> 打电话
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })()}
-
+                          {/* Notes */}
                           {displayTip && (
-                            <div className="min-w-0 mb-5 ml-1">
-                              <p className={cn(
-                                "text-xl text-slate-500 font-medium leading-relaxed tracking-tight break-all",
-                                !isNoteExpanded && "line-clamp-2"
-                              )}>
-                                {displayTip}
+                            <div className="bg-[#fdfbf7] p-4 rounded-[1.5rem] border border-amber-50/50">
+                              <p className="text-sm font-bold text-slate-700 leading-relaxed tracking-tight italic">
+                                “ {displayTip} ”
                               </p>
                               {isNoteTooLong && (
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const eid = Number(event.id);
-                                    setExpandedNoteIds(prev =>
-                                      isNoteExpanded ? prev.filter(id => id !== eid) : [...prev, eid]
-                                    );
-                                  }}
-                                  className="text-[#eab308] mt-1 text-base font-black flex items-center gap-1 hover:opacity-80 active:scale-95 transition-all"
+                                  onClick={() => setExpandedNoteIds(prev => prev.includes(Number(event.id)) ? prev.filter(id => id !== Number(event.id)) : [...prev, Number(event.id)])}
+                                  className="text-[10px] font-black text-[#eab308] mt-2 uppercase tracking-widest underline decoration-wavy"
                                 >
-                                  {isNoteExpanded ? (
-                                    <><ChevronUp size={14} /> 收起详情</>
-                                  ) : (
-                                    <><ChevronDown size={14} /> 展开全文</>
-                                  )}
+                                  {isNoteExpanded ? "收起家族记忆" : "阅读完整记忆"}
                                 </button>
                               )}
                             </div>
                           )}
 
-                          {/* Row 4: Action Buttons */}
-                          <div className="flex gap-3 mt-auto pt-3 border-t border-slate-50">
-                            {(!isOpen && !sentEventIds.includes(event.id)) && (
-                              <button
-                                onClick={() => setOpenBlessingEventId(event.id)}
-                                className="flex-1 py-4 rounded-2xl text-xl font-black flex items-center justify-center transition-all active:scale-95 gap-2 bg-[#eab308]/5 text-[#eab308]"
-                              >
-                                <Gift size={24} />
-                                送出祝福
-                              </button>
-                            )}
-                            {(!isOpen && !sentEventIds.includes(event.id)) && (
-                              <button
-                                onClick={() => window.location.href = 'tel:10086'}
-                                className="size-16 bg-[#eab308]/5 text-[#eab308] rounded-2xl flex items-center justify-center shadow-sm transition-transform active:scale-95"
-                              >
-                                <Phone size={24} />
-                              </button>
-                            )}
-                            {(!isOpen && sentEventIds.includes(event.id)) && (
-                              <button
-                                onClick={() => setOpenBlessingEventId(event.id)}
-                                className="flex-1 py-4 rounded-2xl text-xl font-black flex items-center justify-center transition-all active:scale-95 gap-2 bg-[#eab308]/5 text-[#eab308]"
-                              >
-                                <MessageSquare size={24} />
-                                留言墙
-                              </button>
-                            )}
+                          {/* Reminder Badges */}
+                          <div className="flex flex-col gap-2">
+                             <div className="flex flex-wrap gap-1.5">
+                                {(event.reminderFrequency?.length || 0) > 0 && event.reminderFrequency?.map(f => (
+                                   <div key={f} className="flex items-center gap-1 px-3 py-1 bg-indigo-50 text-indigo-500 rounded-full text-[10px] font-black shadow-sm">
+                                      <Clock size={10} strokeWidth={3} />
+                                      {f === "year" ? "每年" : f === "month" ? "每月" : "每周"}
+                                   </div>
+                                ))}
+                             </div>
+
+                             {/* Action Buttons */}
+                             <div className="flex gap-3 pt-3 border-t border-slate-50">
+                                {(!isOpen && !sentEventIds.includes(event.id)) && (
+                                  <>
+                                    <button
+                                      onClick={() => setOpenBlessingEventId(event.id)}
+                                      className="flex-1 h-14 rounded-2xl text-lg font-black flex items-center justify-center transition-all active:scale-95 gap-2 bg-[#eab308] text-black shadow-lg shadow-[#eab308]/20"
+                                    >
+                                      <Gift size={22} />
+                                      送出祝福
+                                    </button>
+                                    <button
+                                      className="size-14 rounded-2xl bg-[#eab308]/5 text-[#eab308] flex items-center justify-center shadow-sm active:scale-95 transition-all shrink-0"
+                                    >
+                                      <Phone size={24} />
+                                    </button>
+                                  </>
+                                )}
+                             </div>
                           </div>
                         </div>
                       </div>
@@ -573,7 +770,8 @@ export const FamilySquare: React.FC = () => {
                       </AnimatePresence>
                     </div>
                   );
-                })}
+                });
+              })()}
 
               <Card
                 className="p-10 border-4 border-dashed border-slate-100 bg-slate-50/30 rounded-[3rem] flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-white hover:border-[#eab308]/30 hover:shadow-xl transition-all group"
@@ -589,7 +787,7 @@ export const FamilySquare: React.FC = () => {
         )}
 
         {activeTab === "archive" && (
-          <section id="archive-section" className="animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20 pt-4">
+          <section id="archive-section" className="animate-in fade-in slide-in-from-bottom-2 duration-500 pb-32 pt-4">
             <div className="sticky top-[132px] z-30 bg-[#fdfbf7]/90 backdrop-blur-md -mx-6 px-6 mb-6 shadow-sm border-b border-slate-100 flex flex-col">
               <div className="py-2 flex items-center justify-between">
                 <h2 className="text-xl font-bold flex items-center gap-2">
@@ -636,6 +834,7 @@ export const FamilySquare: React.FC = () => {
 
             {archiveView === "map" ? (
               <div className="w-full animate-in fade-in slide-in-from-bottom-2 duration-500 pb-10">
+                {/* 💡 核心：全家福地图渲染，传递闭包内完整的 members 以保证血脉路径完整 */}
                 <FamilyMapView members={members.filter(createKinshipSearchFilter(archiveSearchQuery))} />
               </div>
             ) : (
@@ -648,7 +847,20 @@ export const FamilySquare: React.FC = () => {
                   ) || currentUser;
 
                   const searchFilter = createKinshipSearchFilter(archiveSearchQuery);
-                  const isRealMember = (m: any) => !(m.member_type === 'virtual' || m.memberType === 'virtual' || ["的父亲", "的母亲", "的孩子", "的子女", "的兄弟姐妹", "的哥哥", "的姐姐", "的弟弟", "的妹妹", "的爷爷", "的奶奶", "的外公", "的外婆", "的曾祖", "的高祖"].some(k => (m.name || "").includes(k)));
+                  // 🚀 核心纠偏：遵照用户定义，区分“真实档案”与“系统节点”
+                  // 真实档案 = (已注册用户) OR (由人类主动创建的 persona 档案，存在 archive_memory_creators 记录)
+                  const isRealMember = (m: any) => {
+                    const isRegistered = m.is_registered || m.isRegistered;
+                    const hasExplicitCreator = !!m.createdByMemberId; // 该字段由 /api/family-members 通过 creator table 拍平得到
+                    const isPlaceholder = m.is_placeholder || m.isPlaceholder;
+
+                    // 1. 注册用户（本尊）永远显示
+                    if (isRegistered || (m.id >= 1000 && m.id < 2000)) return true;
+                    // 2. 占位坑位（辅助节点）永远隐藏
+                    if (isPlaceholder) return false;
+                    // 3. 核心：只有在 archive_memory_creators 表中有记录的，才是用户真正录入的“档案人”
+                    return hasExplicitCreator;
+                  };
 
                   // 定义内部统一渲染函数
                   const renderMemberCard = (member: FamilyMember) => {
@@ -912,6 +1124,16 @@ export const FamilySquare: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+      <VoiceAssistant 
+        isOpen={isVoiceAssistantOpen}
+        onClose={() => setIsVoiceAssistantOpen(false)}
+        currentUser={currentUser}
+        onResult={(res) => {
+          if (res.action === 'add-event') {
+            navigate("/add-event", { state: { prefill: res.params, feedback: res.feedback } });
+          }
+        }}
+      />
     </>
   );
 };

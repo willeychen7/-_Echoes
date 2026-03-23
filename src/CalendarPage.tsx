@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Phone, Gift, Calendar as LucideCalendar, ArrowLeft, Trash2, MessageSquare, ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Phone, Gift, Calendar as LucideCalendar, ArrowLeft, Trash2, MessageSquare, ChevronUp, ChevronDown, Sparkles, X } from "lucide-react";
 import { FamilyEvent, FamilyMember } from "./types";
 import { Card } from "./components/Card";
 import { useNavigate } from "react-router-dom";
@@ -8,6 +8,7 @@ import { cn } from "./lib/utils";
 import { DEMO_EVENTS, DEMO_MEMBERS, isDemoMode } from "./demo-data";
 import { InlineBlessingPanel } from "./components/FamilyEvents";
 import { getSafeAvatar } from "./constants";
+import { getLunarDay, getZodiac, formatEventDate } from "./lib/calendarUtils";
 
 export const CalendarPage: React.FC = () => {
   const [events, setEvents] = useState<FamilyEvent[]>([]);
@@ -19,6 +20,8 @@ export const CalendarPage: React.FC = () => {
   const [openBlessingEventId, setOpenBlessingEventId] = useState<number | null>(null);
   const [sentEventIds, setSentEventIds] = useState<number[]>([]);
   const [expandedNoteIds, setExpandedNoteIds] = useState<number[]>([]);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -93,27 +96,33 @@ export const CalendarPage: React.FC = () => {
     setCurrentDate(prev);
   };
 
-  const getZodiac = (year: number) => {
-    const zodiacs = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"];
-    return zodiacs[(year - 4) % 12];
-  };
-
-  const getLunarDay = (day: number) => {
-    const lunarDays = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十", "廿一", "廿2", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"];
-    const month = currentDate.getMonth() + 1;
-    const festivals: Record<string, string> = {
-      "1-1": "元旦",
-      "5-1": "劳动节",
-      "10-1": "国庆",
-      "12-25": "圣诞"
-    };
-    return { lunar: lunarDays[(day - 1) % 30], festival: festivals[`${month}-${day}`] };
-  };
-
   const daysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
 
   const formattedSelectedDate = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}-${selectedDay.toString().padStart(2, '0')}`;
+
+  const generateAiSummary = async () => {
+    setSummaryLoading(true);
+    setAiSummary(null);
+    const dayEvents = events.filter(e => {
+       const dateStr = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}-${selectedDay.toString().padStart(2, '0')}`;
+       return e.date === dateStr || (e.isRecurring && e.date.endsWith(`-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}-${selectedDay.toString().padStart(2, '0')}`));
+    });
+    
+    try {
+      const res = await fetch("/api/ai-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "family-secretary", eventRange: "today", events: dayEvents })
+      });
+      const data = await res.json();
+      setAiSummary(data.text || data.error || "生成总结失败");
+    } catch (e) {
+      setAiSummary("AI 总结请求失败");
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
 
   return (
     <>
@@ -144,7 +153,9 @@ export const CalendarPage: React.FC = () => {
             </button>
             <div className="text-center">
               <h2 className="text-xl font-bold">{currentDate.getFullYear()}年 {currentDate.getMonth() + 1}月</h2>
-              <p className="text-xs text-slate-400 font-medium tracking-widest">岁次 · {getZodiac(currentDate.getFullYear())}年</p>
+              <p className="text-xs text-slate-400 font-medium tracking-widest leading-relaxed">
+                岁次 · {getZodiac(currentDate.getFullYear())}年
+              </p>
             </div>
             <button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
               <ChevronRight className="text-slate-400" size={20} />
@@ -152,8 +163,11 @@ export const CalendarPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-7 gap-1 mb-2">
-            {["日", "一", "二", "三", "四", "五", "六"].map(d => (
-              <div key={d} className="text-center text-xs font-bold text-slate-300 py-1">{d}</div>
+            {["日", "一", "二", "三", "四", "五", "六"].map((d, i) => (
+              <div key={d} className={cn(
+                "text-center text-xs font-bold py-1",
+                (i === 0 || i === 6) ? "text-rose-500" : "text-slate-300"
+              )}>{d}</div>
             ))}
           </div>
 
@@ -180,7 +194,7 @@ export const CalendarPage: React.FC = () => {
                 return isRecurring ? matchMonthDay : (y === currentDate.getFullYear() && matchMonthDay);
               });
 
-              const { lunar, festival } = getLunarDay(dayNum);
+              const { lunar, festival } = getLunarDay(currentDate.getFullYear(), currentDate.getMonth() + 1, dayNum);
 
               return (
                 <button
@@ -193,24 +207,29 @@ export const CalendarPage: React.FC = () => {
                     isToday && !isSelected && "ring-2 ring-[#eab308]/20"
                   )}
                 >
-                  <span className={cn(
-                    "text-lg font-black leading-none",
-                    isEvent && !isSelected && "text-[#eab308]"
-                  )}>{dayNum}</span>
-                  <div className="flex flex-col items-center">
+                  <div className="flex flex-col items-center gap-0.5 pointer-events-none">
                     <span className={cn(
-                      "text-[10px] font-medium scale-90",
-                      isSelected ? "text-white/90" : "text-slate-400"
-                    )}>
-                      {lunar}
-                    </span>
-                    {festival && (
+                      "text-lg font-black leading-none",
+                      isEvent && !isSelected && "text-[#eab308]"
+                    )}>{dayNum}</span>
+                    
+                    {festival ? (
+                      <div className="flex flex-col items-center gap-0 w-full overflow-hidden">
+                         {festival.split(" | ").map((f, idx) => {
+                            const isL = f === "龙抬头" || f === "元宵节" || f === "端午节" || f === "除夕";
+                            return (
+                              <span key={idx} className={cn(
+                                "text-[7px] font-black tracking-tighter leading-tight truncate w-full text-center",
+                                isSelected ? "text-white" : (isL ? "text-rose-500" : "text-emerald-500")
+                              )}>{f.slice(0, 3)}</span>
+                            );
+                         })}
+                      </div>
+                    ) : (
                       <span className={cn(
-                        "text-[10px] font-bold scale-90",
-                        isSelected ? "text-white" : "text-red-500"
-                      )}>
-                        {festival}
-                      </span>
+                        "text-[9px] font-medium tracking-tighter leading-none h-[11px] block",
+                        isSelected ? "text-white/90" : "text-slate-400"
+                      )}>{lunar}</span>
                     )}
                   </div>
                   {isEvent && !isSelected && <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-[#eab308] rounded-full ring-2 ring-white" />}
@@ -229,21 +248,176 @@ export const CalendarPage: React.FC = () => {
               <h3 className="text-lg font-bold">{viewRange === 'day' ? `${selectedDay}日` : '本月'}的大事记</h3>
             </div>
 
-            <div className="flex bg-slate-100/50 p-1.5 rounded-full gap-1">
+            <div className="flex bg-slate-100/50 p-1 rounded-2xl gap-0.5">
               <button
                 onClick={() => setViewRange('day')}
-                className={cn("px-5 py-2 rounded-full text-sm font-black transition-all", viewRange === 'day' ? "bg-white text-[#eab308] shadow-sm" : "text-slate-400")}
+                className={cn("px-4 py-1.5 rounded-xl text-xs font-black transition-all", viewRange === 'day' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400")}
               >
                 本日
               </button>
               <button
                 onClick={() => setViewRange('month')}
-                className={cn("px-5 py-2 rounded-full text-sm font-black transition-all", viewRange === 'month' ? "bg-white text-[#eab308] shadow-sm" : "text-slate-400")}
+                className={cn("px-4 py-1.5 rounded-xl text-xs font-black transition-all", viewRange === 'month' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400")}
               >
                 本月
               </button>
             </div>
           </div>
+
+          {/* === 📅 空状态引导 - 已挪至黄历上方 === */}
+          {(() => {
+            const dateStr = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}-${selectedDay.toString().padStart(2, '0')}`;
+            const todayEvents = events.filter(e => {
+              if (viewRange === 'day') return e.date === dateStr || (e.isRecurring && e.date.endsWith(`-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}-${selectedDay.toString().padStart(2, '0')}`));
+              const [, m] = e.date.split("-").map(Number);
+              return (m - 1) === currentDate.getMonth();
+            });
+            
+            if (todayEvents.length === 0) {
+              return (
+                <div className="mb-4 px-1 animate-in fade-in slide-in-from-bottom-1">
+                  <button 
+                    onClick={() => navigate("/add-event", { state: { initialDate: formattedSelectedDate } })}
+                    className="w-full bg-white/60 backdrop-blur-sm rounded-3xl p-4 border border-[#eab308]/10 flex items-center justify-between group active:scale-[0.98] transition-all shadow-sm"
+                  >
+                    <div className="flex flex-col items-start px-2">
+                       <p className="text-slate-400 font-black text-sm">今天还没有记录哦～</p>
+                    </div>
+                    <div className="size-9 rounded-xl bg-slate-100 text-[#eab308] flex items-center justify-center group-hover:bg-[#eab308] group-hover:text-white transition-all">
+                      <Plus size={18} strokeWidth={4} />
+                    </div>
+                  </button>
+                </div>
+              );
+            }
+            
+            return (
+              <div className="mb-4 px-1 animate-in fade-in slide-in-from-bottom-1">
+                <button
+                  onClick={() => generateAiSummary()}
+                  className="w-full py-4 bg-gradient-to-r from-[#eab308]/5 to-transparent border-2 border-dashed border-[#eab308]/20 rounded-3xl flex items-center justify-center gap-2 text-[#eab308] font-black group hover:bg-[#eab308]/10 transition-all active:scale-[0.98]"
+                >
+                  <Sparkles size={16} className={cn("text-[#eab308]", summaryLoading && "animate-spin")} />
+                  {summaryLoading ? "AI 正在回味家族记忆..." : "本日大事记 AI 智能总结"}
+                </button>
+                <AnimatePresence>
+                  {aiSummary && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-3 p-5 bg-amber-50/50 rounded-3xl border border-amber-100/20 relative"
+                    >
+                      <button onClick={() => setAiSummary(null)} className="absolute top-4 right-4 text-amber-300 hover:text-amber-500"><X size={14} /></button>
+                      <div className="flex gap-2">
+                        <div className="size-8 rounded-full bg-white flex items-center justify-center text-[#eab308] shadow-sm shrink-0">
+                           <Sparkles size={14} />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-[10px] font-black text-amber-600/40 uppercase tracking-widest mb-1 flex items-center gap-1">AI 智能总结</p>
+                          <p className="text-slate-700 font-bold text-xs leading-relaxed">{aiSummary}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })()}
+
+          {viewRange === 'day' && (() => {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            const weekDayStr = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"][new Date(year, month - 1, selectedDay).getDay()];
+            const { lunar, festival } = getLunarDay(year, month, selectedDay);
+
+            return (
+              <div className="mb-6 px-1">
+                <div className="bg-white rounded-[2.5rem] border-4 border-white shadow-xl relative overflow-hidden">
+                  <div className="absolute top-0 inset-x-0 h-1.5 flex gap-1 px-1 opacity-20">
+                    {Array.from({ length: 20 }).map((_, i) => (
+                      <div key={i} className="flex-1 h-full bg-slate-200 rounded-b-full" />
+                    ))}
+                  </div>
+
+                  <div className="p-6 flex flex-col items-center">
+                    <div className="w-full flex justify-between items-center mb-4">
+                      <button 
+                        onClick={() => {
+                          const prev = new Date(year, month - 1, selectedDay - 1);
+                          setCurrentDate(prev);
+                          setSelectedDay(prev.getDate());
+                        }}
+                        className="p-2 text-slate-300 hover:text-emerald-500 transition-colors"
+                      >
+                        <ChevronLeft size={24} />
+                      </button>
+                      <div className="flex flex-col items-center">
+                        <span className="text-base font-black text-emerald-600 tracking-tight font-mono">{year}年 {month}月</span>
+                      </div>
+                      <button 
+                         onClick={() => {
+                          const next = new Date(year, month - 1, selectedDay + 1);
+                          setCurrentDate(next);
+                          setSelectedDay(next.getDate());
+                        }}
+                        className="p-2 text-slate-300 hover:text-emerald-500 transition-colors"
+                      >
+                        <ChevronRight size={24} />
+                      </button>
+                    </div>
+
+                    <div className="flex flex-col items-center my-2">
+                      <motion.span 
+                        key={selectedDay}
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="text-[110px] font-black leading-none text-emerald-500 tracking-tighter"
+                      >
+                        {selectedDay}
+                      </motion.span>
+                      <span className="text-xl font-black text-slate-400 -mt-2 uppercase tracking-widest">{weekDayStr}</span>
+                      {festival && (
+                        <div className="mt-8 flex flex-col items-center gap-4 w-full px-4">
+                          {festival.split(" | ").map((f, idx) => {
+                            const isLunar = f === "龙抬头" || f === "元宵节" || f === "端午节" || f === "七夕" || f === "中秋" || f === "重阳" || f === "冬至" || f === "除夕";
+                            return (
+                              <motion.div
+                                key={idx}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: idx * 0.1 }}
+                                className={cn(
+                                  "flex items-center gap-3 px-6 py-3 rounded-2xl shadow-sm border-2 w-full max-w-[280px]",
+                                  isLunar ? "bg-rose-50 border-rose-100 text-rose-500" : "bg-emerald-50 border-emerald-100 text-emerald-600"
+                                )}
+                              >
+                                <span className={cn(
+                                  "text-sm font-black px-2 py-0.5 rounded-lg",
+                                  isLunar ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-600"
+                                )}>
+                                  {isLunar ? "农历" : "公历"}
+                                </span>
+                                <span className="text-2xl font-black tracking-tighter flex-1 text-center pr-6">
+                                  {f}
+                                </span>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="w-full mt-4 pt-4 border-t-2 border-dashed border-slate-50 flex flex-col items-center">
+                      <div className="flex items-center gap-2">
+                         <div className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                         <span className="text-lg font-black text-slate-700 tracking-widest">{lunar}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="grid grid-cols-1 gap-4">
             {events.filter(e => {
@@ -254,11 +428,7 @@ export const CalendarPage: React.FC = () => {
                 const [, m] = e.date.split("-").map(Number);
                 return (m - 1) === currentDate.getMonth();
               }
-            }).length === 0 ? (
-              <div className="bg-white rounded-[2rem] p-12 text-center border-2 border-dashed border-slate-100">
-                <p className="text-slate-300 font-bold text-xl">暂无大事记</p>
-              </div>
-            ) : (
+            }).length === 0 ? null : (
               events.filter(e => {
                 const targetDate = `${(currentDate.getMonth() + 1).toString().padStart(2, '0')}-${selectedDay.toString().padStart(2, '0')}`;
                 if (viewRange === 'day') {

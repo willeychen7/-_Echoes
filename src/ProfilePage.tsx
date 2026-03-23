@@ -5,14 +5,15 @@ import {
   Plus, Search, Filter, ArrowLeft, MoreHorizontal, Edit2, Trash2, Camera,
   Settings, History, Heart, MessageSquare, Mic, Play, Pause, ChevronRight,
   Share2, QrCode, Copy, CheckCircle, Bell, UserPlus, Info, Shield, Check, X,
-  AlertTriangle, Gift, Users, Clock, LogOut, Sparkles, ChevronDown
+  AlertTriangle, Gift, Users, Clock, LogOut, Sparkles, ChevronDown, Archive, FolderOpen
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { cn, normalizeGender } from "./lib/utils";
+import { cn, normalizeGender, normalizeRank } from "./lib/utils";
 import { updateAvatarCache } from "./lib/useAvatarCache";
 import { ImageCropper } from "./components/ImageCropper";
 import { DEMO_PERSONAS, isDemoMode } from "./demo-data";
-import { DEFAULT_AVATAR, SYSTEM_AVATARS, getSafeAvatar } from "./constants";
+import { DEFAULT_AVATAR_HUMAN, DEFAULT_AVATAR_PET, getSafeAvatar, SYSTEM_AVATARS } from "./constants";
+import { computeReverseViaMumuy } from "./lib/kinshipBridge";
 
 /** 相对时间转换 */
 const getRelativeTime = (dateStr: string) => {
@@ -27,78 +28,90 @@ const getRelativeTime = (dateStr: string) => {
   return date.toLocaleDateString();
 };
 
-/** 核心功能：基于双方 DNA (房分/排行/代数) 自动计算称谓推荐 */
+/** 核心功能：集成 mumuy/relationship.js 宗法模型自动计算称谓推荐 */
+/** 核心功能：集成 mumuy/relationship.js 宗法模型自动计算称谓推荐 */
 const getIdentityRecommendation = (data: any, currentUserGender?: string) => {
   if (!data || !data.inviterId) return null;
 
-  const iSex = data.inviterGender === 'female' || data.inviterGender === '女' ? 'F' : 'M';
-  const effectiveGender = currentUserGender || data.gender || data.targetGender;
-  const tSex = effectiveGender === 'female' || effectiveGender === '女' ? 'F' : 'M';
-
-  // 🚀 [Logic Upgrade] 优先使用邀请时确定的标准角色，结合性别生成精准称谓
-  const targetRole = (data.targetRole || "").trim(); // 邀请人给被邀请人定的称谓，如“四叔叔”
-  let stdRole = data.targetStandardRole;
-
-  // 如果标准角色缺失，尝试从称谓文本推导 (增强鲁棒性)
-  if (!stdRole || stdRole === "other" || stdRole === "family") {
-    if (targetRole.includes("父") || targetRole.endsWith("爸")) stdRole = "father";
-    else if (targetRole.includes("母") || targetRole.endsWith("妈")) stdRole = "mother";
-    else if (targetRole.includes("子") || targetRole.endsWith("儿")) stdRole = "son";
-    else if (targetRole.includes("女")) stdRole = "daughter";
-    else if (targetRole.includes("叔") || targetRole.includes("伯") || targetRole.includes("舅") || targetRole.includes("姨")) stdRole = "uncle";
-    else if (targetRole.includes("姑")) stdRole = "aunt";
-    else if (targetRole.includes("公") || targetRole.includes("爷") || targetRole.includes("婆") || targetRole.includes("奶")) stdRole = "grandfather";
-    else if (targetRole.includes("侄") || targetRole.includes("外甥")) stdRole = "nephew";
-  }
-
-  const roleStr = (stdRole || "").toLowerCase();
   const inviterName = data.inviterName || "邀请人";
+  const targetRole = (data.targetRole || "").trim(); // 邀请人给被邀请人定的称谓，如“二哥哥”
+
+  // 核心：邀请人性别与我的性别 (移除不可靠的姓名推测)
+  const inviterGender = normalizeGender(data.inviterGender) || 'male';
+  const myGender = normalizeGender(currentUserGender || data.gender || data.targetGender) || 'male';
+
+  const iSex = inviterGender === 'female' ? 'F' : 'M';
+  const tSex = myGender === 'female' ? 'F' : 'M';
 
   // 1. 确定“我是谁” (Identity: What the inviter calls me)
   const identity = targetRole || "家人";
 
-  // 2. 判定“对方是谁” (Title: What I should call the inviter)
-  // 我们逆流推导：如果我是对方的 stdRole，那对方是我的什么？
+  // 2. 核心算法：尝试使用权威全量模型进行反向推导
   let title = "亲属";
   let reason = `系统检测到 ${inviterName} 将您收归为“${identity}”。`;
+  let rev: string | null = null;
 
-  // 直接使用简化的逆向映射，确保 onboarding 阶段即便没有完整成员树也能给出满意的结果
-  const inviterIsFemale = iSex === 'F';
+  try {
+    // 🚀 [Bug Fix] 性别反向识别：推导对方称谓时，库的 'sex' 参数必须是“对方（邀请人）”的性别
+    // 因为我们需要知道：对方（女性）叫我“哥”，我该叫她什么？ -> 应传 female 到库中
+    rev = computeReverseViaMumuy(identity, inviterGender as 'male' | 'female', myGender as 'male' | 'female');
+    if (rev && !['亲属', '其他', '亲戚', '家人', '本人'].includes(rev)) {
+      title = rev;
+      reason = `基于宗法模型识别：${inviterName} 给您定义的“${identity}”档案，对应您应称呼其为${title}。`;
+    }
+  } catch (e) {
+    console.warn("Mumuy internal recommendation failed:", e);
+  }
 
-  if (roleStr === 'father' || roleStr === 'mother') {
-    title = inviterIsFemale ? '女儿' : '儿子';
-    reason = `作为档案中的父母辈，您与 ${inviterName} 属于直系亲缘。`;
-  } else if (roleStr === 'son' || roleStr === 'daughter') {
-    title = inviterIsFemale ? '母亲' : '父亲';
-    reason = `作为档案中的子嗣，您与 ${inviterName} 属于直系亲缘。`;
-  } else if (roleStr.includes('uncle') || roleStr.includes('aunt')) {
-    // 我是对方的长辈 -> 对方是我的晚辈
-    title = inviterIsFemale ? '外甥女' : '外甥';
-    if (targetRole.includes('侄')) title = inviterIsFemale ? '侄女' : '侄子';
-    reason = `作为档案中的长辈，${inviterName} 是您的晚辈。`;
-  } else if (roleStr.includes('grand')) {
-    // 我是对方的祖辈 -> 对方是我的孙辈
-    title = inviterIsFemale ? '外孙女' : '孙子'; // 统称
-    reason = `作为档案中的祖辈，${inviterName} 是您的晚辈。`;
-  } else if (roleStr.includes('nephew') || roleStr.includes('niece')) {
-    // 我是对方的晚辈 -> 对方是我的长辈
-    title = inviterIsFemale ? '阿姨' : '叔叔'; // 统称
-    if (targetRole.includes('外甥')) title = inviterIsFemale ? '姨妈' : '舅舅';
-    reason = `作为档案中的晚辈，${inviterName} 是您的长辈。`;
-  } else if (roleStr === 'cousin' || roleStr === 'sibling' || targetRole.includes("堂") || targetRole.includes("表")) {
-    // 同辈逻辑：利用 inviteData 里的房分对比
-    const hallMap: any = { '大房': 1, '二房': 2, '三房': 3, '四房': 4, '五房': 5, '六房': 6, '七房': 7, '八房': 8, '九房': 9, '十房': 10 };
-    const hI = hallMap[data.inviterAncestralHall] || 99;
-    const hT = hallMap[data.targetAncestralHall] || 99;
-    const isMaternal = targetRole.includes('表');
+  // 3. 逻辑补偿与排行、房分细化
+  const isCousinOrSibling = (role: string) =>
+    ['cousin', 'sibling', 'brother', 'sister'].includes((data.targetStandardRole || "").toLowerCase()) ||
+    /堂|表/.test(identity) || /哥|姐|弟|妹/.test(identity);
 
-    let isOlder = false;
-    if (hI < hT) isOlder = true;
-    else if (hI === hT && Number(data.inviterSiblingOrder) < Number(data.targetSiblingOrder)) isOlder = true;
+  if (title === "亲属" || isCousinOrSibling(title) || isCousinOrSibling(identity)) {
+    const roleStr = (data.targetStandardRole || "").toLowerCase();
+    const invOrder = normalizeRank(data.inviterSiblingOrder); // 🚀 [Fix] 使用权威算法归一化排行 (三 -> 3)
+    const myOrder = normalizeRank(data.targetSiblingOrder);
+    const numChars = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
 
-    const prefix = isMaternal ? "表" : (hI === hT ? "" : "堂");
-    title = isOlder ? (inviterIsFemale ? `${prefix}姐` : `${prefix}哥`) : (inviterIsFemale ? `${prefix}妹` : `${prefix}弟`);
-    reason = isOlder ? `由于对方支脉/排行更长，您应称呼其为${title}。` : `由于您的支脉/排行更长，对方应称呼您为${prefix}${tSex === 'F' ? '姐' : '哥'}。`;
+    // 如果没有被 mumuy 反推出更细节的关系，走内置补偿
+    if (title === "亲属") {
+      if (roleStr === 'father' || roleStr === 'mother') title = iSex === 'F' ? '女儿' : '儿子';
+      else if (roleStr === 'son' || roleStr === 'daughter') title = iSex === 'F' ? '母亲' : '父亲';
+      else if (isCousinOrSibling(identity)) {
+        const hallMap: any = { '大房': 1, '二房': 2, '三房': 3, '四房': 4, '五房': 5, '六房': 6, '七房': 7, '八房': 8, '九房': 9, '十房': 10 };
+        const hI = hallMap[data.inviterAncestralHall] || 99;
+        const hT = hallMap[data.targetAncestralHall] || 99;
+        const isMaternal = identity.includes('表');
+
+        let isOlder = false;
+        if (hI < hT) isOlder = true;
+        else if (hI === hT) {
+          if (invOrder !== null && myOrder !== null && invOrder < myOrder) isOlder = true;
+          else if (identity.includes("哥") || identity.includes("姐")) isOlder = false;
+          else if (identity.includes("弟") || identity.includes("妹")) isOlder = true;
+        }
+
+        const prefix = isMaternal ? "表" : (hI === hT ? "" : "堂");
+        title = isOlder ? (iSex === 'F' ? `${prefix}姐` : `${prefix}哥`) : (iSex === 'F' ? `${prefix}妹` : `${prefix}弟`);
+      }
+    }
+
+    // 🚀 [Ranking Injection] 注入具体的排行数字，并自动生成详细解释
+    if (invOrder !== null && invOrder >= 1) {
+      const core = title.replace(/[堂表]/g, '');
+      if (['哥', '弟', '姐', '妹'].includes(core)) {
+        const prefix = title.includes('堂') ? '堂' : (title.includes('表') ? '表' : '');
+        const orderChar = invOrder === 1 ? '大' : (numChars[invOrder] || invOrder.toString());
+        title = `${prefix}${orderChar}${core}`;
+
+        // 生成详细描述语：采用用户要求的简练口语版
+        const sameHall = data.inviterAncestralHall === data.targetAncestralHall;
+        const bloodTypeStr = sameHall && !title.includes('表') ? '同出令尊一脉' : '同属一宗支脉';
+
+        reason = `【血脉定位】${inviterName} 将您登记为“${identity}”。基于宗法计算：对方属于${bloodTypeStr}，由此锁定您应称呼其为：‘${title}’。`;
+      }
+    }
   }
 
   return { title, identity, reason };
@@ -137,6 +150,7 @@ export const ProfilePage: React.FC = () => {
   const [isManualRelMode, setIsManualRelMode] = useState(false);
   const [migrationInfo, setMigrationInfo] = useState<any>(null); // null = 不需要迁移，{} = 需要确认
   const [pendingAcceptParams, setPendingAcceptParams] = useState<any>(null);
+  const [syncArchives, setSyncArchives] = useState(false); // 🚀 数字行李箱：同步历史记忆
 
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem("currentUser");
@@ -156,7 +170,8 @@ export const ProfilePage: React.FC = () => {
       gender: normalizeGender(parsed?.gender) || "male",
       phone: parsed?.phone || "", // 核心修复：防止 phone 字段在后续同步中丢失
       stats: cachedStats,
-      isRegistered: !!parsed?.isRegistered
+      isRegistered: !!parsed?.isRegistered,
+      homeMode: parsed?.homeMode || "normal" // normal, gallery, voice
     };
   });
 
@@ -164,7 +179,8 @@ export const ProfilePage: React.FC = () => {
     name: "",
     bio: "",
     birthday: "",
-    gender: "male"
+    gender: "male",
+    homeMode: "normal"
   });
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -340,7 +356,7 @@ export const ProfilePage: React.FC = () => {
       fetch("/api/users/claim-orphan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: parsed.id, name: parsed.name })
+        body: JSON.stringify({ userId: parsed.id, name: parsed.name, syncArchives: true }) // 自动救治时默认尝试同步
       })
         .then(r => r.json())
         .then(data => {
@@ -454,7 +470,8 @@ export const ProfilePage: React.FC = () => {
       name: editForm.name,
       bio: editForm.bio,
       birthday: editForm.birthday,
-      gender: (normalizeGender(editForm.gender) || "male") as "male" | "female"
+      gender: (normalizeGender(editForm.gender) || "male") as "male" | "female",
+      homeMode: editForm.homeMode
     };
     setUser(updatedUser);
 
@@ -569,7 +586,7 @@ export const ProfilePage: React.FC = () => {
     }
     const finalInviteData = overrideInviteData || inviteData;
     const finalRole = overrideRole || selectedRel;
-    let finalStdRole = overrideStdRole || relationships.find(r => r.label === finalRole)?.value || "other";
+    let finalStdRole = overrideStdRole || relationships.flatMap(g => g.options).find(r => r.label === finalRole)?.value || "other";
 
     // 🚀 核心优化：动态识别“堂/表”称谓并映射为标准 cousin 角色
     if (finalStdRole === "other") {
@@ -632,6 +649,7 @@ export const ProfilePage: React.FC = () => {
           phone: phone,   // 向下兼容降级
           inviteCode: inviteCodeInput.trim(),
           relationshipToInviter: finalRole,
+          syncArchives: syncArchives, // 🚀 将此标识传给后端，执行数字指纹同步
           standardRole: finalStdRole,
           name: finalName,
           avatarUrl: finalAvatar,
@@ -673,14 +691,65 @@ export const ProfilePage: React.FC = () => {
   };
 
   const relationships = [
-    { label: "儿子", value: "son" },
-    { label: "女儿", value: "daughter" },
-    { label: "父亲", value: "father" },
-    { label: "母亲", value: "mother" },
-    { label: "哥哥/姐姐", value: "sibling" },
-    { label: "孙子/孙女", value: "grandson" },
-    { label: "配偶", value: "spouse" },
-    { label: "其他", value: "other" }
+    {
+      group: "宗亲本家", options: [
+        { label: "哥哥", value: "brother" },
+        { label: "姐姐", value: "sister" },
+        { label: "弟弟", value: "brother" },
+        { label: "妹妹", value: "sister" },
+        { label: "堂哥", value: "cousin" },
+        { label: "堂姐", value: "cousin" },
+        { label: "堂弟", value: "cousin" },
+        { label: "堂妹", value: "cousin" },
+        { label: "伯伯", value: "uncle" },
+        { label: "叔叔", value: "uncle" },
+        { label: "姑妈", value: "aunt" },
+        { label: "父亲", value: "father" },
+        { label: "母亲", value: "mother" },
+        { label: "儿子", value: "son" },
+        { label: "女儿", value: "daughter" },
+        { label: "孙子", value: "grandson" },
+        { label: "孙女", value: "granddaughter" },
+        { label: "侄子", value: "nephew" },
+        { label: "侄女", value: "niece" },
+      ]
+    },
+    {
+      group: "外戚母系", options: [
+        { label: "舅舅", value: "uncle" },
+        { label: "姨妈", value: "aunt" },
+        { label: "表哥", value: "cousin" },
+        { label: "表姐", value: "cousin" },
+        { label: "表弟", value: "cousin" },
+        { label: "表妹", value: "cousin" },
+        { label: "外甥", value: "nephew" },
+        { label: "外甥女", value: "niece" },
+      ]
+    },
+    {
+      group: "姻亲眷属", options: [
+        { label: "丈夫", value: "spouse" },
+        { label: "妻子", value: "spouse" },
+        { label: "嫂子", value: "sister_in_law" },
+        { label: "弟媳", value: "sister_in_law" },
+        { label: "姐夫", value: "brother_in_law" },
+        { label: "妹夫", value: "brother_in_law" },
+        { label: "公公", value: "father_in_law" },
+        { label: "婆婆", value: "mother_in_law" },
+        { label: "岳父", value: "father_in_law" },
+        { label: "岳母", value: "mother_in_law" },
+        { label: "伯母", value: "aunt_in_law" },
+        { label: "婶婶", value: "aunt_in_law" },
+        { label: "姑父", value: "uncle_in_law" },
+        { label: "舅妈", value: "aunt_in_law" },
+        { label: "姨父", value: "uncle_in_law" },
+      ]
+    },
+    {
+      group: "其他", options: [
+        { label: "其他", value: "other" }
+      ]
+    }
   ];
 
   const handleLeaveFamily = async (overrideTakeArchives: boolean = false) => {
@@ -707,17 +776,21 @@ export const ProfilePage: React.FC = () => {
         throw new Error(errorData.error || "退出操作失败");
       }
 
-      // 清理本地存储中关于家族身份的信息
+      const data = await res.json();
+      
+      // 清理本地存储中关于家族身份的信息，尊重后端的重定向（通常是回归祖宅）
       localStorage.setItem("currentUser", JSON.stringify({
         ...savedUser,
-        familyId: 1, // 回到默认公共家族
-        memberId: null,
+        familyId: data.newFamilyId || 1, 
+        memberId: data.newMemberId || null,
         relationship: "我",
         role: "我",
-        isRegistered: true // Still registered as a user
+        isRegistered: true,
+        homeFamilyId: data.newFamilyId || savedUser.homeFamilyId,
+        homeMemberId: data.newMemberId || savedUser.homeMemberId
       }));
 
-      alert("已成功退出家族。");
+      alert(data.message || "已成功退出家族。");
       window.location.reload();
     } catch (e: any) {
       alert(e.message || "退出失败，请稍后重试。");
@@ -749,7 +822,13 @@ export const ProfilePage: React.FC = () => {
       items: [
         {
           icon: Edit2, label: "编辑个人资料", color: "text-blue-500 bg-blue-50", action: () => {
-            setEditForm({ name: user.name, bio: user.bio, birthday: user.birthday, gender: user.gender || "男" });
+            setEditForm({ 
+              name: user.name, 
+              bio: user.bio, 
+              birthday: user.birthday, 
+              gender: user.gender || "男",
+              homeMode: user.homeMode || "normal"
+            });
             setShowEditModal(true);
           }
         },
@@ -758,6 +837,12 @@ export const ProfilePage: React.FC = () => {
           label: hasJoinedFamily ? "家族管理" : "接受家族邀请",
           color: hasJoinedFamily ? "text-emerald-500 bg-emerald-50" : "text-rose-500 bg-rose-50",
           action: () => setShowInviteModal(true)
+        },
+        {
+          icon: Sparkles,
+          label: "导出家族纪念册 (PDF/实体)",
+          color: "text-[#eab308] bg-amber-50",
+          action: () => alert("正在为您生成《岁月留声·家族纪念册》...\n\n我们将汇总所有成员的大事记、语音与照片，为您排版为高清 PDF 离线归档包。预计完成后将发送至您的手机。")
         },
         ...(isDemoMode(user) ? [{ icon: Users, label: "切换测试用户", color: "text-indigo-500 bg-indigo-50", action: () => setShowPersonaModal(true) }] : []),
         {
@@ -826,7 +911,13 @@ export const ProfilePage: React.FC = () => {
           <div
             className="flex items-center justify-center gap-2 mb-4 cursor-pointer group px-4 py-1 -mt-1 rounded-full hover:bg-slate-50 transition-colors"
             onClick={() => {
-              setEditForm({ name: user.name, bio: user.bio, birthday: user.birthday, gender: (user.gender as any) || "male" });
+              setEditForm({ 
+        name: user.name, 
+        bio: user.bio, 
+        birthday: user.birthday, 
+        gender: (user.gender as any) || "male",
+        homeMode: user.homeMode || "normal"
+      });
               setShowEditModal(true);
             }}
           >
@@ -899,7 +990,7 @@ export const ProfilePage: React.FC = () => {
       {/* Modals */}
       <AnimatePresence>
         {showNotifications && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
+          <div key="notifications-modal-overlay" className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
@@ -960,9 +1051,11 @@ export const ProfilePage: React.FC = () => {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
 
+      <AnimatePresence>
         {showAvatarModal && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
+          <div key="avatar-config-modal-overlay" className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
@@ -976,7 +1069,7 @@ export const ProfilePage: React.FC = () => {
                   <img
                     src={pendingAvatar || user.avatar}
                     className="w-full h-full object-cover"
-                    key={pendingAvatar}
+                    key={pendingAvatar || "current-avatar-preview"}
                     referrerPolicy="no-referrer"
                   />
                   <div className="absolute inset-0 border-[6px] border-white/50 rounded-full pointer-events-none" />
@@ -1031,7 +1124,7 @@ export const ProfilePage: React.FC = () => {
         )}
 
         {showEditModal && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
+          <div key="edit-profile-modal-overlay" className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
@@ -1093,6 +1186,7 @@ export const ProfilePage: React.FC = () => {
                     placeholder="写点什么吧..."
                   />
                 </div>
+
               </div>
 
               <div className="pt-6 space-y-3">
@@ -1105,7 +1199,7 @@ export const ProfilePage: React.FC = () => {
         )}
 
         {showPersonaModal && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
+          <div key="switch-persona-modal-overlay" className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
@@ -1142,10 +1236,10 @@ export const ProfilePage: React.FC = () => {
           </div>
         )}
 
-        {/* 退出家族二次确认 */}
-        <AnimatePresence>
+        {/* 退出家族二次确认 - 注意：在 AnimatePresence 中作为子节点时也需要 key */}
+        <AnimatePresence key="leave-logic-presence">
           {(showLeaveConfirm || showLeaveDoubleConfirm) && (
-            <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-6 backdrop-blur-sm">
+            <div key="leave-confirm-modal-overlay" className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-6 backdrop-blur-sm">
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -1216,8 +1310,9 @@ export const ProfilePage: React.FC = () => {
           )}
         </AnimatePresence>
 
+      <AnimatePresence>
         {showInviteModal && (
-          <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
+          <div key="invite-handler-modal-overlay" className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
@@ -1281,14 +1376,29 @@ export const ProfilePage: React.FC = () => {
                       <h3 className="text-xl font-black text-slate-800">切换家族确认</h3>
 
                       <div className="text-left bg-slate-50 p-6 rounded-[2rem] text-sm text-slate-600 space-y-3 shadow-inner">
-                        <p className="font-medium text-slate-800 text-base">您目前拥有一个独立的家族。</p>
-                        {migrationInfo.contentCount > 0 ? (
-                          <p>您在这个家族中创建了 <b>{migrationInfo.contentCount}</b> 条记忆/留言。</p>
+                        {migrationInfo.kinshipMatch ? (
+                          <div className="space-y-4">
+                            <div className="p-4 bg-[#eab308]/10 border-2 border-[#eab308]/30 rounded-2xl">
+                              <p className="text-[#854d0e] font-bold leading-relaxed">
+                                🏮 系统检测到您与 <span className="text-[#e7be46] font-black">{migrationInfo.kinshipMatch.targetFamilyName}</span> 拥有共同的长辈 <span className="font-black">[{migrationInfo.kinshipMatch.ancestorName}]</span>，
+                                且两家的【血脉脉络】完全一致（同代同房）。
+                              </p>
+                              <p className="mt-2 text-[#854d0e] text-xs font-medium">是否一键关联，共修家系？</p>
+                            </div>
+                            <p className="font-medium text-slate-800 text-base">您的个人资产将被全量带入新家族。</p>
+                          </div>
                         ) : (
-                          <p>当前家族中暂无内容记录。</p>
-                        )}
-                        {migrationInfo.willFamilyBeDeleted && (
-                          <p className="text-red-500 font-bold bg-red-100/50 p-3 rounded-xl mt-2">由于您是该家族唯一的注册用户，一旦离开，原家族将会被系统解散清理。</p>
+                          <>
+                            <p className="font-medium text-slate-800 text-base">您目前拥有一个独立的家族。</p>
+                            {migrationInfo.contentCount > 0 ? (
+                              <p>您在这个家族中创建了 <b>{migrationInfo.contentCount}</b> 条记忆/留言。</p>
+                            ) : (
+                              <p>当前家族中暂无内容记录。</p>
+                            )}
+                            {migrationInfo.willFamilyBeDeleted && (
+                              <p className="text-red-500 font-bold bg-red-100/50 p-3 rounded-xl mt-2">由于您是该家族唯一的注册用户，一旦离开，原家族将会被系统解散清理。</p>
+                            )}
+                          </>
                         )}
                       </div>
 
@@ -1328,8 +1438,15 @@ export const ProfilePage: React.FC = () => {
                 <div className="space-y-6 overflow-y-auto no-scrollbar pb-2 text-left">
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div className="text-center space-y-3">
-                      <div className="w-16 h-16 bg-[#eab308]/10 rounded-full flex items-center justify-center mx-auto text-[#eab308]">
-                        <Sparkles size={32} />
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-20 h-20 rounded-full border-4 border-[#eab308]/20 shadow-xl overflow-hidden bg-white">
+                          <img
+                            src={tempAvatar || inviteData.targetAvatar || DEFAULT_AVATAR_HUMAN}
+                            alt="Target Avatar"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="text-sm font-black text-slate-800 bg-slate-100 px-3 py-1 rounded-full">{tempName}</div>
                       </div>
                       <h3 className="text-xl font-black text-slate-800 tracking-tight">确认身份档案</h3>
                       <p className="text-sm text-slate-500 font-medium px-4">
@@ -1387,7 +1504,7 @@ export const ProfilePage: React.FC = () => {
                         onClick={() => setShowInviteAvatarPicker(!showInviteAvatarPicker)}
                       >
                         <img
-                          src={tempAvatar || inviteData.targetAvatar || DEFAULT_AVATAR}
+                          src={tempAvatar || inviteData.targetAvatar || DEFAULT_AVATAR_HUMAN}
                           alt="Avatar"
                           className="w-full h-full object-cover transition-transform group-hover:scale-110"
                         />
@@ -1396,45 +1513,23 @@ export const ProfilePage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Inline Avatar Picker */}
-                      <AnimatePresence>
-                        {showInviteAvatarPicker && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="w-full overflow-hidden px-2 pt-2"
-                          >
-                            <div className="grid grid-cols-4 gap-2 bg-white/50 p-3 rounded-[1.5rem] border border-[#eab308]/10">
-                              {SYSTEM_AVATARS.slice(0, 7).map((url, i) => (
-                                <button
-                                  key={i}
-                                  onClick={(e) => { e.stopPropagation(); setTempAvatar(url); setShowInviteAvatarPicker(false); }}
-                                  className={cn(
-                                    "aspect-square rounded-full border-2 overflow-hidden transition-all",
-                                    tempAvatar === url ? "border-[#eab308] scale-90" : "border-slate-100"
-                                  )}
-                                >
-                                  <img src={url} className="w-full h-full object-cover" />
-                                </button>
-                              ))}
-                              <label className="aspect-square rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-400 cursor-pointer hover:bg-white transition-colors">
-                                <Camera size={16} />
-                                <input type="file" className="hidden" accept="image/*" onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    const url = URL.createObjectURL(file);
-                                    setTempImage(url);
-                                    setIsCroppingForInvite(true);
+                      {/* 🚀 已优化：移除预设列表，引导用户自主上传 */}
+                      <div className="w-full text-center py-2 opacity-40">
+                        <p className="text-[10px] font-black tracking-widest uppercase">点击上方头像即可自定义上传</p>
+                      </div>
+
+                      <label className="hidden">
+                        <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const url = URL.createObjectURL(file);
+                            setTempImage(url);
+                            setIsCroppingForInvite(true);
                                     setShowCropper(true);
                                     setShowInviteAvatarPicker(false);
                                   }
                                 }} />
                               </label>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
 
                       {/* === 🚀 核心新增：长辈称谓交叉验证 (仅在手动模式或无推荐时显示) === */}
                       {(isManualRelMode || !getIdentityRecommendation(inviteData)) && (
@@ -1545,49 +1640,20 @@ export const ProfilePage: React.FC = () => {
                           <span className="text-[10px] bg-[#eab308]/10 text-[#eab308] px-2 py-0.5 rounded-full font-bold">需核对</span>
                         </div>
                         <div className="space-y-4">
-                          <div className="relative">
-                            {isEditingTempName ? (
-                              <input
-                                autoFocus
-                                type="text"
-                                className="w-full h-12 rounded-xl bg-slate-50 border-2 border-[#eab308] px-4 font-bold text-slate-800"
-                                value={tempName}
-                                onChange={(e) => setTempName(e.target.value)}
-                                onBlur={() => setIsEditingTempName(false)}
-                              />
-                            ) : (
-                              <div className="flex items-center justify-between">
-                                <span className="text-lg font-black text-slate-800">{tempName}</span>
-                                <button onClick={() => setIsEditingTempName(true)} className="p-2 text-slate-300 hover:text-[#eab308]">
-                                  <Edit2 size={16} />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-2xl">
-                            <div className="size-8 bg-white rounded-lg flex items-center justify-center shadow-sm text-sm font-black text-[#eab308]">
-                              {inviteData.targetAncestralHall?.charAt(0) || "?"}
-                            </div>
+                          <div className="flex items-center gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                             <div className="flex-1">
-                              <p className="text-[10px] text-slate-400 font-bold">您所属的房分</p>
-                              <p className="text-sm font-black text-slate-700">{inviteData.targetAncestralHall || "未录入"}</p>
+                              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{inviteData.inviterName} 对您的称谓</p>
+                              <p className="text-xl font-black text-[#eab308] mt-1">{inviteData.targetRole || "家人"}</p>
                             </div>
-                            <div className="h-8 w-px bg-slate-200" />
-                            <div className="flex-1 pl-2">
-                              <p className="text-[10px] text-slate-400 font-bold">排行</p>
-                              <select
-                                className="bg-transparent text-sm font-black text-slate-700 outline-none w-full"
-                                value={inviteData.targetSiblingOrder || ""}
-                                onChange={(e) => {
-                                  const newOrder = e.target.value ? parseInt(e.target.value) : null;
-                                  setInviteData({ ...inviteData, targetSiblingOrder: newOrder });
-                                }}
-                              >
-                                <option value="">未知</option>
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => (
-                                  <option key={v} value={v}>老{['大', '二', '三', '四', '五', '六', '七', '八', '九', '十'][v - 1]}</option>
-                                ))}
-                              </select>
+                            <div className="h-10 w-px bg-slate-200" />
+                            <div className="flex-[1.2] pl-2">
+                              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">令尊 (父亲) 所属房分</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-base font-black text-slate-700">{inviteData.inviterAncestralHall || "未录入"}</span>
+                                <div className="size-5 bg-white rounded flex items-center justify-center shadow-sm text-[10px] font-black text-[#eab308] border border-slate-100">
+                                  {inviteData.inviterAncestralHall?.charAt(0) || "房"}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1606,8 +1672,12 @@ export const ProfilePage: React.FC = () => {
                               className="w-full h-12 rounded-xl bg-white border-2 border-indigo-200 px-4 font-black text-indigo-600 appearance-none shadow-sm"
                             >
                               <option value="">请选择称呼</option>
-                              {["堂哥", "堂姐", "堂弟", "堂妹", "哥哥", "姐姐", "弟弟", "妹妹", "伯伯", "叔叔", "姑妈", "大伯", "其他"].map(r => (
-                                <option key={r} value={r}>{r}</option>
+                              {relationships.map(group => (
+                                <optgroup key={group.group} label={group.group}>
+                                  {group.options.map(opt => (
+                                    <option key={opt.label} value={opt.label}>{opt.label}</option>
+                                  ))}
+                                </optgroup>
                               ))}
                             </select>
                             <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-300">
@@ -1628,6 +1698,25 @@ export const ProfilePage: React.FC = () => {
                           </p>
                         </div>
                       )}
+                    </div>
+
+                    {/* === 🚀 核心新增：数据行李箱 (同步开关) === */}
+                    <div 
+                      className="p-4 rounded-[2rem] bg-amber-50 border-2 border-amber-100 flex items-start gap-3 cursor-pointer select-none active:scale-95 transition-all w-full mb-2"
+                      onClick={() => setSyncArchives(!syncArchives)}
+                    >
+                      <div className={cn(
+                        "mt-0.5 size-5 rounded-md border-2 flex items-center justify-center transition-colors shadow-sm",
+                        syncArchives ? "bg-amber-500 border-amber-500 text-white" : "bg-white border-amber-200"
+                      )}>
+                        {syncArchives && <Check size={12} strokeWidth={4} />}
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className="text-xs font-black text-amber-900 leading-tight">同步我在以往存档或祖宅中记录的资料</p>
+                        <p className="text-[10px] text-amber-600 mt-1 font-bold opacity-80 leading-relaxed">
+                          勾选后，系统将自动基于“指纹识别”技术，将您带入的家系档案与留言同步至本家族，且不会产生重复条目。
+                        </p>
+                      </div>
                     </div>
 
                     <div className="pt-2 px-1">
@@ -1670,10 +1759,74 @@ export const ProfilePage: React.FC = () => {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
 
-        <AnimatePresence>
+      <AnimatePresence>
+        {showInviteAvatarPicker && (
+          <div key="invite-avatar-picker-modal-overlay" className="fixed inset-0 bg-black/60 z-[220] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px]"
+            >
+              <h3 className="text-2xl font-bold mb-6 text-center">选择受邀人头像</h3>
+
+              <div className="grid grid-cols-3 gap-4 mb-8">
+                {SYSTEM_AVATARS.map((url, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setTempAvatar(url);
+                      setShowInviteAvatarPicker(false);
+                    }}
+                    className={cn(
+                      "size-20 rounded-full border-4 overflow-hidden transition-all",
+                      tempAvatar === url ? "border-[#eab308] scale-110 shadow-lg shadow-[#eab308]/20" : "border-transparent opacity-60 hover:opacity-100"
+                    )}
+                  >
+                    <img src={url} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = "image/*";
+                    input.onchange = (e: any) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const url = URL.createObjectURL(file);
+                        setTempImage(url);
+                        setIsCroppingForInvite(true);
+                        setShowCropper(true);
+                        setShowInviteAvatarPicker(false);
+                      }
+                    };
+                    input.click();
+                  }}
+                  className="size-20 rounded-full bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-1 text-slate-400 hover:bg-slate-100 transition-colors"
+                >
+                  <Plus size={24} />
+                  <span className="text-[10px] font-bold">上传</span>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowInviteAvatarPicker(false)}
+                className="w-full py-4 text-slate-400 font-bold"
+              >
+                取消
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+        <AnimatePresence key="image-cropping-presence">
           {showCropper && tempImage && (
-            <div className="fixed inset-0 bg-black/90 z-[300] flex items-center justify-center p-4">
+            <div key="image-cropper-modal-overlay" className="fixed inset-0 bg-black/90 z-[300] flex items-center justify-center p-4">
               <ImageCropper
                 image={tempImage}
                 onCropComplete={(croppedImage) => {
