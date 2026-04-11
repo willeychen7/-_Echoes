@@ -1215,7 +1215,7 @@ export const FamilySquare: React.FC = () => {
 
         {/* Layer 5.8: AI 魔法映像馆入口 (移动至录音按钮下方) */}
         {activeTab === 'events' && (
-          <div className="absolute bottom-[25%] left-1/2 -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-700">
+          <div className="absolute bottom-[18%] left-1/2 -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-700">
             <MagicPortrait className="shadow-2xl shadow-orange-200/50" />
           </div>
         )}
