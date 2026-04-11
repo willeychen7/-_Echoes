@@ -3,25 +3,85 @@
  * GitHub: https://github.com/mumuy/relationship
  */
 
-import { normalizeGender } from "./utils";
+import relationship from 'relationship.js';
+import { normalizeGender, normalizeRank, getFormalRankTitle, NUM_CHAR, RANK_REGEX_STR } from "./utils";
 
 // 基于衔接点的快捷建议表
 export const CONNECTOR_SUGGESTIONS: Record<string, string[]> = {
-    'father': ['叔叔', '伯伯', '姑姑', '堂伯', '堂叔', '堂姑'],
+    'father': ['叔叔', '伯伯', '姑姑'],
+    'paternal_cousin_elder': ['堂伯', '堂叔', '堂姑', '表伯', '表叔', '表姑'],
     'grandfather': ['伯公', '叔公', '姑婆', '婶婆', '伯婆', '堂爷爷', '堂奶奶'],
     'g_grandfather': ['太爷爷', '老祖公', '太奶', '曾祖父', '曾祖母', '太伯公', '太叔公'],
     'grandmother': ['舅公', '姨婆', '堂舅公', '堂姨婆', '姨外婆'],
+    // 直系至亲快捷项
+    'grandparent_direct': ['爷爷', '奶奶'],
+    'grandparent_m_direct': ['外公', '外婆'],
+    'parent_direct': ['爸爸', '爸', '父亲'],
+    'parent_m_direct': ['妈妈', '妈', '母亲'],
     'sibling': ['哥哥', '弟弟', '姐姐', '妹妹'], // 亲兄弟姐妹
     'self_p': ['堂哥', '堂弟', '堂姐', '堂妹', '表哥', '表弟'], // 父系宗亲
     'child_p': ['儿子', '女儿', '侄子', '侄女', '堂侄', '堂侄女'],
     'grandchild_p': ['孙子', '孙女', '外孙', '外孙女', '曾孙', '曾孙女'],
-    'mother': ['舅舅', '阿姨', '表叔', '表姑'],
-    'm_grandfather': ['堂舅', '堂姨', '表舅', '外舅公', '外公', '姑婆', '表叔', '堂姨公', '堂舅公'],
+    'mother': ['舅舅', '阿姨'],
+    'maternal_cousin_elder': ['堂舅', '堂姨', '表舅', '表叔', '表姑'],
+    'm_grandfather': ['外公家族分支', '堂舅公', '堂姨婆'],
     'm_g_grandfather': ['外太公', '外太婆', '曾外祖'],
     'm_grandmother': ['姨姥', '表姨', '姨外婆', '外婆'],
     'self_m': ['表哥', '表弟', '表姐', '表妹'], // 母系外戚
     'child_m': ['外甥', '外甥女', '外孙', '外孙女'],
 };
+/**
+ * 智能连接点测定：将自然语言称谓映射回系统逻辑节点
+ */
+export function getConnectorNodeByRelation(rel: string): string {
+    if (!rel) return 'self';
+    const r = rel.trim();
+
+    // 1. 远祖辈 (4-5代及以上)
+    if (r.includes('烈') || r.includes('天') || r.includes('远') || r.includes('鼻')) {
+        return r.includes('外') ? 'm_g_grandfather' : 'g_grandfather';
+    }
+
+    // 2. 曾/高祖辈 (3-4代)
+    if (r.includes('曾') || r.includes('高') || r.includes('太爷') || r.includes('太奶')) {
+        return r.includes('外') ? 'm_g_grandfather' : 'g_grandfather';
+    }
+    // 3. 祖辈 (按照宗法严格划分)
+    if (r.includes('外婆') || r.includes('外祖母') || r.includes('姥姥')) return 'm_grandmother';
+    if (r.includes('外公') || r.includes('外祖父')) return 'm_grandfather';
+    if (r.includes('奶奶') || r.includes('祖母')) return 'grandparent_direct';
+    if (r.includes('爷爷') || r.includes('祖父')) return 'grandparent_direct';
+    
+    // 旁系祖辈
+    if (r.includes('姨外婆') || r.includes('舅外公') || r.includes('姨姥')) return 'm_grandmother';
+    if (r.includes('太外公') || r.includes('外曾祖')) return 'm_g_grandfather';
+    if (r.includes('叔公') || r.includes('伯公') || r.includes('姑婆') || r.includes('叔婆') || r.includes('伯婆')) return 'grandfather';
+    if (r.includes('舅公') || r.includes('姨婆')) return 'grandmother';
+
+    // 4. 父辈 (直接)
+    if (r === '父亲' || r === '爸爸' || r === '爸') return 'parent_direct';
+    if (r === '母亲' || r === '妈妈' || r === '妈') return 'parent_m_direct';
+
+    // 5. 叔伯舅姨 (父辈旁系)
+    if (r.includes('堂伯') || r.includes('堂叔') || r.includes('堂姑')) return 'paternal_cousin_elder';
+    if (r.includes('叔') || r.includes('伯') || r.includes('姑')) return 'father';
+    if (r.includes('堂舅') || r.includes('堂姨')) return 'maternal_cousin_elder';
+    if (r.includes('舅') || r.includes('姨')) return 'mother';
+
+    // 6. 平辈 (堂、表)
+    if (r.includes('堂')) return 'self_p';
+    if (r.includes('表')) return 'self_m';
+    if (['哥', '弟', '姐', '妹'].some(s => r.includes(s))) return 'sibling';
+
+    // 7. 晚辈
+    if (r.includes('玄') || r.includes('来') || r.includes('晜') || r.includes('仍')) return 'grandchild_p'; // 统归为远孙辈
+    if (r.includes('孙')) return 'grandchild_p'; // 简化处理，默认宗亲孙辈
+    if (r.includes('侄')) return 'child_p';
+    if (r.includes('甥')) return 'child_m';
+    if (r.includes('子') || r.includes('女')) return 'child_p';
+
+    return 'self';
+}
 
 // 房头配色方案：采用低饱和度、高明度的中国传统色，确保不干扰头像显示
 const HALL_COLORS = [
@@ -38,8 +98,7 @@ const HALL_COLORS = [
  */
 export function extractRankFromText(text: string): string | null {
     if (!text) return null;
-    // 优先匹配多位数字，如 十一, 二十
-    const match = text.match(/(二十|十一|十二|十三|十四|十五|十六|十七|十八|十九|一|二|三|四|五|六|七|八|九|十|大|小|幺|老)/);
+    const match = text.match(new RegExp(RANK_REGEX_STR));
     return match ? match[0] : null;
 }
 
@@ -52,12 +111,23 @@ export function getLogicTag(side: 'paternal' | 'maternal', connector: string, ra
     const suffix = (side === 'maternal' && isSameSurname) ? '!S' : '';
     const paths: Record<string, string> = {
         father: 'f', grandfather: 'f,f', grandmother: 'f,m', g_grandfather: 'f,f,f',
+        paternal_cousin_elder: 'f,f,b', // 通过爷爷的手足衔接 (堂伯叔姑)
         mother: 'm', m_grandfather: 'm,f', m_grandmother: 'm,m', m_g_grandfather: 'm,f,f',
+        maternal_cousin_elder: 'm,f,b', // 通过外公的手足衔接 (堂舅姨)
         sibling: 'sib', self_p: 'x', self_m: 'x,m',
         child_p: 's', child_m: 's,m', grandchild_p: 's,s'
     };
     const path = paths[connector] || 'unknown';
-    const r = rank && rank !== '不知道' ? `-o${rank}` : '';
+    
+    // 🚀 核心改进：如果房分未知，通过特定的 hash 或标记位使该分支保持独立，防止多房头“合并成一房”
+    let r = '';
+    if (rank && rank !== '不知道') {
+        r = `-o${rank}`;
+    } else if (rank === '不知道') {
+        // 使用一个特殊的占位符，由后端或同步流程决定是否真的合龙
+        r = `-oUNKNOWN`;
+    }
+    
     return `${s}${suffix}-${path}${r}`;
 }
 
@@ -138,8 +208,8 @@ export function validateKinshipLogic(
     return { isValid: true, type: 'success', tag };
 }
 
-import { computeKinshipViaMumuy } from './kinshipBridge';
-import { STANDARD_ROLE_LABELS, getCleanRelationship } from './relationships';
+import { computeKinshipViaMumuy, getExplicitOrder, computeReverseViaMumuy } from './kinshipBridge';
+import { STANDARD_ROLE_LABELS, getCleanRelationship, isFemale } from './relationships';
 
 /**
  * 反向关系推演：TA 怎么叫你
@@ -153,11 +223,34 @@ export function getReverseKinship(
     viewerNode?: any,
     members?: any[]
 ): string {
+    // 🛡️ 极端过滤：避免返回“创建者”等管理术语，直接重定义关系基准
+    const isMeFemale = isFemale(viewerNode);
+    const isMeMale = !isMeFemale;
+
+    // 如果 targetNode 或 viewerNode 带有管理性称谓，重置其计算优先级，强制走 mumuy 逻辑
+    const getSafeNode = (node: any) => {
+        if (!node) return node;
+        const rel = (node.relationship || '').trim();
+        if (['创建者', '本人', '我'].includes(rel)) return { ...node, relationship: undefined };
+        return node;
+    };
+
+    const safeTarget = getSafeNode(targetNode);
+    const safeViewer = getSafeNode(viewerNode);
+
+    const pRank = normalizeRank(viewerNode?.parent_order);
+    const sRank = normalizeRank(viewerNode?.sibling_order);
+    const isPaternal = side === 'paternal';
+
     // --- 🚀 核心升级：如果具备 55.0 引擎环境，直接进行视角对调推演 ---
-    if (targetNode && viewerNode && members && members.length > 0) {
+    // NOTE: 如果有排行信息且是祖辈关系，我们优先走下方的“排行归位”礼法逻辑，否则走标准引擎
+    const isAncestorConnector = ['grandfather', 'grandmother', 'm_grandfather', 'm_grandmother', 'g_grandfather', 'm_g_grandfather', 'grandparent_direct', 'grandparent_m_direct'].includes(connector);
+    const hasRankInfo = pRank !== null && pRank !== undefined || sRank !== null && sRank !== undefined;
+
+    if (safeTarget && safeViewer && members && members.length > 0 && !(isAncestorConnector && hasRankInfo)) {
         try {
-            const rev = computeKinshipViaMumuy(viewerNode, targetNode, members);
-            if (rev && !['亲属', '其他', '亲戚', '家人'].includes(rev)) return rev;
+            const rev = computeKinshipViaMumuy(safeTarget, safeViewer, members);
+            if (rev && !['亲属', '其他', '亲戚', '家人', '本人', '创建者', '我'].includes(rev)) return rev;
         } catch (e) { }
     }
 
@@ -168,13 +261,35 @@ export function getReverseKinship(
     }
 
     const coreRel = getCleanRelationship(rel);
-    const isMale = normalizeGender(myGender) === 'male';
+
+    const targetSex = normalizeGender(targetNode?.gender) || (isFemale(targetNode) ? 'female' : 'male');
+
+    // --- 🚀 权威升级：mumuy/relationship.js 核心算法引擎 ---
+    if (!(isAncestorConnector && hasRankInfo)) {
+        try {
+            // 逻辑：如果 A 叫 B "三姨婆"，我们要知道 B 叫 A 什么。
+            // 此时 A 是观察者/目标（isMeMale ? 'male' : 'female'），B 是被称呼者（targetSex）。
+            // 在 computeReverseViaMumuy 中，第二个参数应传入“发起称谓者 A”的性别。
+            const rev = computeReverseViaMumuy(coreRel, (isMeMale ? 'male' : 'female'), targetSex as 'male' | 'female');
+            if (rev && !['亲属', '其他', '亲戚', '家人', '本人'].includes(rev)) return rev;
+        } catch (e) {
+            console.warn("Mumuy reverse calculation failed, falling back to heuristics:", e);
+        }
+    }
 
     // 🚀 [Logic Upgrade] 增加对标准 role key 的直接支持，防止翻译混淆
     const stdRoleKey = (relText || '').toLowerCase();
-    if (stdRoleKey === 'son' || stdRoleKey === 'daughter' || stdRoleKey === 'child') return isMale ? '父亲' : '母亲';
-    if (stdRoleKey === 'father' || stdRoleKey === 'mother' || stdRoleKey === 'parent') return isMale ? '儿子' : '女儿';
-    if (stdRoleKey === 'brother' || stdRoleKey === 'sister' || stdRoleKey === 'sibling') return isMale ? '哥哥/弟弟' : '姐姐/妹妹';
+    if (stdRoleKey === 'son' || stdRoleKey === 'daughter' || stdRoleKey === 'child') return isMeMale ? '父亲' : '母亲';
+    if (stdRoleKey === 'father' || stdRoleKey === 'mother' || stdRoleKey === 'parent') return isMeMale ? '儿子' : '女儿';
+    if (stdRoleKey === 'brother' || stdRoleKey === 'sister' || stdRoleKey === 'sibling') {
+        const tS = getExplicitOrder(targetNode);
+        const vS = getExplicitOrder(viewerNode);
+        if (tS !== 99 && vS !== 99 && tS !== vS) {
+            if (tS < vS) return isMeMale ? '弟弟' : '妹妹'; // TA 比我大，TA 喊我弟/妹
+            if (tS > vS) return isMeMale ? '哥哥' : '姐姐'; // TA 比我小，TA 喊我哥/姐
+        }
+        return isMeMale ? '哥哥/弟弟' : '姐姐/妹妹';
+    }
 
     // 提取前缀 (堂、表、再从、三从、族)
     const prefixes = ['再从', '三从', '堂', '表', '族'];
@@ -183,46 +298,77 @@ export function getReverseKinship(
     // =====================================================================
     // --- 🌟 Fallback: 启发式内置规则 (用于只有文本标签的场景) ---
     // =====================================================================
-    if (['grandfather', 'grandmother', 'm_grandfather', 'm_grandmother', 'g_grandfather', 'm_g_grandfather'].includes(connector)) {
-        if (/^(爷爷|奶奶|外公|外婆|曾祖|太爷|太奶|外太公|外太婆|公|爷|奶|姥)$/.test(coreRel)) {
-            if (side === 'paternal') {
-                if (coreRel.includes('曾') || coreRel.includes('太')) return isMale ? '曾孙' : '曾孙女';
-                return isMale ? '孙子' : '孙女';
+    if (['grandfather', 'grandmother', 'm_grandfather', 'm_grandmother', 'g_grandfather', 'm_g_grandfather', 'grandparent_direct', 'grandparent_m_direct'].includes(connector)) {
+        if (/^(爷爷|奶奶|外公|外婆|曾祖|太爷|太奶|外太公|外太婆|公|爷|奶|姥)/.test(coreRel)) {
+
+            const isPaternal = side === 'paternal';
+            const isGreat = coreRel.includes('曾') || coreRel.includes('太');
+
+            // 基础称谓定义
+            const baseSuffix = isMeMale ? (isPaternal ? '孙' : '外孙') : (isPaternal ? '孙女' : '外孙女');
+            const fullBase = isMeMale ? (isPaternal ? '孙子' : '外孙子') : (isPaternal ? '孙女' : '外孙女');
+
+            // 礼法组合逻辑
+            // 1. 特殊简写：长房长孙(女) -> 长孙(女)
+            if (pRank === 1 && sRank === 1) return '长' + baseSuffix;
+
+            // 2. 正常组合：如 大房的二孙子
+            if (pRank && sRank) {
+                const bTitle = getFormalRankTitle(pRank, 'branch');
+                const sChar = sRank === 1 ? '长' : (sRank === 2 ? '次' : (sRank === 99 ? '小' : (NUM_CHAR[sRank] || sRank)));
+                const finalBase = (sRank === 1 || sRank === 2 || sRank === 99) ? baseSuffix : fullBase;
+                return `${bTitle}${sChar}${finalBase}`;
             }
-            if (coreRel.includes('曾') || coreRel.includes('太')) return isMale ? '外曾孙' : '外曾孙女';
-            return isMale ? '外孙' : '外孙女';
+
+            if (pRank) return getFormalRankTitle(pRank, 'branch') + fullBase;
+            if (sRank) {
+                const sChar = sRank === 1 ? '长' : (sRank === 2 ? '次' : (sRank === 99 ? '小' : (NUM_CHAR[sRank] || sRank)));
+                return sChar + baseSuffix;
+            }
+
+            return isGreat ? (isMeMale ? (isPaternal ? '曾孙' : '外曾孙') : (isPaternal ? '曾孙女' : '外曾孙女')) : fullBase;
         }
     }
 
     if (connector === 'grandchild_p') {
-        if (coreRel.includes('玄')) return isMale ? '高祖父' : '高祖母';
-        if (coreRel.includes('曾')) return isMale ? '曾祖父' : '曾祖母';
-        return isMale ? '爷爷' : '奶奶';
+        if (coreRel.includes('玄')) return isMeMale ? '高祖父' : '高祖母';
+        if (coreRel.includes('曾')) return isMeMale ? '曾祖父' : '曾祖母';
+        return isMeMale ? '爷爷' : '奶奶';
     }
 
-    if (/叔|伯/.test(coreRel)) return prefix + (isMale ? '侄子' : '侄女');
-    if (/姑/.test(coreRel)) return prefix + (isMale ? '侄子' : '侄女'); // 姑姑的侄子/女
-    if (/舅|姨/.test(coreRel)) return prefix + (isMale ? '外甥' : '外甥女');
+    if (/叔|伯/.test(coreRel)) return prefix + (isMeMale ? '侄子' : '侄女');
+    if (/姑/.test(coreRel)) return prefix + (isMeMale ? '侄子' : '侄女'); // 姑姑的侄子/女
+    if (/舅|姨/.test(coreRel)) return prefix + (isMeMale ? '外甥' : '外甥女');
     if (/哥|姐|弟|妹/.test(coreRel)) {
         const isOlder = /哥|姐/.test(coreRel);
-        if (isMale) return isOlder ? prefix + '弟' : prefix + '哥';
+        if (isMeMale) return isOlder ? prefix + '弟' : prefix + '哥';
         return isOlder ? prefix + '妹' : prefix + '姐';
     }
-    if (coreRel === '父亲' || coreRel === '母亲' || /爸|妈/.test(coreRel)) return isMale ? '儿子' : '女儿';
-    if (coreRel === '儿子' || coreRel === '女儿' || /子|女/.test(coreRel)) return isMale ? '父亲' : '母亲';
+    if (coreRel === '父亲' || coreRel === '母亲' || /爸|妈/.test(coreRel)) return isMeMale ? '儿子' : '女儿';
+    if (coreRel === '儿子' || coreRel === '女儿' || /子|女/.test(coreRel)) return isMeMale ? '父亲' : '母亲';
+
+    // 🚀 [Ranking Fix] 如果是平辈，且有排行数据，进行精准推导
+    if (connector === 'sibling') {
+        const tS = getExplicitOrder(targetNode);
+        const vS = getExplicitOrder(viewerNode);
+        if (tS !== 99 && vS !== 99 && tS !== vS) {
+            if (tS < vS) return isMeMale ? '弟弟' : '妹妹'; // TA 比我大，TA 喊我弟/妹
+            if (tS > vS) return isMeMale ? '哥哥' : '姐姐'; // TA 比我小，TA 喊我哥/姐
+        }
+    }
 
     if (/孙/.test(coreRel)) {
-        if (coreRel.includes('玄') || coreRel.includes('耳')) return isMale ? '高祖父' : '高祖母';
-        if (coreRel.includes('曾')) return isMale ? '曾祖父' : '曾祖母';
-        if (coreRel.includes('外')) return isMale ? '外公' : '外婆';
-        return isMale ? '爷爷' : '奶奶';
+        if (coreRel.includes('玄') || coreRel.includes('耳')) return isMeMale ? '高祖父' : '高祖母';
+        if (coreRel.includes('曾')) return isMeMale ? '曾祖父' : '曾祖母';
+        if (coreRel.includes('外')) return isMeMale ? '外公' : '外婆';
+        return isMeMale ? '爷爷' : '奶奶';
     }
 
     if (/侄|甥/.test(coreRel)) {
-        if (prefix === '堂') return isMale ? '堂叔' : '堂姑';
-        if (prefix === '表') return isMale ? '表舅' : '表姨';
-        if (/外甥/.test(coreRel)) return isMale ? '舅舅/姨丈' : '姨妈/舅妈';
-        return isMale ? '叔/舅' : '姑/姨';
+        if (prefix === '堂') return isMeMale ? '堂叔' : '堂姑';
+        if (prefix === '表') return isMeMale ? '表舅' : '表姨';
+        if (/外甥/.test(coreRel)) return isMeMale ? '舅舅/姨丈' : '姨妈/舅妈';
+        return isMeMale ? '叔/舅' : '姑/姨';
     }
 
     return '亲属';
@@ -277,12 +423,22 @@ export function createKinshipSearchFilter(query: string) {
  * 为《全家福大地图》自动排版生成坐标：采用弹性智能布局 (Smart Layout)
  * Generate SVG coordinates for members using an elastic collision-free layout.
  */
-export function generateSmartLayout(rawMembers: any[]) {
+export function generateSmartLayout(rawMembers: any[], currentUser?: any) {
+    if (!rawMembers || rawMembers.length === 0) return { members: [], pods: [] };
+
     // 过滤掉宠物和社交关系，它们不参与家族谱的计算
     const members = (rawMembers || []).filter(m =>
         m.memberType !== 'pet' && m.member_type !== 'pet' &&
         m.kinshipType !== 'social' && m.kinship_type !== 'social'
     );
+
+    // 🚀 核心纠偏：确定“本人”基准
+    // 如果传入了 currentUser，优先通过 userId 或 memberId 在 members 中找到它
+    const selfNode = members.find(m => 
+      (currentUser?.id && m.userId && String(m.userId) === String(currentUser.id)) ||
+      (currentUser?.memberId && m.id && String(m.id) === String(currentUser.memberId)) ||
+      (m.relationship === '本人' || m.relationship === '创建者' || (m.logicTag || "").includes('self'))
+    ) || members[0];
 
     // Canvas settings
     const CENTER_X = 500;
@@ -291,30 +447,38 @@ export function generateSmartLayout(rawMembers: any[]) {
     const MIN_NODE_GAP = 140; // 弹性防碰撞节点安全距离
     const SIDE_OFFSET = 300;
 
-    // 内部帮助函数：提取代际
-    const getGenLevel = (tag: string) => {
-        if (!tag) return 99; // 未指定，放最后
-        if (tag.includes('f,f,f') || tag.includes('m,f,f')) return -2; // 曾祖
-        if (tag.includes('f,f') || tag.includes('m,m') || tag.includes('m,f') || tag.includes('f,m')) return -1; // 爷爷
-        if (tag.includes('-f') || tag.includes('-m')) return 0; // 父母
-        if (tag.includes('-sib') || tag.includes('-x') || tag.includes('self')) return 1; // 同辈
-        if (tag.includes('-s,s')) return 3; // 孙辈/曾孙辈
-        if (tag.includes('-s') || tag.includes('child')) return 2; // 晚辈
-        return 99;
+    // 内部帮助函数：动态提取代际 (支持无限层级)
+    const getGenLevel = (tag: string, member: any) => {
+        if (member.generation_num !== undefined && member.generation_num !== null) {
+            // 修正：后端 generation_num 越大代表辈分越低（子孙），越小代表辈分越高（祖先）
+            // 我们希望 Y 轴方向一致：祖先 (小) -> 后代 (大)
+            return Number(member.generation_num); 
+        }
+        if (!tag || tag === 'unknown') return 30; // 放到中间默认层级
+
+        const parts = tag.split('-');
+        if (parts.length < 2) return 0;
+        const path = parts[1];
+        
+        if (path === 'self' || path.startsWith('sib') || path.startsWith('x')) return 0; // 同辈
+        
+        const segments = path.split(',').filter(Boolean);
+        const depth = segments.length;
+        
+        if (path.startsWith('f') || path.startsWith('m')) {
+            return -depth; // 祖辈，越老越往上 (负数)
+        }
+        if (path.startsWith('s') || path.startsWith('child')) {
+            return depth; // 晚辈，越年轻越往下 (正数)
+        }
+        return 0;
     };
 
     // 内部帮助函数：提取数字化的房分权重排序
     const getRankIndex = (tag: string) => {
-        const match = tag.match(/-o(二十|十一|十二|十三|十四|十五|十六|十七|十八|十九|一|二|三|四|五|六|七|八|九|十|大|小|幺|老)$/);
-        if (!match) return 0;
-        const rankMap: Record<string, number> = {
-            '大': 1, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
-            '六': 6, '七': 7, '八': 8, '九': 9, '十': 10,
-            '十一': 11, '十二': 12, '十三': 13, '十四': 14, '十五': 15,
-            '十六': 16, '十七': 17, '十八': 18, '十九': 19, '二十': 20,
-            '小': 98, '幺': 98, '老': 99
-        };
-        return rankMap[match[1]] || 1;
+        const match = tag.match(/-o([\d\w一二三四五六七八九十]+)$/);
+        if (!match) return 5; // 默认中间位置
+        return normalizeRank(match[1]) || 5;
     };
 
     /**
@@ -365,7 +529,7 @@ export function generateSmartLayout(rawMembers: any[]) {
 
         return {
             ...m,
-            _gen: getGenLevel(tag),
+            _gen: getGenLevel(tag, m),
             _side: tag.startsWith('[F]') ? 'paternal' : (tag.startsWith('[M]') ? 'maternal' : fallbackSide),
             _rank: getRankIndex(tag),
             _rawTag: tag
@@ -405,9 +569,9 @@ export function generateSmartLayout(rawMembers: any[]) {
             const prev = group[i - 1];
             const curr = group[i];
             let gap = MIN_NODE_GAP;
-            if (prev.fatherId && curr.fatherId && prev.fatherId === curr.fatherId) gap = 85;
-            else if (prev.ancestralHall && curr.ancestralHall && prev.ancestralHall === curr.ancestralHall) gap = 140;
-            else gap = 200;
+            if (prev.father_id && curr.father_id && prev.father_id === curr.father_id) gap = MIN_NODE_GAP * 0.8;
+            else if (prev.ancestralHall && curr.ancestralHall && prev.ancestralHall === curr.ancestralHall) gap = MIN_NODE_GAP;
+            else gap = MIN_NODE_GAP * 1.5;
             currentXOffset += gap;
             gaps.push(currentXOffset);
         }
@@ -416,19 +580,18 @@ export function generateSmartLayout(rawMembers: any[]) {
 
         group.forEach((m, index) => {
             let x = CENTER_X;
-            let y = START_Y + (gen + 1) * LEVEL_HEIGHT;
-            const extraRepulsion = m._rawTag.includes('!S') ? 160 : 0;
-
+            let y = START_Y + (gen + 3) * LEVEL_HEIGHT; // Offset to start lower so top generations don't hit the top
+            
             if (gen === 99) {
                 x = CENTER_X + (Math.random() * 800 - 400);
-                y = START_Y + 4 * LEVEL_HEIGHT + Math.random() * 100;
+                y = START_Y + 10 * LEVEL_HEIGHT; 
             } else {
                 if (isPaternal) {
-                    const centerX = CENTER_X - SIDE_OFFSET;
-                    x = centerX - (totalWidth / 2) + gaps[index] - extraRepulsion;
+                    const centerX = CENTER_X - (SIDE_OFFSET + totalWidth / 2);
+                    x = centerX + gaps[index];
                 } else if (isMaternal) {
                     const centerX = CENTER_X + SIDE_OFFSET;
-                    x = centerX - (totalWidth / 2) + gaps[index] + extraRepulsion;
+                    x = centerX + gaps[index];
                 } else {
                     x = CENTER_X - (totalWidth / 2) + gaps[index];
                 }

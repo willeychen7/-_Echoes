@@ -8,7 +8,7 @@ import confetti from "canvas-confetti";
 import { FamilyEvent, Message, MessageType } from "./types";
 import { cn, getRelativeTime } from "./lib/utils";
 import { useAvatarCache, resolveAvatar, updateAvatarCache } from "./lib/useAvatarCache";
-import { isDemoMode } from "./demo-data";
+import { isDemoMode, DEMO_EVENTS } from "./demo-data";
 import { getSafeAvatar } from "./constants";
 
 const PUNCT_END = /[。！？….,!?]$/;
@@ -65,59 +65,68 @@ export const BlessingPage: React.FC = () => {
   const timerRef = React.useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (eventId) {
-      const familyId = currentUser?.familyId || "demo";
-      fetch(`/api/events?familyId=${familyId}`).then(res => res.json()).then(data => {
-        if (Array.isArray(data)) {
-          const found = data.find((e: any) => e.id === Number(eventId));
-          setEvent(found);
-        }
-      }).catch(console.error);
-      // NOTE: 同时拉取家庭成员最新头像，建立名字->URL映射
-      fetch(`/api/family-members?familyId=${familyId}`).then(r => r.json()).then(members => {
-        if (Array.isArray(members)) {
-          const map: Record<string, string> = {};
-          members.forEach((m: any) => {
-            if (m.name && (m.avatar_url || m.avatarUrl)) {
-              map[m.name] = m.avatar_url || m.avatarUrl;
-            }
-            if (m.id && (m.avatar_url || m.avatarUrl)) {
-              updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
-            }
-          });
-          setMemberAvatarMap(map);
-        }
-      }).catch(console.error);
-      fetch(`/api/messages?eventId=${eventId}`).then(res => res.json()).then(data => {
-        if (Array.isArray(data)) {
-          const userKey = currentUser ? String(currentUser.memberId || currentUser.id || currentUser.name) : "匿名";
-          const formatted = data.filter((m: any) => m.eventId === Number(eventId)).map((m: any) => {
-            if (m.authorId && m.authorAvatar) {
-              updateAvatarCache(m.authorId, m.authorAvatar);
-            }
-            return {
-              ...m,
-              isLiked: m.likedBy?.includes(userKey) || false
-            };
-          }).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          setMessages(formatted);
-          // NOTE: 如果有点赞跳转的高亮 ID，等 DOM 渲染后滚动到该留言并高亮 3 秒
-          const targetId = searchParams.get("highlightMsg");
-          if (targetId) {
-            setTimeout(() => {
-              const el = document.getElementById(`msg-${targetId}`);
-              if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "center" });
-                setHighlightedMsgId(Number(targetId));
-                setTimeout(() => setHighlightedMsgId(null), 3500);
-              }
-            }, 600);
-          }
-        } else {
-          setMessages([]);
-        }
-      }).catch(() => setMessages([]));
+    if (!eventId) return;
+    const savedUser = localStorage.getItem("currentUser");
+    const currentUserParsed = savedUser ? JSON.parse(savedUser) : null;
+    const familyId = currentUserParsed?.familyId || "demo";
+    const isDemo = isDemoMode(currentUserParsed);
+
+    if (isDemo) {
+      // Demo 模式：直接从本地数据中查找事件，不走 API
+      const customEvents = JSON.parse(localStorage.getItem("demoCustomEvents") || "[]");
+      const allEvents = [...DEMO_EVENTS, ...customEvents];
+      const found = allEvents.find((e: any) => String(e.id) === String(eventId));
+      setEvent(found || null);
+
+      // Demo 模式下留言使用本地模拟数据
+      const customMessages = JSON.parse(localStorage.getItem("demoCustomMessages") || "[]");
+      const eventMessages = customMessages.filter((m: any) => String(m.eventId) === String(eventId));
+      setMessages(eventMessages);
+      return;
     }
+
+    // 非 Demo 模式：走 API
+    fetch(`/api/events?familyId=${familyId}`).then(res => res.json()).then(data => {
+      if (Array.isArray(data)) {
+        const found = data.find((e: any) => e.id === Number(eventId));
+        setEvent(found);
+      }
+    }).catch(console.error);
+
+    fetch(`/api/family-members?familyId=${familyId}`).then(r => r.json()).then(members => {
+      if (Array.isArray(members)) {
+        const map: Record<string, string> = {};
+        members.forEach((m: any) => {
+          if (m.name && (m.avatar_url || m.avatarUrl)) map[m.name] = m.avatar_url || m.avatarUrl;
+          if (m.id && (m.avatar_url || m.avatarUrl)) updateAvatarCache(m.id, m.avatar_url || m.avatarUrl);
+        });
+        setMemberAvatarMap(map);
+      }
+    }).catch(console.error);
+
+    fetch(`/api/messages?eventId=${eventId}`).then(res => res.json()).then(data => {
+      if (Array.isArray(data)) {
+        const userKey = currentUser ? String(currentUser.memberId || currentUser.id || currentUser.name) : "匿名";
+        const formatted = data.filter((m: any) => m.eventId === Number(eventId)).map((m: any) => {
+          if (m.authorId && m.authorAvatar) updateAvatarCache(m.authorId, m.authorAvatar);
+          return { ...m, isLiked: m.likedBy?.includes(userKey) || false };
+        }).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setMessages(formatted);
+        const targetId = searchParams.get("highlightMsg");
+        if (targetId) {
+          setTimeout(() => {
+            const el = document.getElementById(`msg-${targetId}`);
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+              setHighlightedMsgId(Number(targetId));
+              setTimeout(() => setHighlightedMsgId(null), 3500);
+            }
+          }, 600);
+        }
+      } else {
+        setMessages([]);
+      }
+    }).catch(() => setMessages([]));
   }, [eventId, currentUser]);
 
   const toggleRecording = () => {

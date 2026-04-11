@@ -2,24 +2,25 @@ import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "./components/Button";
+import { FormInput } from "./components/FormInput";
 import { ArrowLeft, Eye, EyeOff, ImagePlus, Plus, ChevronDown, Sparkles, Edit2, X, Camera, Check } from "lucide-react";
 import { Card } from "./components/Card";
 import { cn } from "./lib/utils";
-import { DEFAULT_AVATAR, SYSTEM_AVATARS } from "./constants";
+import { DEFAULT_AVATAR_HUMAN, DEFAULT_AVATAR_PET, SYSTEM_AVATARS } from "./constants";
 import { ImageCropper } from "./components/ImageCropper";
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isAvatarUploaded, setIsAvatarUploaded] = useState(false);
   const [showDefaultAvatars, setShowDefaultAvatars] = useState(false);
-  const [avatar, setAvatar] = useState(DEFAULT_AVATAR);
+  const [avatar, setAvatar] = useState(DEFAULT_AVATAR_HUMAN);
   const [gender, setGender] = useState<"male" | "female" | null>(null);
   const [birthDate, setBirthDate] = useState("");
   const [showModalAvatarPicker, setShowModalAvatarPicker] = useState(false);
@@ -55,7 +56,7 @@ export const RegisterPage: React.FC = () => {
     }
   }, []);
 
-  const canSubmit = name && phone && password && confirmPassword && verificationCode && (birthDate || isBirthDateUnknown);
+  const canSubmit = name && email && password && confirmPassword && verificationCode && gender && (birthDate || isBirthDateUnknown);
 
   const topRelationships = [
     { label: "儿子", value: "son" },
@@ -84,7 +85,7 @@ export const RegisterPage: React.FC = () => {
   const allRelationships = [...topRelationships, ...otherRelationships];
 
   const handleSendCode = async () => {
-    if (!phone) {
+    if (!email) {
       alert("请先输入手机号或邮箱");
       return;
     }
@@ -92,7 +93,7 @@ export const RegisterPage: React.FC = () => {
       const res = await fetch("/api/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: phone })
+        body: JSON.stringify({ email: email })
       });
       if (res.ok) {
         setIsCodeSent(true);
@@ -140,7 +141,7 @@ export const RegisterPage: React.FC = () => {
       const verifyRes = await fetch("/api/verify-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: phone, code: verificationCode })
+        body: JSON.stringify({ email: email, code: verificationCode })
       });
 
       if (!verifyRes.ok) {
@@ -212,7 +213,7 @@ export const RegisterPage: React.FC = () => {
               if (finalRole.includes("叔") || finalRole.includes("伯") || finalRole.includes("舅") || finalRole.includes("姨")) return "uncle";
               return "other";
             })(),
-            phone: phone.trim(),
+            email: email.trim(),
             password: password.trim(),
             gender: gender,
             birthDate: finalBirthDate,
@@ -236,7 +237,7 @@ export const RegisterPage: React.FC = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: finalName,
-            phone,
+            email,
             password,
             avatar: finalAvatar,
             gender,
@@ -265,7 +266,7 @@ export const RegisterPage: React.FC = () => {
     const userData = {
       id: currentUserId,
       name: finalName,
-      phone,
+      email,
       avatar: finalAvatar,
       relationship: overrideRole || selectedRelationship || (currentFamilyId ? "创建者" : ""),
       inviterName: (invitationCode || overrideRole) ? inviterName : null,
@@ -280,7 +281,7 @@ export const RegisterPage: React.FC = () => {
   };
 
   const handleAvatarClick = () => {
-    setShowDefaultAvatars(!showDefaultAvatars);
+    setShowModalAvatarPicker(true);
   };
 
   const handleUploadClick = (e: React.MouseEvent) => {
@@ -294,7 +295,6 @@ export const RegisterPage: React.FC = () => {
       const url = URL.createObjectURL(file);
       setTempImage(url);
       setShowCropper(true);
-      setShowDefaultAvatars(false);
       setShowModalAvatarPicker(false);
     }
   };
@@ -302,7 +302,7 @@ export const RegisterPage: React.FC = () => {
   const selectDefaultAvatar = (url: string) => {
     setAvatar(url);
     setIsAvatarUploaded(true);
-    setShowDefaultAvatars(false);
+    setShowModalAvatarPicker(false);
   };
 
   return (
@@ -334,31 +334,7 @@ export const RegisterPage: React.FC = () => {
             <Camera size={20} className="text-[#eab308]" />
           </button>
 
-          {showDefaultAvatars && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="absolute top-full mt-4 left-1/2 -translate-x-1/2 bg-white p-4 rounded-3xl shadow-2xl border border-slate-100 z-50 min-w-[280px]"
-            >
-              <div className="grid grid-cols-4 gap-3">
-                {SYSTEM_AVATARS.map((url, i) => (
-                  <button
-                    key={i}
-                    onClick={() => selectDefaultAvatar(url)}
-                    className="w-12 h-12 rounded-full border-2 border-slate-100 hover:border-[#eab308] overflow-hidden transition-all"
-                  >
-                    <img src={url} alt={`Default ${i}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  </button>
-                ))}
-                <button
-                  onClick={handleUploadClick}
-                  className="w-12 h-12 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-[#eab308] hover:border-[#eab308] transition-all"
-                >
-                  <Plus size={24} />
-                </button>
-              </div>
-            </motion.div>
-          )}
+
         </div>
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">创建账号</h1>
@@ -368,104 +344,116 @@ export const RegisterPage: React.FC = () => {
 
       <div className="flex flex-col gap-8 px-6 max-w-md mx-auto w-full">
         <div className="space-y-5">
-          <label className="flex flex-col gap-3">
-            <span className="text-[#1e293b] text-lg font-bold px-1">我的名字</span>
-            <input
-              className="w-full rounded-[2rem] border-none bg-white shadow-sm h-16 px-6 text-lg text-black placeholder:text-slate-400 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
-              placeholder="请输入您的姓名"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </label>
+          <FormInput
+            label="我的名字"
+            required
+            placeholder="请输入您的姓名"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
 
-          <label className="flex flex-col gap-3">
-            <span className="text-[#1e293b] text-lg font-bold px-1">手机号 / 邮箱</span>
-            <input
-              className="w-full rounded-[2rem] border-none bg-white shadow-sm h-16 px-6 text-lg text-black placeholder:text-slate-400 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
-              placeholder="请输入您的手机号或邮箱"
-              type="text"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </label>
+          <FormInput
+            label="邮箱"
+            required
+            placeholder="请输入邮箱"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
 
-          <label className="flex flex-col gap-3">
-            <span className="text-[#1e293b] text-lg font-bold px-1">验证码</span>
-            <div className="relative flex items-center">
-              <input
-                className={cn(
-                  "w-full rounded-[2rem] border-none bg-white shadow-sm h-16 px-6 text-lg text-black placeholder:text-slate-400 focus:ring-2 focus:ring-[#eab308]/20 transition-all",
-                  verificationError && "ring-2 ring-red-400"
-                )}
-                placeholder="请输入验证码"
-                type="text"
-                value={verificationCode}
-                onChange={(e) => {
-                  setVerificationCode(e.target.value);
-                  setVerificationError("");
-                }}
-              />
+          <FormInput
+            label="验证码"
+            required
+            placeholder="请输入验证码"
+            value={verificationCode}
+            onChange={(e) => {
+              setVerificationCode(e.target.value);
+              setVerificationError("");
+            }}
+            error={verificationError}
+            suffix={
               <button
+                type="button"
                 onClick={handleSendCode}
-                disabled={countdown > 0}
-                className={`absolute right-3 px-4 py-2 rounded-full font-bold text-sm transition-all ${countdown > 0
-                  ? "bg-slate-100 text-slate-400"
-                  : "bg-[#eab308]/10 text-[#eab308] hover:bg-[#eab308]/20"
-                  }`}
+                disabled={countdown > 0 || !email}
+                className={cn(
+                  "px-4 py-2 rounded-full text-xs font-bold transition-all",
+                  (countdown > 0 || !email)
+                    ? "bg-slate-100 text-slate-400"
+                    : "bg-[#eab308]/10 text-[#eab308] hover:bg-[#eab308]/20"
+                )}
               >
                 {countdown > 0 ? `${countdown}s` : "获取验证码"}
               </button>
-            </div>
-            {verificationError && <p className="text-red-500 text-sm font-bold px-2">{verificationError}</p>}
-          </label>
+            }
+          />
 
-          <label className="flex flex-col gap-3">
-            <span className="text-[#1e293b] text-lg font-bold px-1">设置密码</span>
-            <div className="relative flex items-center">
-              <input
-                className="w-full rounded-[2rem] border-none bg-white shadow-sm h-16 px-6 text-lg text-black placeholder:text-slate-400 focus:ring-2 focus:ring-[#eab308]/20 transition-all"
-                placeholder="请输入登录密码"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setPasswordError("");
-                }}
-              />
-              <button onClick={() => setShowPassword(!showPassword)} className="absolute right-6 text-slate-400">
-                {showPassword ? <EyeOff size={24} /> : <Eye size={24} />}
+          <FormInput
+            label="设置密码"
+            required
+            type={showPassword ? "text" : "password"}
+            placeholder="请输入登录密码"
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setPasswordError("");
+            }}
+            suffix={
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="p-2 text-slate-400 hover:text-slate-600 transition-colors"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
-            </div>
-          </label>
+            }
+          />
+
+          <FormInput
+            label="确认密码"
+            required
+            type={showConfirmPassword ? "text" : "password"}
+            placeholder="请再次输入密码"
+            error={passwordError}
+            className={cn(
+              confirmPassword && password !== confirmPassword && "ring-rose-200 focus:ring-rose-500"
+            )}
+            value={confirmPassword}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value);
+              setPasswordError("");
+            }}
+            suffix={
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="p-2 text-slate-400 hover:text-slate-600 transition-colors"
+                tabIndex={-1}
+              >
+                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            }
+          />
 
           <label className="flex flex-col gap-3">
-            <span className="text-[#1e293b] text-lg font-bold px-1">确认密码</span>
-            <div className="relative flex items-center">
-              <input
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[#1e293b] text-lg font-bold flex items-center gap-1">
+                您的生日 <span className="text-rose-500 text-base">*</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBirthDateUnknown(!isBirthDateUnknown);
+                  if (!isBirthDateUnknown) setBirthDate("");
+                }}
                 className={cn(
-                  "w-full rounded-[2rem] border-none bg-white shadow-sm h-16 px-6 text-lg text-black placeholder:text-slate-400 focus:ring-2 focus:ring-[#eab308]/20 transition-all",
-                  passwordError && "ring-2 ring-red-400"
+                  "text-xs font-black px-4 py-1.5 rounded-full transition-all",
+                  isBirthDateUnknown ? "bg-[#eab308] text-white" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
                 )}
-                placeholder="请再次输入密码"
-                type={showConfirmPassword ? "text" : "password"}
-                value={confirmPassword}
-                onChange={(e) => {
-                  setConfirmPassword(e.target.value);
-                  setPasswordError("");
-                }}
-              />
-              <button onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-6 text-slate-400">
-                {showConfirmPassword ? <EyeOff size={24} /> : <Eye size={24} />}
+              >
+                {isBirthDateUnknown ? "设为已知" : "不知道"}
               </button>
             </div>
-            {passwordError && <p className="text-red-500 text-sm font-bold px-2">{passwordError}</p>}
-          </label>
-
-          <label className="flex flex-col gap-3">
-            <span className="text-[#1e293b] text-lg font-bold px-1 flex items-center gap-1">
-              您的生日 <span className="text-rose-500 text-base">*</span>
-            </span>
             <div className="relative">
               <input
                 className={cn(
@@ -485,26 +473,13 @@ export const RegisterPage: React.FC = () => {
             </div>
             <div className="flex items-center justify-between px-2">
               <p className="text-[10px] text-slate-400 italic">提示：生日将用于在家族大事记中为您举行庆生。</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsBirthDateUnknown(!isBirthDateUnknown);
-                  if (!isBirthDateUnknown) setBirthDate("");
-                }}
-                className={cn(
-                  "text-xs font-bold px-3 py-1.5 rounded-full transition-all",
-                  isBirthDateUnknown
-                    ? "bg-[#eab308] text-black"
-                    : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                )}
-              >
-                {isBirthDateUnknown ? "撤销“不知道”" : "不知道生日"}
-              </button>
             </div>
           </label>
 
           <label className="flex flex-col gap-3">
-            <span className="text-[#1e293b] text-lg font-bold px-1">您的性别 (选填)</span>
+            <span className="text-[#1e293b] text-lg font-bold px-1 flex items-center gap-1">
+              您的性别 <span className="text-rose-500 text-base">*</span>
+            </span>
             <div className="flex gap-4">
               <button
                 type="button"
@@ -712,6 +687,56 @@ export const RegisterPage: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {/* 头像选择模态框 */}
+      <AnimatePresence>
+        {showModalAvatarPicker && (
+          <div key="avatar-picker-modal-overlay" className="fixed inset-0 bg-black/60 z-[110] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px]"
+            >
+              <h3 className="text-2xl font-bold mb-6 text-center">选择您的头像</h3>
+
+              <div className="grid grid-cols-3 gap-4 mb-8">
+                {SYSTEM_AVATARS.map((url, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setAvatar(url);
+                      setIsAvatarUploaded(false);
+                      setShowModalAvatarPicker(false);
+                    }}
+                    className={cn(
+                      "size-20 rounded-full border-4 overflow-hidden transition-all",
+                      avatar === url ? "border-[#eab308] scale-110 shadow-lg shadow-[#eab308]/20" : "border-transparent opacity-60 hover:opacity-100"
+                    )}
+                  >
+                    <img src={url} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="size-20 rounded-full bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-1 text-slate-400 hover:bg-slate-100 transition-colors"
+                >
+                  <Plus size={24} />
+                  <span className="text-[10px] font-bold">上传</span>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowModalAvatarPicker(false)}
+                className="w-full py-4 text-slate-400 font-bold"
+              >
+                取消
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {showCropper && tempImage && (
         <ImageCropper

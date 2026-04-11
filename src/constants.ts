@@ -1,16 +1,10 @@
-export const DEFAULT_AVATAR = "https://api.dicebear.com/7.x/lorelei/png?seed=Felix";
+export const DEFAULT_AVATAR_HUMAN = "/default_avatar.png";
+export const DEFAULT_AVATAR_PET = "/default_avatar.png";
+
+export const DEFAULT_AVATAR = DEFAULT_AVATAR_HUMAN;
 
 export const SYSTEM_AVATARS = [
-    DEFAULT_AVATAR, // 1. 活力青年
-    "https://api.dicebear.com/7.x/lorelei/png?seed=Aneka", // 2. 温婉女性
-    "https://api.dicebear.com/7.x/lorelei/png?seed=Bob",   // 3. 沉稳中年
-    "https://api.dicebear.com/7.x/lorelei/png?seed=Molly", // 4. 亲和女性
-    "https://api.dicebear.com/7.x/lorelei/png?seed=John",  // 5. 睿智长辈
-    "https://api.dicebear.com/7.x/lorelei/png?seed=Sarah", // 6. 慈祥长辈
-    "https://api.dicebear.com/7.x/lorelei/png?seed=Buster",// 7. 活泼少年
-    "https://api.dicebear.com/7.x/lorelei/png?seed=Gracie",// 8. 乖巧女孩
-    "https://api.dicebear.com/7.x/lorelei/png?seed=Jasper",// 9. 阳光男性
-    "https://api.dicebear.com/7.x/lorelei/png?seed=Lucy",  // 10. 阳光女性
+    DEFAULT_AVATAR_HUMAN,
 ];
 
 /**
@@ -19,8 +13,13 @@ export const SYSTEM_AVATARS = [
  * 2. 如果没有，返回标准默认头像。
  */
 export const getSafeAvatar = (url?: string) => {
-    if (url && url.length > 20) return url;
-    return DEFAULT_AVATAR;
+    if (!url || typeof url !== 'string' || url.trim().length === 0) return DEFAULT_AVATAR;
+    let finalUrl = url.trim();
+    // 强制增加前导斜杠，防止二级路由路径偏移导致的 404/连接错误
+    if (!finalUrl.startsWith('http') && !finalUrl.startsWith('data:') && !finalUrl.startsWith('/')) {
+        finalUrl = '/' + finalUrl;
+    }
+    return finalUrl;
 };
 
 

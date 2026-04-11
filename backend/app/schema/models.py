@@ -28,6 +28,7 @@ class FamilyMemberBase(BaseModel):
     avatar_url: Optional[str] = None
     bio: Optional[str] = None
     birth_date: Optional[date] = None
+    birthday: Optional[str] = None
     is_registered: bool = False
     familyId: Optional[int] = None
     createdByMemberId: Optional[int] = None
@@ -76,3 +77,20 @@ class MessageResponse(MessageBase):
     created_at: datetime
     class Config:
         from_attributes = True
+
+class AlmanacResponse(BaseModel):
+    solar_date: str
+    solar_year: int
+    solar_month: int
+    solar_day: int
+    lunar_month_name: str
+    lunar_day_name: str
+    lunar_year_gz: str
+    lunar_month_gz: str
+    lunar_day_gz: str
+    is_lucky_day: bool
+    yi: List[str]
+    ji: List[str]
+    week_day: str
+    family_insight: str
+    family_events: List[str]

@@ -2,6 +2,7 @@ import React from "react";
 import { motion } from "motion/react";
 import { Button } from "./components/Button";
 import { useNavigate } from "react-router-dom";
+import { DEMO_PERSONAS } from "./demo-data";
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -99,10 +100,13 @@ export const LandingPage: React.FC = () => {
           <div className="text-center">
             <button
               onClick={() => {
-                localStorage.removeItem("currentUser");
+                // 🚀 核心优化：Demo 模式默认以“陈小明”身份进入，确保头像和档案身份统一
+                const defaultPersona = DEMO_PERSONAS[0];
+                localStorage.setItem("currentUser", JSON.stringify(defaultPersona));
+                
                 localStorage.removeItem("demoCustomMembers");
                 localStorage.removeItem("demoCustomEvents");
-                navigate("/square");
+                navigate("/square?demo=true");
               }}
               className="text-[#a1a1a1] text-sm font-black hover:text-[#4a4a4a] transition-colors uppercase tracking-widest"
             >

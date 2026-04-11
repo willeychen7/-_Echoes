@@ -497,6 +497,7 @@ export const InlineBlessingPanel: React.FC<{
         const optimisticMsg: Message = {
             id: tempId,
             familyMemberId: event.memberId,
+            authorId: currentUser?.memberId || null,
             authorName: currentUser?.name || "家人",
             authorRole: currentUser?.relationship || "家人",
             authorAvatar: currentUser?.avatar,
@@ -540,23 +541,31 @@ export const InlineBlessingPanel: React.FC<{
 
                 const payload = {
                     ...optimisticMsg,
+                    familyId: familyId,
                     mediaUrl: inputMode === "photo" ? currentImageUrl : inputMode === "voice" ? currentAudioUrl : undefined,
                 };
                 delete (payload as any).id;
                 delete (payload as any).createdAt;
 
-                const res = await fetch("/api/messages", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
+                if (!isDemoMode(currentUser)) {
+                    const res = await fetch("/api/messages", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
 
-                if (res.ok) {
-                    setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: data.id, mediaUrl: payload.mediaUrl } : m));
-                    window.dispatchEvent(new CustomEvent('blessing-sent', { detail: { eventId: event.id } }));
+                    if (res.ok) {
+                        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: data.id, mediaUrl: payload.mediaUrl } : m));
+                        window.dispatchEvent(new CustomEvent('blessing-sent', { detail: { eventId: event.id } }));
+                    } else {
+                        throw new Error(data.error || "Failed to save message");
+                    }
                 } else {
-                    throw new Error(data.error || "Failed to save message");
+                    // Demo 模式下模拟短暂延迟后更新状态
+                    setTimeout(() => {
+                        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, sending: false } as any : m));
+                    }, 500);
                 }
             } catch (err) {
                 console.error("[OPTIMISTIC] Background send failed:", err);
@@ -592,7 +601,9 @@ export const InlineBlessingPanel: React.FC<{
 
     const handleDeleteMessage = (msgId: number) => {
         setMessages(prev => prev.filter(m => m.id !== msgId));
-        fetch(`/api/messages/${msgId}`, { method: "DELETE" }).catch(console.error);
+        if (!isDemoMode(currentUser)) {
+            fetch(`/api/messages/${msgId}`, { method: "DELETE" }).catch(console.error);
+        }
     };
 
     const generateAISummary = async () => {
@@ -602,6 +613,17 @@ export const InlineBlessingPanel: React.FC<{
         }
         setIsGeneratingAI(true);
         try {
+            if (isDemoMode(currentUser)) {
+                // Demo 模式下模拟一个 AI 总结
+                setTimeout(() => {
+                    const names = [...new Set(messages.map(m => m.authorName))];
+                    setAiSummary(`【AI 温情总结】在这个特别的日子里，${names.join("、")}等家人送上了诚挚的祝福。大家回忆了往昔的点滴，表达了对 ${event.title} 的美好憧憬。家人的爱是最好的礼物！`);
+                    setShowWall(true);
+                    setIsGeneratingAI(false);
+                }, 1500);
+                return;
+            }
+
             const res = await fetch("/api/ai-generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

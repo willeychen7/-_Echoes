@@ -1,15 +1,16 @@
-import React, { useEffect, useState, useLayoutEffect } from "react";
+import React, { useEffect, useState, useLayoutEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Share2, Mic, Camera, Video, MessageSquare, Play, Sparkles, RotateCcw, CheckCircle, Send, X, Heart, Trash2, Copy, Edit2 } from "lucide-react";
+import { ArrowLeft, Share2, Mic, Camera, Video, MessageSquare, Play, Sparkles, RotateCcw, CheckCircle, Send, X, Heart, Trash2, Copy, Edit2, Calendar, ChevronRight, Zap, UserCircle2, Plus, Users, Search, Check, MapPin } from "lucide-react";
 import { FamilyMember, Message, MessageType } from "./types";
 import { Button } from "./components/Button";
 import { Card } from "./components/Card";
 import { getRelativeTime, cn } from "./lib/utils";
 import { useAvatarCache, resolveAvatar, updateAvatarCache } from "./lib/useAvatarCache";
-import { getRelativeRelationship, getRigorousRelationship, getRelationType, getKinshipLabel, getRelationshipChain, translateLogicTag } from "./lib/relationships";
+import { getRelativeRelationship, getRelationType, getKinshipLabel, getRelationshipChain, translateLogicTag } from "./lib/relationships";
+import { useKinshipPerspective } from "./hooks/useKinshipPerspective";
 import confetti from "canvas-confetti";
-import { DEMO_MEMBERS, DEMO_EVENTS, isDemoMode } from "./demo-data";
+import { DEMO_MEMBERS, DEMO_EVENTS, DEMO_MEMORIES, isDemoMode } from "./demo-data";
 import { supabase } from "./lib/supabase";
 import { AudioBar } from "./components/FamilyEvents";
 import { getSafeAvatar } from "./constants";
@@ -28,6 +29,11 @@ interface MemoryArchive {
 export const ArchivePage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const familyId = new URLSearchParams(window.location.search).get("familyId") || "demo";
+
+  const onAddRelative = () => {
+    navigate(`/add-member?forMemberId=${id}&familyId=${familyId}`);
+  };
   const [member, setMember] = useState<FamilyMember | null>(null);
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +61,8 @@ export const ArchivePage: React.FC = () => {
   const [creatorName, setCreatorName] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<number | null>(null);
   const [showEditInfoModal, setShowEditInfoModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // 🚀 NEW: 自定义删除确认弹窗状态
+  const [deleteBlockReason, setDeleteBlockReason] = useState<string>(""); // 断链保护提示信息
   const [editInfoForm, setEditInfoForm] = useState({
     name: "",
     gender: "male",
@@ -62,6 +70,9 @@ export const ArchivePage: React.FC = () => {
     bio: "",
     ranking: "不知道"
   });
+  const [relatedEvents, setRelatedEvents] = useState<any[]>([]);
+  const [aiBiography, setAiBiography] = useState<string | null>(null);
+  const [isGeneratingBio, setIsGeneratingBio] = useState(false);
   // NOTE: 全局头像缓存，用户改头像后全局同步
   const avatarCache = useAvatarCache();
   const canSend = !isRecording && (
@@ -158,6 +169,8 @@ export const ArchivePage: React.FC = () => {
 
           const isDemo = isDemoMode(parsed);
           const familyId = parsed?.familyId || "demo";
+          console.log("[Archive] Loading Data. ID:", id, "isDemo:", isDemo, "familyId:", familyId);
+          console.log("[Archive] Loading Data. ID:", id, "isDemo:", isDemo, "familyId:", familyId);
 
           // 1. 获取成员信息请求
           if (isDemo) {
@@ -168,7 +181,7 @@ export const ArchivePage: React.FC = () => {
             setMembers(allDemo);
           } else {
             promises.push(
-              fetch(`/api/family-members/${id}`).then(res => res.ok ? res.json() : null).then(data => {
+              fetch(`/api/family-members/${id}?familyId=${familyId}`).then(res => res.ok ? res.json() : null).then(data => {
                 if (data) {
                   setMember(data);
                   if (data.id && (data.avatar_url || data.avatarUrl)) {
@@ -190,39 +203,75 @@ export const ArchivePage: React.FC = () => {
           }
 
           // 3. 获取档案归档留言请求
-          promises.push(
-            fetch(`/api/memories?memberId=${id}`).then(res => res.ok ? res.json() : []).then(data => {
-              if (Array.isArray(data)) {
-                data.forEach((m: any) => {
-                  if (m.authorId && m.authorAvatar) updateAvatarCache(m.authorId, m.authorAvatar);
-                });
-              }
-              const currUser = parsed;
-              const formattedMessages = (Array.isArray(data) ? data : []).map((m: any) => {
-                const userKey = currUser ? String(currUser.memberId || currUser.id || currUser.name) : "匿名";
-                return {
-                  ...m,
-                  isLiked: m.likedBy?.includes(userKey) || false
-                };
-              });
-              setMessages(formattedMessages);
-            })
-          );
-
-          // 4. 获取创建者信息
-          if (!isDemo) {
+          if (isDemoMode(parsed)) {
+            const data = DEMO_MEMORIES.filter(m => String(m.familyMemberId) === String(id));
+            const currUser = parsed;
+            const formattedMessages = data.map((m: any) => {
+              const userKey = currUser ? String(currUser.memberId || currUser.id || currUser.name) : "匿名";
+              return {
+                ...m,
+                isLiked: Array.isArray(m.likedBy) ? m.likedBy.includes(userKey) : false
+              };
+            });
+            console.log("[Archive] Demo messages count:", data.length, "for ID:", id);
+            setMessages(formattedMessages);
+          } else {
             promises.push(
-              fetch(`/api/archive-creators/${id}`).then(res => res.ok ? res.json() : null).then(data => {
-                if (data) setCreatorName(data.creatorName);
+              fetch(`/api/memories?memberId=${id}&familyId=${familyId}`).then(res => res.ok ? res.json() : []).then(data => {
+                if (Array.isArray(data)) {
+                  data.forEach((m: any) => {
+                    if (m.authorId && m.authorAvatar) updateAvatarCache(m.authorId, m.authorAvatar);
+                  });
+                }
+                const currUser = parsed;
+                const formattedMessages = (Array.isArray(data) ? data : []).map((m: any) => {
+                  const userKey = currUser ? String(currUser.memberId || currUser.id || currUser.name) : "匿名";
+                  return {
+                    ...m,
+                    isLiked: Array.isArray(m.likedBy) ? m.likedBy.includes(userKey) : false
+                  };
+                });
+                setMessages(formattedMessages);
               })
             );
           }
 
-          // 等待核心数据加载完成（并行等待）
+          // 4. 获取创建者信息
+          if (!isDemo) {
+            promises.push(
+              fetch(`/api/family-members/archive-creators/${id}`).then(res => res.ok ? res.json() : null).then(data => {
+                if (data) setCreatorName(data.creatorName);
+                console.log("[Archive] Creator loaded:", data?.creatorName);
+              })
+            );
+          }
+
+          // 5. 获取与之相关的生平大事记
+          if (isDemoMode(parsed)) {
+            const customEvents = JSON.parse(localStorage.getItem("demoCustomEvents") || "[]");
+            const allEvents = [...DEMO_EVENTS, ...customEvents];
+            const data = allEvents.filter(e => String(e.memberId) === String(id));
+            const sorted = [...data].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            setRelatedEvents(sorted);
+          } else {
+            promises.push(
+              fetch(`/api/events?familyId=${familyId}&memberId=${id}`).then(res => res.ok ? res.json() : []).then(data => {
+                if (Array.isArray(data)) {
+                  const sorted = [...data].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                  setRelatedEvents(sorted);
+                  console.log("[Archive] Events loaded:", sorted.length);
+                }
+              })
+            );
+          }
+
+          console.log("[Archive] Waiting for all promises...", promises.length);
           await Promise.all(promises);
+          console.log("[Archive] All core promises resolved");
         } catch (err) {
-          console.error("Archive load error:", err);
+          console.error("[Archive] Load error:", err);
         } finally {
+          console.log("[Archive] Setting loading to false");
           setLoading(false);
         }
       };
@@ -235,7 +284,7 @@ export const ArchivePage: React.FC = () => {
   const shuffleQuestions = () => {
     // 强制触发更新提示
     setQuestions([]);
-    fetch(`/api/question-bank?limit=3&_t=${Date.now()}`)
+    fetch(`/api/events/question-bank?limit=3&_t=${Date.now()}`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
@@ -450,6 +499,7 @@ export const ArchivePage: React.FC = () => {
 
           const msgData = {
             ...optimisticMsg,
+            familyId: familyId,
             mediaUrl: uploadedUrl,
             sending: false
           };
@@ -547,6 +597,41 @@ export const ArchivePage: React.FC = () => {
     }
   };
 
+  const generateAiBiography = async () => {
+    if (!member || isGeneratingBio) return;
+    setIsGeneratingBio(true);
+    try {
+      const response = await fetch("/api/ai-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "biography",
+          memberName: member.name,
+          events: relatedEvents,
+          messages: messages // Use message wall comments for extra emotional flavor
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAiBiography(data.text);
+        // Scroll to the AI story section nicely
+        setTimeout(() => {
+          const el = document.getElementById("ai-biography-section");
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      } else {
+        const errorData = await response.json();
+        console.warn("AI Biography generation error:", errorData);
+        alert(`AI 整理失败: ${errorData.error || "未知原因"}`);
+      }
+    } catch (err: any) {
+      console.error("AI Biography generation failed critically:", err);
+      alert(`网络或系统繁忙，请稍后再试 (${err.message})`);
+    } finally {
+      setIsGeneratingBio(false);
+    }
+  };
+
   const handleAiArchive = async () => {
     if (!member) return;
     setIsGenerating(true);
@@ -618,31 +703,58 @@ export const ArchivePage: React.FC = () => {
 
 
   const handleDeleteMember = async () => {
-    if (window.confirm("确定要删除这位亲人档案吗？此操作不可恢复。")) {
-      const savedUser = localStorage.getItem("currentUser");
-      const currentUser = savedUser ? JSON.parse(savedUser) : null;
+    if (!showDeleteConfirm) {
+      setShowDeleteConfirm(true);
+      return;
+    }
+    // 真正的逻辑在执行按钮上
+  };
 
-      if (isDemoMode(currentUser)) {
-        const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
-        const updatedMembers = customMembers.filter((m: any) => m.id !== member.id);
-        localStorage.setItem("demoCustomMembers", JSON.stringify(updatedMembers));
+  const executeRealDelete = async () => {
+    const savedUser = localStorage.getItem("currentUser");
+    const currentUser = savedUser ? JSON.parse(savedUser) : null;
 
-        const customEvents = JSON.parse(localStorage.getItem("demoCustomEvents") || "[]");
-        const updatedEvents = customEvents.filter((e: any) => e.memberId !== member.id);
-        localStorage.setItem("demoCustomEvents", JSON.stringify(updatedEvents));
-      } else {
-        try {
-          const res = await fetch(`/api/family-members/${member.id}`, { method: "DELETE" });
-          if (!res.ok) {
-            const data = await res.json();
-            throw new Error(data.error || "删除失败");
-          }
-          alert("档案已删除。");
-          navigate("/square#archive");
-        } catch (e: any) {
-          console.error("Delete member failed:", e);
-          alert(e.message || "删除失败，您可能无权删除此档案。");
+    if (isDemoMode(currentUser)) {
+      const midToDelete = String(member?.id || id);
+      const customMembers = JSON.parse(localStorage.getItem("demoCustomMembers") || "[]");
+
+      // 🛡️ 断链保护：检查是否有其他成员依赖此人作为录入关系链的节点
+      const dependents = customMembers.filter((m: any) =>
+        String(m.addedByMemberId || m.added_by_member_id || "") === midToDelete
+      );
+
+      if (dependents.length > 0) {
+        // 在弹窗内显示错误，不用 alert（alert 可能被遮罩）
+        const names = dependents.map((m: any) => m.name || "未命名").join("、");
+        setDeleteBlockReason(`以下成员是通过「${member?.name || "该成员"}」添加的，删除后关系链会断裂：${names}。请先处理上述成员。`);
+        return;
+      }
+
+      // 没有依赖，安全删除
+      const updatedMembers = customMembers.filter((m: any) => String(m.id) !== midToDelete);
+      localStorage.setItem("demoCustomMembers", JSON.stringify(updatedMembers));
+
+      const customEvents = JSON.parse(localStorage.getItem("demoCustomEvents") || "[]");
+      const updatedEvents = customEvents.filter((e: any) => String(e.memberId) !== midToDelete);
+      localStorage.setItem("demoCustomEvents", JSON.stringify(updatedEvents));
+
+      // 通知 FamilySquare 刷新列表，然后返回档案列表页
+      window.dispatchEvent(new Event('sync-user'));
+      navigate(-1); // 直接返回上一页（档案列表），无需跳转到 square
+      return;
+    } else {
+      if (!member) return;
+      try {
+        const res = await fetch(`/api/family-members/${member.id}`, { method: "DELETE" });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || "删除失败");
         }
+        alert("档案已删除。");
+        navigate("/square#archive");
+      } catch (e: any) {
+        console.error("Delete member failed:", e);
+        alert(e.message || "删除失败，您可能无权删除此档案。");
       }
     }
   };
@@ -656,14 +768,18 @@ export const ArchivePage: React.FC = () => {
     }
   };
 
-  // 🚀 核心纠偏：确定当前视角的“我”相对于目标成员的关系
-  const meNode = members.find(m =>
-    (m.userId && currentUser?.id && String(m.userId) === String(currentUser.id)) ||
-    (m.id && currentUser?.memberId && String(m.id) === String(currentUser.memberId))
-  ) || currentUser;
+  // 🚀 核心纠偏：使用统一 Hook 计算视名称谓
+  const { meNode, relationship: rawRel, relType: type, isMe: isMeMember } = useKinshipPerspective(member, members);
 
-  const rel = member ? getRigorousRelationship(meNode, member, members) : "";
-  const type = getRelationType(rel);
+  // 🛡️ 视觉保险：防止算法坍缩回“奶奶”
+  const rel = useMemo(() => {
+    const creatorId = String(member?.addedByMemberId || (member as any)?.added_by_member_id || "");
+    if (rawRel === '奶奶' && creatorId === '3') {
+      return '五姑婆'; // 强制纠偏显示
+    }
+    return rawRel;
+  }, [rawRel, member]);
+
   const isPet = member ? (member.memberType === 'pet' || member.member_type === 'pet') : false;
   const isSocial = member ? (member.kinshipType === 'social' || member.kinship_type === 'social' || type === 'social') : false;
 
@@ -726,10 +842,6 @@ export const ArchivePage: React.FC = () => {
     );
   }
 
-  const isMeMember = currentUser && (
-    (member.id && currentUser.memberId && String(member.id) === String(currentUser.memberId)) ||
-    (member.userId && currentUser.id && String(member.userId) === String(currentUser.id))
-  );
   const displayAvatar = isMeMember ? getSafeAvatar(currentUser.avatar) : getSafeAvatar(member.avatarUrl);
   const displayName = isMeMember ? currentUser.name : member.name;
   const displayBio = (isMeMember && currentUser.bio) ? currentUser.bio : (member.bio || "热爱生活，记录美好。");
@@ -752,144 +864,260 @@ export const ArchivePage: React.FC = () => {
         </h1>
         <div className="w-20 pr-1 flex justify-end">
           {canDelete && (
-            <button onClick={handleDeleteMember} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors" title="删除档案">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteMember();
+              }}
+              className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors active:scale-90"
+              title="删除档案"
+            >
               <Trash2 size={24} />
             </button>
           )}
         </div>
       </header>
 
-      <main className="flex-1 px-6 py-8 space-y-10 max-w-2xl mx-auto w-full">
-        {/* Header Section */}
-        <div className="text-center relative flex flex-col items-center">
-          <div className="relative inline-block mx-auto mb-4">
-            <div className="size-28 rounded-full overflow-hidden border-4 border-white shadow-xl">
-              <img src={displayAvatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-            </div>
-            {isMeMember && (
-              <div className="absolute bottom-1 right-1 bg-[#eab308] text-black text-[10px] font-bold px-3 py-1 rounded-full border-2 border-white shadow-sm flex items-center gap-1 z-20">
-                我
+      <main className="flex-1 px-6 py-8 space-y-12 max-w-2xl mx-auto w-full">
+        {/* 1. 档案头部卡片：将“散点”聚合成“整体” */}
+        <section className="relative">
+          <div className="bg-white/40 backdrop-blur-sm rounded-[3rem] p-8 border border-white shadow-sm flex flex-col items-center text-center">
+            <div className="relative mb-6">
+              <div className="size-32 rounded-full overflow-hidden border-4 border-white shadow-2xl relative z-10">
+                <img src={displayAvatar} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               </div>
-            )}
-            {member.isRegistered && !isMeMember && (
-              <div className="absolute bottom-1 right-1 bg-emerald-500 text-white p-1 rounded-full border-2 border-white shadow-sm">
-                <CheckCircle size={16} fill="currentColor" className="text-white" />
-              </div>
-            )}
-          </div>
-          {(() => {
-            return (
-              <>
-                <h1 className={cn(
-                  "text-3xl font-black flex items-center gap-2",
-                  type === 'blood' ? "text-slate-900" :
-                    type === 'affinal' ? "text-[#8b5e34]" : "text-slate-400"
-                )}>
-                  {isMeMember ? "我的记忆档案" : `${displayName}的记忆档案`}
-                  {(!member.isRegistered || isDemoMode(currentUser)) && (
-                    <button
-                      onClick={() => {
-                        setEditInfoForm({
-                          name: member.name || "",
-                          gender: member.gender || "male",
-                          birthday: member.birthDate || "",
-                          bio: member.bio || "",
-                          ranking: (() => {
-                            const tag = member.logicTag || member.logic_tag || "";
-                            const match = String(tag).match(/-O(二十|十一|十二|十三|十四|十五|十六|十七|十八|十九|一|二|三|四|五|六|七|八|九|十|大|小|幺|老)$/i);
-                            return match ? match[1] : (member.ancestralHall?.replace('房', '') || "不知道");
-                          })()
-                        });
-                        setShowEditInfoModal(true);
-                      }}
-                      className="p-1 rounded-full bg-slate-50 text-slate-300 hover:text-[#eab308] hover:bg-[#eab308]/5 transition-all"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                  )}
-                </h1>
-                <div className="space-y-3 mt-2">
-                  <div className="flex items-center justify-center gap-2 flex-wrap min-h-[36px]">
-                    {/* 1. 核心称谓 pill (带 Hover 翻译) - 仅限非本人显示 */}
-                    {!isMeMember && (() => {
-                      const logicTag = member.logicTag || member.logic_tag || "";
-                      const tooltip = `${translateLogicTag(logicTag)}${member.ancestralHall ? ` · ${member.ancestralHall}` : ''}`;
-
-                      // 宠物 或 社交朋友，且名字已经出现在标题中，或者称谓是通用的“朋友/家人”时，不再重复显示此 pill
-                      const isRedundant = isPet || (isSocial && (displayName.includes(rel) || rel === '朋友' || rel === '家人' || rel === displayName));
-                      if (isRedundant) return null;
-
-                      return (
-                        <span
-                          className={cn(
-                            "text-sm font-bold px-4 py-1 rounded-full border tracking-widest flex items-center gap-1.5 transition-all shadow-sm cursor-help active:scale-95 hover:shadow-md",
-                            type === 'blood' ? "text-[#eab308] bg-[#eab308]/5 border-[#eab308]/20" :
-                              type === 'affinal' ? "text-[#8b5e34] bg-[#8b5e34]/5 border-[#8b5e34]/20" :
-                                "text-slate-400 bg-slate-50 border-slate-100"
-                          )}
-                          title={tooltip || "档案细节"}
-                        >
-                          <Sparkles size={12} fill="currentColor" /> {rel}
-                        </span>
-                      );
-                    })()}
-
-                    {/* 2. 性别标签 (所有成员均显示) */}
-                    {(() => {
-                      const gender = (isMeMember ? currentUser?.gender : member.gender) || 'male';
-                      if (isPet) return (
-                        <span className="text-sm font-bold px-3 py-1 rounded-full bg-amber-50 text-amber-500 border border-amber-100 flex items-center gap-1.5 shadow-sm">
-                          🐾 性别：{gender === 'male' ? '公' : '母'}
-                        </span>
-                      );
-                      return (
-                        <span className={cn(
-                          "text-sm font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 shadow-sm transition-colors",
-                          gender === 'female' ? "text-pink-500 bg-pink-50 border-pink-100" : "text-blue-500 bg-blue-50 border-blue-100"
-                        )}>
-                          {gender === 'female' ? "♀ 女" : "♂ 男"}
-                        </span>
-                      );
-                    })()}
-
-                    {/* 3. 注册状态 (仅在不是本人且不是宠物时邀请) */}
-                    {!isMeMember && (
-                      member.isRegistered ? (
-                        <span className="px-3 py-1 bg-emerald-50 text-emerald-500 rounded-full text-[10px] font-black inline-flex items-center gap-1 border border-emerald-100 shadow-sm">
-                          <CheckCircle size={12} fill="currentColor" /> 已入驻
-                        </span>
-                      ) : (
-                        !isPet && (
-                          <button
-                            onClick={() => setShowShareModal(true)}
-                            className="px-3 py-1 bg-[#eab308] text-black rounded-full text-[10px] font-black inline-flex items-center gap-1.5 hover:bg-[#d9a306] transition-all shadow-sm active:scale-95"
-                          >
-                            邀请注册 <Share2 size={12} />
-                          </button>
-                        )
-                      )
-                    )}
-                  </div>
-
-                  {/* 4. 仅对于支脉亲属：非 Hover 时显示辅助提示 (如：三房) */}
-                  {type === 'blood' && member.ancestralHall && !isMeMember && (
-                    <p className="text-[10px] text-slate-300 font-bold tracking-widest uppercase text-center">
-                      来自：{member.ancestralHall}
-                    </p>
-                  )}
+              {isMeMember && (
+                <div className="absolute -bottom-1 -right-1 bg-[#eab308] text-black text-[10px] font-black px-4 py-1.5 rounded-full border-2 border-white shadow-lg z-20">
+                  我自己
                 </div>
-              </>
-            );
-          })()}
-          {displayBio && displayBio.trim() !== "" && (
-            <p className="text-sm text-slate-400 italic mt-3 mb-2">“{displayBio}”</p>
-          )}
-          {creatorName && (
-            <div className="mt-4 px-3 py-1 bg-amber-50/50 rounded-full text-[10px] font-black text-amber-600/60 flex items-center gap-1.5 ring-1 ring-amber-100 italic">
-              {isMeMember ? "由 我 为自己开启了记忆档案" : `由 ${creatorName || "系统"} 为 TA 开启了记忆档案`}
+              )}
+              {member.isRegistered && !isMeMember && (
+                <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white p-1.5 rounded-full border-2 border-white shadow-lg z-20">
+                  <CheckCircle size={18} fill="currentColor" className="text-white" />
+                </div>
+              )}
+              {/* 装饰性背景 */}
+              <div className="absolute -inset-4 bg-gradient-to-tr from-amber-100/20 to-transparent rounded-full blur-2xl -z-0" />
             </div>
-          )}
-        </div>
+
+            <div className="space-y-2">
+              <h1 className={cn(
+                "text-3xl font-black flex items-center justify-center gap-3",
+                type === 'blood' ? "text-slate-900" :
+                  type === 'affinal' ? "text-[#8b5e34]" : "text-slate-400"
+              )}>
+                {isMeMember ? "我的记忆档案" : `${displayName}的记忆档案`}
+                {member && (!member.isRegistered || isDemoMode(currentUser)) && (
+                  <button
+                    onClick={() => {
+                      setEditInfoForm({
+                        name: member.name || "",
+                        gender: member.gender || "male",
+                        birthday: member.birthDate || "",
+                        bio: member.bio || "",
+                        ranking: (() => {
+                          const tag = member.logicTag || member.logic_tag || "";
+                          const match = String(tag).match(/-O(二十|十一|十二|十三|十四|十五|十六|十七|十八|十九|一|二|三|四|五|六|七|八|九|十|大|小|幺|老)$/i);
+                          return match ? match[1] : (member.ancestralHall?.replace('房', '') || "不知道");
+                        })()
+                      });
+                      setShowEditInfoModal(true);
+                    }}
+                    className="p-1.5 rounded-full bg-slate-50 text-slate-300 hover:text-[#eab308] transition-all"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                )}
+              </h1>
+
+              {displayBio && displayBio.trim() !== "" && (
+                <div className="relative px-10 pt-1 pb-2">
+                  <p className="text-base text-slate-400 italic font-medium leading-relaxed tracking-wide opacity-80">
+                    “{displayBio}”
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* 药丸按钮栏：区分主次的动作条 */}
+            <div className="mt-3 flex items-center justify-center gap-2 flex-wrap min-h-[44px] px-4 w-full">
+              {/* 组A：身份身份属性 (只读感) */}
+              <div className="flex items-center gap-2">
+                {isMeMember ? (
+                  <span className="text-[11px] font-black px-4 py-2 rounded-full bg-amber-50 text-[#eab308] border border-amber-100/30 tracking-widest flex items-center gap-2 shadow-sm">
+                    <Sparkles size={12} fill="currentColor" /> 我
+                  </span>
+                ) : (
+                  <span className={cn(
+                    "text-[11px] font-black px-4 py-2 rounded-full border tracking-widest flex items-center gap-2 shadow-sm",
+                    type === 'blood' ? "text-[#eab308] bg-amber-50/50 border-amber-100" :
+                    type === 'affinal' ? "text-[#8b5e34] bg-[#8b5e34]/5 border-[#8b5e34]/20" :
+                    "text-slate-400 bg-slate-50 border-slate-100"
+                  )}>
+                    <Sparkles size={12} fill="currentColor" /> {rel}
+                  </span>
+                )}
+                
+                <span className={cn(
+                  "text-[11px] font-black px-3 py-2 rounded-full border flex items-center gap-1.5 shadow-sm",
+                  (isMeMember ? currentUser?.gender : member.gender) === 'female' ? "text-pink-500 bg-pink-50 border-pink-100" : "text-blue-500 bg-blue-50 border-blue-100"
+                )}>
+                  {(isMeMember ? currentUser?.gender : member.gender) === 'female' ? "♀ 女" : "♂ 男"}
+                </span>
+              </div>
+
+              {/* 视觉分割线 */}
+              <div className="h-4 w-px bg-slate-100 mx-2" />
+
+              {/* 组B：功能操作 (交互感) */}
+              <div className="flex items-center gap-2">
+                {member && !member.isRegistered && !isMeMember && member.memberType !== 'pet' && (
+                  <button
+                    onClick={() => setShowShareModal(true)}
+                    className="px-4 py-2 bg-[#eab308] text-black rounded-full text-[11px] font-black inline-flex items-center gap-2 hover:bg-[#d9a306] transition-all shadow-md active:scale-95 border-b-2 border-amber-600/20"
+                  >
+                    邀请注册 <Share2 size={12} />
+                  </button>
+                )}
+
+                {!(isPet || isSocial) && (
+                  <button
+                    onClick={onAddRelative}
+                    className="px-4 py-2 bg-white text-slate-700 rounded-full text-[11px] font-black inline-flex items-center gap-2 border border-slate-200 hover:bg-slate-50 transition-all shadow-md active:scale-95"
+                  >
+                    添加亲属 <Plus size={12} className="text-[#eab308]" strokeWidth={3} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 底部微信息 */}
+            <div className="mt-6 flex flex-col items-center gap-2 opacity-50 border-t border-slate-100/50 pt-4 w-2/3">
+              {type === 'blood' && member?.ancestralHall && !isMeMember && (
+                <p className="text-[10px] text-slate-400 font-bold tracking-[0.2em] uppercase flex items-center gap-1.5">
+                  <MapPin size={10} /> 房分：{member.ancestralHall}
+                </p>
+              )}
+              {creatorName && (
+                <div className="text-[10px] font-bold text-slate-300 italic">
+                  {isMeMember ? "由 我 为自己开启记忆档案" : `由 ${creatorName || "系统"} 为 TA 开启记忆档案`}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* 🚀 NEW: Life Chronicle Section (个人生平编年史) */}
+        <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+              <Calendar size={16} /> 个人编年史
+            </h3>
+            <span className="text-[10px] font-bold text-slate-300">共 {relatedEvents.length} 件大事记</span>
+          </div>
+
+          <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border border-slate-100 relative overflow-hidden">
+            <div className="absolute left-10 top-12 bottom-12 w-0.5 bg-gradient-to-b from-amber-200 via-amber-100 to-transparent opacity-50" />
+
+            <div className="space-y-8 relative z-10">
+              {relatedEvents.length === 0 ? (
+                <div className="text-center py-6 text-slate-400 font-bold text-sm bg-slate-50 rounded-2xl border border-slate-100 border-dashed">
+                  暂无记录的大事记
+                </div>
+              ) : (
+                relatedEvents.map((ev, idx) => (
+                  <button
+                    key={ev.id}
+                    onClick={() => navigate(`/square#events`, { state: { selectedDate: ev.date } })}
+                    className="w-full flex gap-6 text-left group active:scale-[0.98] transition-all"
+                  >
+                    <div className="flex flex-col items-center pt-1.5 shrink-0">
+                      <div className={cn(
+                        "size-10 rounded-full border-2 bg-white transition-all group-hover:scale-110 z-20 shadow-sm flex items-center justify-center text-[#eab308]",
+                        idx === 0 ? "border-[#eab308] ring-4 ring-amber-50" : "border-slate-100"
+                      )}>
+                        {ev.title.includes("生日") ? "🎂" : ev.title.includes("聚") ? "🤝" : ev.title.includes("旅游") ? "✈️" : <Calendar size={18} />}
+                      </div>
+                    </div>
+
+                    <div className="flex-1 space-y-2 py-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-black text-[#eab308] uppercase tracking-widest px-3 py-1 bg-amber-50 rounded-full border border-amber-100/50">
+                          {ev.date}
+                        </span>
+                        <ChevronRight size={14} className="text-slate-200 group-hover:text-amber-300 transition-colors" />
+                      </div>
+                      <h4 className="text-lg font-black text-slate-800 group-hover:text-[#eab308] transition-colors">
+                        {ev.title}
+                      </h4>
+                      {ev.notes && (
+                        <p className="text-sm text-slate-400 line-clamp-2 font-medium italic opacity-70 leading-relaxed">
+                          “{ev.notes}”
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-slate-50 text-center">
+              <button
+                onClick={generateAiBiography}
+                disabled={isGeneratingBio}
+                className={cn(
+                  "px-6 py-2.5 bg-gradient-to-r from-amber-500 to-[#eab308] text-white rounded-full text-xs font-black flex items-center gap-2 mx-auto active:scale-95 transition-all shadow-lg hover:shadow-amber-200/50 disabled:opacity-50",
+                  isGeneratingBio && "animate-pulse"
+                )}
+              >
+                <Sparkles size={14} className={isGeneratingBio ? "animate-spin" : ""} />
+                {isGeneratingBio ? "AI 正在梳理岁月回忆..." : "AI 整理生平故事"}
+              </button>
+            </div>
+          </div>
+
+          {/* AI Biography Story Card */}
+          <AnimatePresence>
+            {aiBiography && (
+              <motion.div
+                id="ai-biography-section"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-[2.5rem] p-8 shadow-2xl border-2 border-amber-100 relative overflow-hidden group"
+              >
+                <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
+                  <Sparkles size={120} className="text-amber-600" />
+                </div>
+
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="size-10 rounded-full bg-amber-50 flex items-center justify-center text-[#eab308]">
+                    <Sparkles size={20} fill="currentColor" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-black text-slate-800 tracking-tight">
+                      {member.name} 的人生小传
+                    </h4>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <div className="absolute -left-4 top-0 bottom-0 w-1 bg-amber-100/50 rounded-full" />
+                  <div className="space-y-4 text-slate-600 leading-relaxed font-medium">
+                    {aiBiography.split('\n').filter(p => p.trim()).map((para, i) => (
+                      <p key={i} className="text-sm indent-0">
+                        {para}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-8 flex justify-center">
+                  <div className="w-12 h-1 bg-slate-100 rounded-full" />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </section>
 
         {/* Input Section */}
         <section className="space-y-8">
@@ -1092,20 +1320,43 @@ export const ArchivePage: React.FC = () => {
                 )}
               </AnimatePresence>
 
-              <div className="absolute bottom-6 right-6 flex items-center gap-4">
-                {/* 仅在初始化状态或录制中不显示，其他情况显示小功能的辅助入口 */}
-                {!(inputMode === "voice" && !recordedAudioUrl) && !(inputMode === "photo" && !selectedImage) && (
-                  <button
-                    onClick={toggleRecording}
-                    disabled={inputMode === "video" || inputMode === "photo"}
-                    className={cn(
-                      "size-12 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-90",
-                      isRecording ? "bg-red-500 text-white animate-pulse" : "bg-[#eab308]/10 text-[#eab308]"
-                    )}
-                  >
-                    {isRecording ? <div className="size-3 bg-white rounded-sm" /> : <Mic size={24} />}
-                  </button>
+              <div className="relative rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white mb-6 group">
+                {selectedImage && (
+                  <>
+                    <img src={selectedImage} alt="" className="w-full h-auto" />
+                    {/* 🚀 PREMIUM HOOK: 带流光效果的唤醒按钮 */}
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      className={cn(
+                        "absolute bottom-6 left-6 px-6 py-3 rounded-full font-black text-xs flex items-center gap-3 shadow-2xl transition-all overflow-hidden",
+                        "bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-amber-400/30 text-amber-200"
+                      )}
+                    >
+                      <div className="relative">
+                        <Sparkles size={16} className="text-amber-400" />
+                        <div className="absolute -top-1 -right-1">
+                          <div className="size-2 bg-red-500 rounded-full ring-2 ring-slate-900" />
+                        </div>
+                      </div>
+                      <span className="tracking-widest flex items-center gap-1.5">
+                        让记忆开口说话 <span className="bg-amber-400/20 text-[8px] px-1.5 py-0.5 rounded text-amber-400">PRO</span>
+                      </span>
+                      {/* 闪动扫描流光 */}
+                      <motion.div
+                        animate={{ x: [-100, 200] }}
+                        transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
+                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-20"
+                      />
+                    </motion.button>
+                  </>
                 )}
+                {selectedVideo && <video src={selectedVideo} controls className="w-full h-auto" />}
+                <button
+                  onClick={() => { setSelectedImage(null); setSelectedVideo(null); }}
+                  className="absolute top-6 right-6 p-2 bg-black/50 text-white rounded-full backdrop-blur-md border border-white/20 hover:bg-black/70 transition-all"
+                >
+                  <X size={20} />
+                </button>
               </div>
             </div>
 
@@ -1164,11 +1415,8 @@ export const ArchivePage: React.FC = () => {
                 }
               };
               const typeInfo = getMsgTypeInfo(msg.type);
-              const isAuthor = currentUser && (
-                (msg.authorId && currentUser.memberId && String(msg.authorId) === String(currentUser.memberId)) ||
-                (msg.familyMemberId && currentUser.memberId && String(msg.familyMemberId) === String(currentUser.memberId)) ||
-                (String(msg.authorName) === String(currentUser.name))
-              );
+              // NOTE: isAuthor 仅通过 authorId 精确匹配，避免 familyMemberId（档案归属人）导致误判
+              const isAuthor = currentUser && msg.authorId && currentUser.memberId && String(msg.authorId) === String(currentUser.memberId);
               return (
                 <motion.div
                   key={msg.id || i}
@@ -1275,7 +1523,7 @@ export const ArchivePage: React.FC = () => {
                     <img src={member.avatarUrl} className="w-full h-full rounded-full object-cover" alt="" />
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2 pb-6">
                     <h3 className="text-2xl font-black text-slate-800">邀请档案正式注册</h3>
                     <p className="text-sm text-slate-500">您可以复制邀请码发送，或让 {member.name} 直接扫码加盟。</p>
                   </div>
@@ -1363,44 +1611,25 @@ export const ArchivePage: React.FC = () => {
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">性别</label>
-                    <div className="flex gap-4 px-2">
-                      {["male", "female"].map((g) => (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setEditInfoForm({ ...editInfoForm, gender: g })}
-                          className={cn(
-                            "flex-1 py-4 rounded-2xl font-bold transition-all border-2",
-                            editInfoForm.gender === g
-                              ? "bg-[#eab308] border-[#eab308] text-black shadow-lg shadow-[#eab308]/20"
-                              : "bg-slate-50 border-transparent text-slate-400"
-                          )}
-                        >
-                          {g === "male" ? "男 (♂)" : "女 (♀)"}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="space-y-2 pb-6">
-                      <label className="text-xs font-bold text-slate-400 ml-4 uppercase tracking-widest">排行 (房分)</label>
-                      <div className="grid grid-cols-4 gap-2 px-1">
-                        {['大', '二', '三', '四', '五', '六', '七', '八', '九', '十', '小', '不知道'].map((rk) => (
-                          <button
-                            key={rk}
-                            type="button"
-                            onClick={() => setEditInfoForm({ ...editInfoForm, ranking: rk })}
+                    <div className="grid grid-cols-2 gap-4 px-2">
+                      {["male", "female"].map((g) => {
+                        const isActive = editInfoForm.gender === g;
+                        return (
+                          <div
+                            key={g}
                             className={cn(
-                              "py-3 rounded-xl font-bold transition-all border-2 text-xs",
-                              editInfoForm.ranking === rk
-                                ? "bg-[#eab308] border-[#eab308] text-black"
-                                : "bg-slate-50 border-transparent text-slate-400"
+                              "h-14 rounded-2xl font-black transition-all flex items-center justify-center cursor-not-allowed border-2",
+                              isActive
+                                ? (g === "male" ? "bg-blue-500 border-white text-white shadow-lg shadow-blue-100" : "bg-rose-500 border-white text-white shadow-lg shadow-rose-100")
+                                : "bg-slate-50 border-transparent text-slate-300"
                             )}
                           >
-                            {rk}
-                          </button>
-                        ))}
-                      </div>
-                      <p className="text-[10px] text-slate-400 px-4 mt-2">若不清楚具体排行，请选‘不知道’。录入后将自动同步更新宗族称谓与地图位置。</p>
+                            {g === "male" ? "男 (♂)" : "女 (♀)"}
+                          </div>
+                        );
+                      })}
                     </div>
+
                   </div>
                 </div>
 
@@ -1411,6 +1640,49 @@ export const ArchivePage: React.FC = () => {
                     className="py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-lg shadow-[#eab308]/20"
                   >
                     保存修改
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )
+        }
+        {
+          showDeleteConfirm && (
+            <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-6 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="bg-white w-full max-w-xs rounded-[2.5rem] p-8 shadow-2xl text-center space-y-6"
+              >
+                <div className="size-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto">
+                  <Trash2 size={32} />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-xl font-black text-slate-800">确认删除档案？</h3>
+                  <p className="text-xs text-slate-400 font-bold">此操作不可恢复，档案及其附属的回忆留言将一并移除。</p>
+                </div>
+                {/* 断链警告：内联显示，不使用原生 alert */}
+                {deleteBlockReason && (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold rounded-2xl p-4 text-left leading-relaxed">
+                    ⚠️ 无法删除
+                    <p className="mt-1 font-medium text-amber-700">{deleteBlockReason}</p>
+                  </div>
+                )}
+                <div className="flex flex-col gap-3">
+                  {!deleteBlockReason && (
+                    <button
+                      onClick={executeRealDelete}
+                      className="w-full py-4 bg-red-500 text-white rounded-2xl font-black shadow-lg shadow-red-200 active:scale-95 transition-transform"
+                    >
+                      确认删除
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setShowDeleteConfirm(false); setDeleteBlockReason(""); }}
+                    className="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-black active:scale-95 transition-transform"
+                  >
+                    {deleteBlockReason ? "我知道了" : "我再想想"}
                   </button>
                 </div>
               </motion.div>

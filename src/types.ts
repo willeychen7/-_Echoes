@@ -18,18 +18,21 @@ export interface FamilyMember {
   relationship: string;
   avatarUrl: string;
   bio?: string;
-  birthDate?: string;
   inviteCode?: string;
   isRegistered?: boolean;
   standardRole?: string;
   fatherId?: number;
+  father_id?: number;
   motherId?: number;
+  mother_id?: number;
   spouseId?: number;     // 配偶 ID
+  spouse_id?: number;    // 数据库蛇形命名兼容
   gender?: string;
   createdByMemberId?: number;
   userId?: number | string;
   // 以下为闽系家谱扩展字段
   generationNum?: number; // 昭穆（辈分）绝对值
+  generation_num?: number; // 数据库蛇形命名兼容
   surname?: string;       // 姓氏
   ancestralHall?: string; // 房头/房份 (例如：大房、二房)
   isAdopted?: boolean;    // 是否为继嗣/祧子
@@ -41,6 +44,14 @@ export interface FamilyMember {
   member_type?: string;
   mapX?: number; // 家族树地图横坐标
   mapY?: number; // 家族树地图纵坐标
+  familyId?: string | number; // 家族 ID
+  family_id?: string | number; // 数据库蛇形命名兼容
+  birthDate?: string;
+  birth_date?: string;
+  siblingOrder?: number;
+  sibling_order?: number;
+  addedByMemberId?: number | string; // 关键：记录以此人为视点的添加关系
+  added_by_member_id?: number | string; // 数据库蛇形命名兼容
 }
 
 export interface FamilyEvent {
@@ -56,6 +67,9 @@ export interface FamilyEvent {
   customMemberName?: string;
   location?: string;
   notes?: string;
+  reminderTime?: string;     // HH:mm
+  reminderFrequency?: string[]; // ["week", "month", "year"]
+  notifyAll?: boolean;
 }
 
 export interface Message {

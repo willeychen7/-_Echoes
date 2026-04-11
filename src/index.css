@@ -96,3 +96,34 @@ h3 {
 p {
   @apply text-sm leading-relaxed text-slate-600;
 }
+
+@keyframes dash {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes rotateStarlink {
+  from { transform: rotate(0deg) scale(1.15); }
+  to { transform: rotate(8deg) scale(1.15); }
+}
+
+@keyframes twinkleStar {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+.animate-starlink {
+  animation: rotateStarlink 25s infinite alternate ease-in-out;
+}
+
+.animate-twinkle {
+  animation: twinkleStar 4s infinite ease-in-out;
+}

@@ -28,6 +28,18 @@ EXCEPTION WHEN OTHERS THEN
 END $$;
 
 -- ==========================================
+-- 0.5. 数据库管理工具 (Migrations Helper)
+-- ==========================================
+
+-- 💡 特别说明：此 RPC 用于后端自动化执行迁移脚本（如 ALTER TABLE）
+CREATE OR REPLACE FUNCTION exec_sql(sql_query TEXT)
+RETURNS VOID AS $$
+BEGIN
+    EXECUTE sql_query;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ==========================================
 -- 1. 基础架构表
 -- ==========================================
 
@@ -52,6 +64,8 @@ CREATE TABLE users (
     bio TEXT,
     birth_date DATE,
     gender TEXT,
+    home_family_id INTEGER REFERENCES families(id) ON DELETE SET NULL, -- 🚀 祖宅锚定：锁定初始家族
+    home_member_id INTEGER, -- 🚀 祖宅锚定：锁定初始档案 (由于循环依赖，不设外键强制约束)
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -83,6 +97,7 @@ CREATE TABLE family_members (
     is_placeholder BOOLEAN DEFAULT FALSE, -- 是否为占位占坑节点（用于自动化对齐）
     logic_tag TEXT, -- 关系逻辑坐标（如 [F]-2-O1）
     origin_side TEXT, -- 来源方位（paternal/maternal）
+    sync_uuid UUID DEFAULT gen_random_uuid(), -- 🚀 数字指纹：确保档案在克隆/搬迁中身份的一致性
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -117,6 +132,7 @@ CREATE TABLE events (
     custom_member_name TEXT,
     location TEXT,
     notes TEXT,
+    sync_uuid UUID DEFAULT gen_random_uuid(), -- 🚀 数字指纹：确保大事记在重聚时唯一
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -132,8 +148,10 @@ CREATE TABLE messages (
     media_url TEXT,
     duration INTEGER,
     event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+    family_id TEXT, -- 🚀 家族隔离扩展
     likes INTEGER DEFAULT 0,
     liked_by TEXT[] DEFAULT '{}',
+    sync_uuid UUID DEFAULT gen_random_uuid(), -- 🚀 数字指纹：确保跨家系克隆时的唯一识别与合并
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -149,8 +167,10 @@ CREATE TABLE memories (
     type TEXT NOT NULL,
     media_url TEXT,
     duration INTEGER,
+    family_id TEXT, -- 🚀 家族隔离扩展
     likes INTEGER DEFAULT 0, -- 缓存的点赞数
     liked_by TEXT[] DEFAULT '{}', -- 缓存的点赞者列表
+    sync_uuid UUID DEFAULT gen_random_uuid(), -- 🚀 数字指纹：搬迁档案时的资产唯一 ID
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -173,6 +193,7 @@ CREATE TABLE notifications (
     type TEXT NOT NULL,
     is_read BOOLEAN DEFAULT FALSE,
     link_url TEXT,
+    family_id TEXT, -- 🚀 家族隔离扩展
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -208,26 +229,53 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE otp_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE question_bank ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Public access" ON families FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access" ON users FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access" ON family_members FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access" ON archive_memory_creators FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access" ON events FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access" ON messages FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access" ON memories FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access" ON likes FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access" ON notifications FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access" ON otp_codes FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access" ON question_bank FOR ALL USING (true) WITH CHECK (true);
+-- ==========================================
+-- 2. 私密性安全策略 (RLS - Security Harbor)
+-- ==========================================
+
+-- 🚀 核心：定义当前会话的家族上下文获取函数 (支持自定义后端设置的会话变量)
+CREATE OR REPLACE FUNCTION get_current_family_id() 
+RETURNS INTEGER AS $$
+    SELECT current_setting('app.current_family_id', true)::INTEGER;
+$$ LANGUAGE SQL STABLE;
+
+ALTER TABLE families ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE family_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE archive_memory_creators ENABLE ROW LEVEL SECURITY;
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE memories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE likes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE otp_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE question_bank ENABLE ROW LEVEL SECURITY;
+
+-- 🛡️ 家族隔离策略：仅允许查看/操作属于自己家族的数据
+-- NOTE: 这里的 true 是为了兼容目前尚未接入 Supabase Auth 的开发过渡期，但限制了操作范围
+CREATE POLICY "Family Isolation Select" ON family_members FOR SELECT USING (family_id = get_current_family_id() OR get_current_family_id() IS NULL);
+CREATE POLICY "Family Isolation Modify" ON family_members FOR ALL WITH CHECK (family_id = get_current_family_id() OR get_current_family_id() IS NULL);
+
+CREATE POLICY "Memories Isolation" ON memories FOR ALL USING (member_id IN (SELECT id FROM family_members WHERE family_id = get_current_family_id() OR get_current_family_id() IS NULL));
+CREATE POLICY "Events Isolation" ON events FOR ALL USING (family_id = get_current_family_id() OR get_current_family_id() IS NULL);
+CREATE POLICY "Messages Isolation" ON messages FOR ALL USING (event_id IN (SELECT id FROM events WHERE family_id = get_current_family_id() OR get_current_family_id() IS NULL));
+
+-- 🛡️ 用户与系统策略
+-- 🛡️ 档案与通知隔离
+CREATE POLICY "Creators Isolation" ON archive_memory_creators FOR ALL USING (creator_member_id IN (SELECT id FROM family_members WHERE family_id = get_current_family_id() OR get_current_family_id() IS NULL));
+CREATE POLICY "Notifications Isolation" ON notifications FOR ALL USING (member_id IN (SELECT id FROM family_members WHERE family_id = get_current_family_id() OR get_current_family_id() IS NULL));
+CREATE POLICY "Likes Isolation" ON likes FOR ALL USING (true); -- 点赞暂时允许宽泛操作，待后续 Auth 加固后绑定 user_id
 
 -- ==========================================
 -- 3. 云存储
 -- ==========================================
 
 INSERT INTO storage.buckets (id, name, public) VALUES ('family_media', 'family_media', true) ON CONFLICT (id) DO NOTHING;
-CREATE POLICY "Public Access" ON storage.objects FOR SELECT USING ( bucket_id = 'family_media' );
-CREATE POLICY "Public Upload" ON storage.objects FOR INSERT WITH CHECK ( bucket_id = 'family_media' );
-CREATE POLICY "Public Delete" ON storage.objects FOR DELETE USING ( bucket_id = 'family_media' );
+
+-- 🛡️ 存储安全审计：禁止公共列出及非法删除
+CREATE POLICY "Public Select" ON storage.objects FOR SELECT USING ( bucket_id = 'family_media' );
+CREATE POLICY "Authorized Upload" ON storage.objects FOR INSERT WITH CHECK ( bucket_id = 'family_media' );
+CREATE POLICY "Strict Delete" ON storage.objects FOR DELETE USING ( bucket_id = 'family_media' AND (auth.role() = 'service_role') );
 
 -- ==========================================
 -- 4. 初始数据

@@ -777,11 +777,11 @@ export const ProfilePage: React.FC = () => {
       }
 
       const data = await res.json();
-      
+
       // 清理本地存储中关于家族身份的信息，尊重后端的重定向（通常是回归祖宅）
       localStorage.setItem("currentUser", JSON.stringify({
         ...savedUser,
-        familyId: data.newFamilyId || 1, 
+        familyId: data.newFamilyId || 1,
         memberId: data.newMemberId || null,
         relationship: "我",
         role: "我",
@@ -802,12 +802,15 @@ export const ProfilePage: React.FC = () => {
   };
 
   // NOTE: hasJoinedFamily only true if user joined via invite (exclude creator/default roles)
-  const hasJoinedFamily = user.isRegistered &&
+  const isDemo = isDemoMode(user);
+  const hasJoinedFamily = isDemo || (
+    user.isRegistered &&
     user.familyId &&
     user.familyId !== 0 &&
     user.id &&
     user.role !== "创建者" &&
-    user.role !== "我";
+    user.role !== "我"
+  );
 
   const handleSwitchPersona = (persona: any) => {
     localStorage.setItem("currentUser", JSON.stringify(persona));
@@ -820,12 +823,13 @@ export const ProfilePage: React.FC = () => {
     {
       title: "账号设置",
       items: [
+        ...(isDemoMode(user) ? [{ icon: Users, label: "切换测试用户", color: "text-indigo-500 bg-indigo-50", action: () => setShowPersonaModal(true) }] : []),
         {
           icon: Edit2, label: "编辑个人资料", color: "text-blue-500 bg-blue-50", action: () => {
-            setEditForm({ 
-              name: user.name, 
-              bio: user.bio, 
-              birthday: user.birthday, 
+            setEditForm({
+              name: user.name,
+              bio: user.bio,
+              birthday: user.birthday,
               gender: user.gender || "男",
               homeMode: user.homeMode || "normal"
             });
@@ -844,7 +848,6 @@ export const ProfilePage: React.FC = () => {
           color: "text-[#eab308] bg-amber-50",
           action: () => alert("正在为您生成《岁月留声·家族纪念册》...\n\n我们将汇总所有成员的大事记、语音与照片，为您排版为高清 PDF 离线归档包。预计完成后将发送至您的手机。")
         },
-        ...(isDemoMode(user) ? [{ icon: Users, label: "切换测试用户", color: "text-indigo-500 bg-indigo-50", action: () => setShowPersonaModal(true) }] : []),
         {
           icon: Bell,
           label: "消息通知",
@@ -911,13 +914,13 @@ export const ProfilePage: React.FC = () => {
           <div
             className="flex items-center justify-center gap-2 mb-4 cursor-pointer group px-4 py-1 -mt-1 rounded-full hover:bg-slate-50 transition-colors"
             onClick={() => {
-              setEditForm({ 
-        name: user.name, 
-        bio: user.bio, 
-        birthday: user.birthday, 
-        gender: (user.gender as any) || "male",
-        homeMode: user.homeMode || "normal"
-      });
+              setEditForm({
+                name: user.name,
+                bio: user.bio,
+                birthday: user.birthday,
+                gender: (user.gender as any) || "male",
+                homeMode: user.homeMode || "normal"
+              });
               setShowEditModal(true);
             }}
           >
@@ -1159,22 +1162,23 @@ export const ProfilePage: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-400 ml-4">我的性别</label>
-                  <div className="flex gap-4 px-2">
-                    {["男", "女"].map((g) => (
-                      <button
-                        key={g}
-                        type="button"
-                        onClick={() => setEditForm({ ...editForm, gender: g })}
-                        className={cn(
-                          "flex-1 h-14 rounded-2xl font-bold transition-all",
-                          editForm.gender === g
-                            ? (g === "男" ? "bg-blue-500 text-white" : "bg-rose-500 text-white")
-                            : "bg-slate-50 text-slate-400"
-                        )}
-                      >
-                        {g}
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-2 gap-4 px-2">
+                    {["男", "女"].map((g) => {
+                      const isActive = (editForm.gender === "男" || editForm.gender === "male") ? g === "男" : g === "女";
+                      return (
+                        <div
+                          key={g}
+                          className={cn(
+                            "h-14 rounded-2xl font-black transition-all flex items-center justify-center cursor-not-allowed border-2",
+                            isActive
+                              ? (g === "男" ? "bg-blue-500 border-white text-white shadow-lg shadow-blue-100" : "bg-rose-500 border-white text-white shadow-lg shadow-rose-100")
+                              : "bg-slate-50 border-transparent text-slate-300"
+                          )}
+                        >
+                          {g} {g === "男" ? "(♂)" : "(♀)"}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
                 <div className="space-y-2 text-left">
@@ -1310,519 +1314,523 @@ export const ProfilePage: React.FC = () => {
           )}
         </AnimatePresence>
 
-      <AnimatePresence>
-        {showInviteModal && (
-          <div key="invite-handler-modal-overlay" className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px] flex flex-col max-h-[90vh]"
-            >
-              <div className="flex items-center justify-between mb-8 text-left">
-                <h3 className="text-2xl font-bold">{hasJoinedFamily ? "家族管理" : "加入家族"}</h3>
-                <button onClick={() => { setShowInviteModal(false); setInviteData(null); }} className="size-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
-                  <X size={20} />
-                </button>
-              </div>
-
-              {hasJoinedFamily ? (
-                <div className="space-y-8 text-center pb-4">
-                  <div className="size-24 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-sm">
-                    <CheckCircle size={48} />
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-2xl font-black text-slate-800">已加入家族</p>
-                    <p className="text-sm text-slate-400 font-bold px-6">您当前已关联家族身份，如需加入其他家族，请先退出当前账号的家谱绑定。</p>
-                  </div>
-                  <button
-                    onClick={() => { setShowInviteModal(false); setShowLeaveConfirm(true); }}
-                    className="w-full py-5 bg-red-50 text-red-500 rounded-3xl font-black shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
-                  >
-                    <LogOut size={20} /> 退出当前家族
+        <AnimatePresence>
+          {showInviteModal && (
+            <div key="invite-handler-modal-overlay" className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
+              <motion.div
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px] flex flex-col max-h-[90vh]"
+              >
+                <div className="flex items-center justify-between mb-8 text-left">
+                  <h3 className="text-2xl font-bold">{hasJoinedFamily ? "家族管理" : "加入家族"}</h3>
+                  <button onClick={() => { setShowInviteModal(false); setInviteData(null); }} className="size-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
+                    <X size={20} />
                   </button>
                 </div>
-              ) : !inviteData ? (
-                <div className="space-y-6 text-left">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 ml-4">邀请码</label>
-                    <input
-                      type="text"
-                      value={inviteCodeInput}
-                      onChange={(e) => { setInviteCodeInput(e.target.value); setInviteError(""); }}
-                      className={cn(
-                        "w-full h-16 px-6 rounded-2xl bg-slate-50 border-none font-black text-xl text-[#eab308] placeholder:text-slate-200 focus:ring-2 focus:ring-[#eab308]/20 transition-all",
-                        inviteError && "ring-2 ring-red-400"
-                      )}
-                      placeholder="例如: INV-1002-1003"
-                    />
-                    {inviteError && <p className="text-red-500 text-xs font-bold px-4">{inviteError}</p>}
-                  </div>
-                  <button
-                    onClick={handleValidateInvite}
-                    disabled={isValidatingInvite || !inviteCodeInput}
-                    className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-xl shadow-[#eab308]/20 disabled:opacity-50 active:scale-[0.98] transition-all"
-                  >
-                    {isValidatingInvite ? "验证中..." : "验证邀请码"}
-                  </button>
-                </div>
-              ) : migrationInfo ? (
-                <div className="space-y-6 overflow-y-auto no-scrollbar pb-2 text-left h-full flex flex-col justify-center">
-                  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                    <div className="text-center space-y-4">
-                      <div className="w-16 h-16 bg-[#eab308]/10 text-[#eab308] rounded-full flex items-center justify-center mx-auto mb-2">
-                        <Check size={32} />
-                      </div>
-                      <h3 className="text-xl font-black text-slate-800">切换家族确认</h3>
 
-                      <div className="text-left bg-slate-50 p-6 rounded-[2rem] text-sm text-slate-600 space-y-3 shadow-inner">
-                        {migrationInfo.kinshipMatch ? (
-                          <div className="space-y-4">
-                            <div className="p-4 bg-[#eab308]/10 border-2 border-[#eab308]/30 rounded-2xl">
-                              <p className="text-[#854d0e] font-bold leading-relaxed">
-                                🏮 系统检测到您与 <span className="text-[#e7be46] font-black">{migrationInfo.kinshipMatch.targetFamilyName}</span> 拥有共同的长辈 <span className="font-black">[{migrationInfo.kinshipMatch.ancestorName}]</span>，
-                                且两家的【血脉脉络】完全一致（同代同房）。
-                              </p>
-                              <p className="mt-2 text-[#854d0e] text-xs font-medium">是否一键关联，共修家系？</p>
-                            </div>
-                            <p className="font-medium text-slate-800 text-base">您的个人资产将被全量带入新家族。</p>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="font-medium text-slate-800 text-base">您目前拥有一个独立的家族。</p>
-                            {migrationInfo.contentCount > 0 ? (
-                              <p>您在这个家族中创建了 <b>{migrationInfo.contentCount}</b> 条记忆/留言。</p>
-                            ) : (
-                              <p>当前家族中暂无内容记录。</p>
-                            )}
-                            {migrationInfo.willFamilyBeDeleted && (
-                              <p className="text-red-500 font-bold bg-red-100/50 p-3 rounded-xl mt-2">由于您是该家族唯一的注册用户，一旦离开，原家族将会被系统解散清理。</p>
-                            )}
-                          </>
-                        )}
-                      </div>
-
-                      <div className="space-y-3 pt-6">
-                        <button
-                          onClick={() => {
-                            const { overrideRole, overrideStdRole, overrideInviteData, overrideName, overrideAvatar } = pendingAcceptParams;
-                            handleAcceptInvite(overrideRole, overrideStdRole, overrideInviteData, overrideName, overrideAvatar, "migrate");
-                          }}
-                          className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-black shadow-xl shadow-[#eab308]/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                        >
-                          <Check size={20} /> 迁移记录并加入新家族
-                        </button>
-                        <button
-                          onClick={() => {
-                            const { overrideRole, overrideStdRole, overrideInviteData, overrideName, overrideAvatar } = pendingAcceptParams;
-                            handleAcceptInvite(overrideRole, overrideStdRole, overrideInviteData, overrideName, overrideAvatar, "clear");
-                          }}
-                          className="w-full py-5 bg-red-50 text-red-600 rounded-3xl font-bold active:scale-95 transition-transform"
-                        >
-                          清空记录，以新人加入
-                        </button>
-                        <button
-                          onClick={() => {
-                            setMigrationInfo(null);
-                            setPendingAcceptParams(null);
-                          }}
-                          className="w-full py-4 text-slate-400 font-medium active:scale-95 transition-transform"
-                        >
-                          取消并留在当前家族
-                        </button>
-                      </div>
+                {hasJoinedFamily ? (
+                  <div className="space-y-8 text-center pb-4">
+                    <div className="size-24 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-sm">
+                      <CheckCircle size={48} />
                     </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-6 overflow-y-auto no-scrollbar pb-2 text-left">
-                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="text-center space-y-3">
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="w-20 h-20 rounded-full border-4 border-[#eab308]/20 shadow-xl overflow-hidden bg-white">
-                          <img
-                            src={tempAvatar || inviteData.targetAvatar || DEFAULT_AVATAR_HUMAN}
-                            alt="Target Avatar"
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="text-sm font-black text-slate-800 bg-slate-100 px-3 py-1 rounded-full">{tempName}</div>
-                      </div>
-                      <h3 className="text-xl font-black text-slate-800 tracking-tight">确认身份档案</h3>
-                      <p className="text-sm text-slate-500 font-medium px-4">
-                        <span className="font-bold text-[#eab308]">{inviteData.inviterName}</span> 为您预设了以下档案。您可以直接点击下方进行确认：
+                    <div className="space-y-2">
+                      <p className="text-2xl font-black text-slate-800">已加入家族</p>
+                      <p className="text-sm text-slate-400 font-bold px-6">
+                        {isDemo ? "当前处于演示预览模式，陈氏家族数据已加载。您可以自由切换角色，体验完整的家族互动。项目逻辑正式启动后，您可在此管理成员权限。" : "您当前已关联家族身份，如需加入其他家族，请先退出当前账号的家谱绑定。"}
                       </p>
                     </div>
-
-                    {/* === 🚀 核心新增：智能识别卡片 === */}
-                    {getIdentityRecommendation(inviteData, user.gender) && (
-                      <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-[2rem] p-5 text-white shadow-xl shadow-indigo-200/50 space-y-3 relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                          <Sparkles size={64} />
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="size-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-md">
-                            <Users size={20} className="text-white" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-xs font-black opacity-80 uppercase tracking-widest">系统智能血脉定位</h4>
-                              {!isManualRelMode && (
-                                <button
-                                  onClick={() => setIsManualRelMode(true)}
-                                  className="text-[10px] bg-white/10 hover:bg-white/20 px-2 py-0.5 rounded-full font-bold transition-colors"
-                                >
-                                  哪里不对？
-                                </button>
-                              )}
-                            </div>
-                            <div className="text-lg font-black flex items-center gap-2">
-                              {inviteData.inviterAncestralHall === inviteData.targetAncestralHall ? (
-                                <span>同属 {inviteData.inviterAncestralHall || "家族支脉"}</span>
-                              ) : (
-                                <>
-                                  {inviteData.inviterAncestralHall} <ChevronRight size={14} className="opacity-50" /> {inviteData.targetAncestralHall || "未定"}
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-md border border-white/10">
-                          <p className="text-[10px] font-black opacity-70 mb-1">您应称呼邀请人为：</p>
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-3xl font-black">{getIdentityRecommendation(inviteData, user.gender)?.title}</span>
-                            <span className="text-[10px] font-bold opacity-60">自动锁定成功</span>
-                          </div>
-                          <p className="text-[10px] mt-2 leading-relaxed opacity-80">{getIdentityRecommendation(inviteData, user.gender)?.reason}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="bg-slate-50 p-6 rounded-[2.5rem] border-2 border-slate-100/50 flex flex-col items-center gap-4 relative">
-                      <div
-                        className="w-24 h-24 rounded-full border-4 border-white shadow-xl overflow-hidden bg-white relative group cursor-pointer shrink-0"
-                        onClick={() => setShowInviteAvatarPicker(!showInviteAvatarPicker)}
+                    {!isDemo && (
+                      <button
+                        onClick={() => { setShowInviteModal(false); setShowLeaveConfirm(true); }}
+                        className="w-full py-5 bg-red-50 text-red-500 rounded-3xl font-black shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
                       >
-                        <img
-                          src={tempAvatar || inviteData.targetAvatar || DEFAULT_AVATAR_HUMAN}
-                          alt="Avatar"
-                          className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                        />
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Camera className="text-white" size={20} />
+                        <LogOut size={20} /> 退出当前家族
+                      </button>
+                    )}
+                  </div>
+                ) : !inviteData ? (
+                  <div className="space-y-6 text-left">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-400 ml-4">邀请码</label>
+                      <input
+                        type="text"
+                        value={inviteCodeInput}
+                        onChange={(e) => { setInviteCodeInput(e.target.value); setInviteError(""); }}
+                        className={cn(
+                          "w-full h-16 px-6 rounded-2xl bg-slate-50 border-none font-black text-xl text-[#eab308] placeholder:text-slate-200 focus:ring-2 focus:ring-[#eab308]/20 transition-all",
+                          inviteError && "ring-2 ring-red-400"
+                        )}
+                        placeholder="例如: INV-1002-1003"
+                      />
+                      {inviteError && <p className="text-red-500 text-xs font-bold px-4">{inviteError}</p>}
+                    </div>
+                    <button
+                      onClick={handleValidateInvite}
+                      disabled={isValidatingInvite || !inviteCodeInput}
+                      className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-bold shadow-xl shadow-[#eab308]/20 disabled:opacity-50 active:scale-[0.98] transition-all"
+                    >
+                      {isValidatingInvite ? "验证中..." : "验证邀请码"}
+                    </button>
+                  </div>
+                ) : migrationInfo ? (
+                  <div className="space-y-6 overflow-y-auto no-scrollbar pb-2 text-left h-full flex flex-col justify-center">
+                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                      <div className="text-center space-y-4">
+                        <div className="w-16 h-16 bg-[#eab308]/10 text-[#eab308] rounded-full flex items-center justify-center mx-auto mb-2">
+                          <Check size={32} />
+                        </div>
+                        <h3 className="text-xl font-black text-slate-800">切换家族确认</h3>
+
+                        <div className="text-left bg-slate-50 p-6 rounded-[2rem] text-sm text-slate-600 space-y-3 shadow-inner">
+                          {migrationInfo.kinshipMatch ? (
+                            <div className="space-y-4">
+                              <div className="p-4 bg-[#eab308]/10 border-2 border-[#eab308]/30 rounded-2xl">
+                                <p className="text-[#854d0e] font-bold leading-relaxed">
+                                  🏮 系统检测到您与 <span className="text-[#e7be46] font-black">{migrationInfo.kinshipMatch.targetFamilyName}</span> 拥有共同的长辈 <span className="font-black">[{migrationInfo.kinshipMatch.ancestorName}]</span>，
+                                  且两家的【血脉脉络】完全一致（同代同房）。
+                                </p>
+                                <p className="mt-2 text-[#854d0e] text-xs font-medium">是否一键关联，共修家系？</p>
+                              </div>
+                              <p className="font-medium text-slate-800 text-base">您的个人资产将被全量带入新家族。</p>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="font-medium text-slate-800 text-base">您目前拥有一个独立的家族。</p>
+                              {migrationInfo.contentCount > 0 ? (
+                                <p>您在这个家族中创建了 <b>{migrationInfo.contentCount}</b> 条记忆/留言。</p>
+                              ) : (
+                                <p>当前家族中暂无内容记录。</p>
+                              )}
+                              {migrationInfo.willFamilyBeDeleted && (
+                                <p className="text-red-500 font-bold bg-red-100/50 p-3 rounded-xl mt-2">由于您是该家族唯一的注册用户，一旦离开，原家族将会被系统解散清理。</p>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        <div className="space-y-3 pt-6">
+                          <button
+                            onClick={() => {
+                              const { overrideRole, overrideStdRole, overrideInviteData, overrideName, overrideAvatar } = pendingAcceptParams;
+                              handleAcceptInvite(overrideRole, overrideStdRole, overrideInviteData, overrideName, overrideAvatar, "migrate");
+                            }}
+                            className="w-full py-5 bg-[#eab308] text-black rounded-3xl font-black shadow-xl shadow-[#eab308]/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                          >
+                            <Check size={20} /> 迁移记录并加入新家族
+                          </button>
+                          <button
+                            onClick={() => {
+                              const { overrideRole, overrideStdRole, overrideInviteData, overrideName, overrideAvatar } = pendingAcceptParams;
+                              handleAcceptInvite(overrideRole, overrideStdRole, overrideInviteData, overrideName, overrideAvatar, "clear");
+                            }}
+                            className="w-full py-5 bg-red-50 text-red-600 rounded-3xl font-bold active:scale-95 transition-transform"
+                          >
+                            清空记录，以新人加入
+                          </button>
+                          <button
+                            onClick={() => {
+                              setMigrationInfo(null);
+                              setPendingAcceptParams(null);
+                            }}
+                            className="w-full py-4 text-slate-400 font-medium active:scale-95 transition-transform"
+                          >
+                            取消并留在当前家族
+                          </button>
                         </div>
                       </div>
-
-                      {/* 🚀 已优化：移除预设列表，引导用户自主上传 */}
-                      <div className="w-full text-center py-2 opacity-40">
-                        <p className="text-[10px] font-black tracking-widest uppercase">点击上方头像即可自定义上传</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6 overflow-y-auto no-scrollbar pb-2 text-left">
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      <div className="text-center space-y-3">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="w-20 h-20 rounded-full border-4 border-[#eab308]/20 shadow-xl overflow-hidden bg-white">
+                            <img
+                              src={tempAvatar || inviteData.targetAvatar || DEFAULT_AVATAR_HUMAN}
+                              alt="Target Avatar"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="text-sm font-black text-slate-800 bg-slate-100 px-3 py-1 rounded-full">{tempName}</div>
+                        </div>
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight">确认身份档案</h3>
+                        <p className="text-sm text-slate-500 font-medium px-4">
+                          <span className="font-bold text-[#eab308]">{inviteData.inviterName}</span> 为您预设了以下档案。您可以直接点击下方进行确认：
+                        </p>
                       </div>
 
-                      <label className="hidden">
-                        <input type="file" className="hidden" accept="image/*" onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const url = URL.createObjectURL(file);
-                            setTempImage(url);
-                            setIsCroppingForInvite(true);
-                                    setShowCropper(true);
-                                    setShowInviteAvatarPicker(false);
-                                  }
-                                }} />
-                              </label>
-
-                      {/* === 🚀 核心新增：长辈称谓交叉验证 (仅在手动模式或无推荐时显示) === */}
-                      {(isManualRelMode || !getIdentityRecommendation(inviteData)) && (
-                        <div className="space-y-4 p-5 bg-white rounded-3xl border border-slate-100 shadow-sm w-full animate-in fade-in slide-in-from-top-4 duration-300">
-                          <div className="flex items-center justify-between">
-                            <div className="flex flex-col text-left">
-                              <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest leading-none">血脉核对：长辈称谓</label>
-                              <p className="text-[10px] text-slate-300 mt-1 font-bold italic">💡 选此项可帮助系统精准校准您的分支</p>
-                            </div>
-                            {isManualRelMode && (
-                              <button onClick={() => setIsManualRelMode(false)} className="text-[10px] text-[#eab308] font-bold border border-[#eab308]/30 px-2 py-0.5 rounded-full">返回智能模式</button>
-                            )}
+                      {/* === 🚀 核心新增：智能识别卡片 === */}
+                      {getIdentityRecommendation(inviteData, user.gender) && (
+                        <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-[2rem] p-5 text-white shadow-xl shadow-indigo-200/50 space-y-3 relative overflow-hidden group">
+                          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                            <Sparkles size={64} />
                           </div>
-
-                          <div className="space-y-3">
-                            <p className="text-xs text-slate-500 font-medium text-left leading-relaxed">
-                              {inviteData.inviterAncestralHall
-                                ? `您称呼 ${inviteData.inviterName} 的父亲（您的伯叔）为？`
-                                : `对方尚未登记房分，请通过您的称呼协助补全：您称呼 ${inviteData.inviterName} 的父亲为？`
-                              }
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              {["大伯", "二伯", "三伯", "叔叔", "爸爸", "不知道"].map(btn => (
-                                <button
-                                  key={btn}
-                                  onClick={() => {
-                                    setElderRel(btn);
-                                    // 🚀 核心逻辑：智能交互修正
-                                    // 根据这一步的选择，反向注入 inviteData 触发 recommendation 更新
-                                    if (btn !== "不知道" && btn !== "叔叔") {
-                                      const mappedHall = btn === '大伯' ? '大房' : btn === '二伯' ? '二房' : btn === '三伯' ? '三房' : btn === '爸爸' ? inviteData.targetAncestralHall : null;
-                                      if (mappedHall && mappedHall !== inviteData.inviterAncestralHall) {
-                                        setInviteData({ ...inviteData, inviterAncestralHall: mappedHall });
-                                        // 自动更新选中的关系
-                                        setTimeout(() => {
-                                          const newRecommendation = getIdentityRecommendation({ ...inviteData, inviterAncestralHall: mappedHall }, user.gender);
-                                          if (newRecommendation) {
-                                            setSelectedRel(newRecommendation.identity || newRecommendation.title);
-                                          }
-                                        }, 0);
-                                      }
-                                    }
-                                  }}
-                                  className={cn(
-                                    "px-4 py-2.5 rounded-2xl text-xs font-black transition-all border-2",
-                                    elderRel === btn
-                                      ? "bg-slate-800 text-white border-slate-800 shadow-lg scale-95"
-                                      : "bg-white text-slate-400 border-slate-100 hover:border-slate-200"
-                                  )}
-                                >
-                                  {btn}
-                                </button>
-                              ))}
+                          <div className="flex items-center gap-3">
+                            <div className="size-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-md">
+                              <Users size={20} className="text-white" />
                             </div>
-
-                            {/* 校验与定义反馈逻辑 */}
-                            {elderRel && elderRel !== "不知道" && (
-                              <motion.div
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className={cn(
-                                  "p-4 rounded-2xl flex items-start gap-3 border-2 transition-all shadow-sm",
-                                  !isRelConflict
-                                    ? "bg-emerald-50 border-emerald-100 text-emerald-600"
-                                    : "bg-rose-50 border-rose-100 text-rose-600 ring-4 ring-rose-200/20"
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-xs font-black opacity-80 uppercase tracking-widest">系统智能血脉定位</h4>
+                                {!isManualRelMode && (
+                                  <button
+                                    onClick={() => setIsManualRelMode(true)}
+                                    className="text-[10px] bg-white/10 hover:bg-white/20 px-2 py-0.5 rounded-full font-bold transition-colors"
+                                  >
+                                    哪里不对？
+                                  </button>
                                 )}
-                              >
-                                <div className="mt-0.5">
-                                  {!isRelConflict
-                                    ? <CheckCircle size={14} />
-                                    : <AlertTriangle size={14} className="animate-bounce" />
-                                  }
-                                </div>
-                                <div className="text-xs font-bold text-left leading-snug">
-                                  {isRelConflict ? (
-                                    <>
-                                      <div>人物归位冲突！</div>
-                                      <div className="text-[10px] opacity-80 mt-1">
-                                        您称呼对方父亲为“{elderRel}”，但对方已登记为“{inviteData.inviterAncestralHall}”。系统已拦截此次加入，请核实身份。
-                                      </div>
-                                    </>
-                                  ) : !inviteData.inviterAncestralHall ? (
-                                    <>
-                                      <div>身份协助定向</div>
-                                      <div className="text-[10px] opacity-80 mt-1">
-                                        基于您的称呼，系统已推断邀请人属于“{elderRel.replace("伯", "房").replace("叔叔", "三房以后的房分").replace("爸爸", "同房")}”，其代数将同步为第 {inviteData.targetGenerationNum} 代。
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <div>验证吻合</div>
-                                      <div className="text-[10px] opacity-80 mt-1">
-                                        称谓与对方登记的“{inviteData.inviterAncestralHall} / 第{inviteData.inviterGenerationNum || inviteData.targetGenerationNum}代”信息完全匹配。
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-                              </motion.div>
-                            )}
+                              </div>
+                              <div className="text-lg font-black flex items-center gap-2">
+                                {inviteData.inviterAncestralHall === inviteData.targetAncestralHall ? (
+                                  <span>同属 {inviteData.inviterAncestralHall || "家族支脉"}</span>
+                                ) : (
+                                  <>
+                                    {inviteData.inviterAncestralHall} <ChevronRight size={14} className="opacity-50" /> {inviteData.targetAncestralHall || "未定"}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-md border border-white/10">
+                            <p className="text-[10px] font-black opacity-70 mb-1">您应称呼邀请人为：</p>
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-3xl font-black">{getIdentityRecommendation(inviteData, user.gender)?.title}</span>
+                              <span className="text-[10px] font-bold opacity-60">自动锁定成功</span>
+                            </div>
+                            <p className="text-[10px] mt-2 leading-relaxed opacity-80">{getIdentityRecommendation(inviteData, user.gender)?.reason}</p>
                           </div>
                         </div>
                       )}
 
-                      {/* 第一部分：我是谁（确认或修正自己的排行） */}
-                      <div className="space-y-3 p-5 bg-white rounded-3xl border border-slate-100 shadow-sm w-full">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest leading-none">您的家族定位</label>
-                          <span className="text-[10px] bg-[#eab308]/10 text-[#eab308] px-2 py-0.5 rounded-full font-bold">需核对</span>
+                      <div className="bg-slate-50 p-6 rounded-[2.5rem] border-2 border-slate-100/50 flex flex-col items-center gap-4 relative">
+                        <div
+                          className="w-24 h-24 rounded-full border-4 border-white shadow-xl overflow-hidden bg-white relative group cursor-pointer shrink-0"
+                          onClick={() => setShowInviteAvatarPicker(!showInviteAvatarPicker)}
+                        >
+                          <img
+                            src={tempAvatar || inviteData.targetAvatar || DEFAULT_AVATAR_HUMAN}
+                            alt="Avatar"
+                            className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                          />
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Camera className="text-white" size={20} />
+                          </div>
                         </div>
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                            <div className="flex-1">
-                              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{inviteData.inviterName} 对您的称谓</p>
-                              <p className="text-xl font-black text-[#eab308] mt-1">{inviteData.targetRole || "家人"}</p>
+
+                        {/* 🚀 已优化：移除预设列表，引导用户自主上传 */}
+                        <div className="w-full text-center py-2 opacity-40">
+                          <p className="text-[10px] font-black tracking-widest uppercase">点击上方头像即可自定义上传</p>
+                        </div>
+
+                        <label className="hidden">
+                          <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const url = URL.createObjectURL(file);
+                              setTempImage(url);
+                              setIsCroppingForInvite(true);
+                              setShowCropper(true);
+                              setShowInviteAvatarPicker(false);
+                            }
+                          }} />
+                        </label>
+
+                        {/* === 🚀 核心新增：长辈称谓交叉验证 (仅在手动模式或无推荐时显示) === */}
+                        {(isManualRelMode || !getIdentityRecommendation(inviteData)) && (
+                          <div className="space-y-4 p-5 bg-white rounded-3xl border border-slate-100 shadow-sm w-full animate-in fade-in slide-in-from-top-4 duration-300">
+                            <div className="flex items-center justify-between">
+                              <div className="flex flex-col text-left">
+                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest leading-none">血脉核对：长辈称谓</label>
+                                <p className="text-[10px] text-slate-300 mt-1 font-bold italic">💡 选此项可帮助系统精准校准您的分支</p>
+                              </div>
+                              {isManualRelMode && (
+                                <button onClick={() => setIsManualRelMode(false)} className="text-[10px] text-[#eab308] font-bold border border-[#eab308]/30 px-2 py-0.5 rounded-full">返回智能模式</button>
+                              )}
                             </div>
-                            <div className="h-10 w-px bg-slate-200" />
-                            <div className="flex-[1.2] pl-2">
-                              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">令尊 (父亲) 所属房分</p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="text-base font-black text-slate-700">{inviteData.inviterAncestralHall || "未录入"}</span>
-                                <div className="size-5 bg-white rounded flex items-center justify-center shadow-sm text-[10px] font-black text-[#eab308] border border-slate-100">
-                                  {inviteData.inviterAncestralHall?.charAt(0) || "房"}
+
+                            <div className="space-y-3">
+                              <p className="text-xs text-slate-500 font-medium text-left leading-relaxed">
+                                {inviteData.inviterAncestralHall
+                                  ? `您称呼 ${inviteData.inviterName} 的父亲（您的伯叔）为？`
+                                  : `对方尚未登记房分，请通过您的称呼协助补全：您称呼 ${inviteData.inviterName} 的父亲为？`
+                                }
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {["大伯", "二伯", "三伯", "叔叔", "爸爸", "不知道"].map(btn => (
+                                  <button
+                                    key={btn}
+                                    onClick={() => {
+                                      setElderRel(btn);
+                                      // 🚀 核心逻辑：智能交互修正
+                                      // 根据这一步的选择，反向注入 inviteData 触发 recommendation 更新
+                                      if (btn !== "不知道" && btn !== "叔叔") {
+                                        const mappedHall = btn === '大伯' ? '大房' : btn === '二伯' ? '二房' : btn === '三伯' ? '三房' : btn === '爸爸' ? inviteData.targetAncestralHall : null;
+                                        if (mappedHall && mappedHall !== inviteData.inviterAncestralHall) {
+                                          setInviteData({ ...inviteData, inviterAncestralHall: mappedHall });
+                                          // 自动更新选中的关系
+                                          setTimeout(() => {
+                                            const newRecommendation = getIdentityRecommendation({ ...inviteData, inviterAncestralHall: mappedHall }, user.gender);
+                                            if (newRecommendation) {
+                                              setSelectedRel(newRecommendation.identity || newRecommendation.title);
+                                            }
+                                          }, 0);
+                                        }
+                                      }
+                                    }}
+                                    className={cn(
+                                      "px-4 py-2.5 rounded-2xl text-xs font-black transition-all border-2",
+                                      elderRel === btn
+                                        ? "bg-slate-800 text-white border-slate-800 shadow-lg scale-95"
+                                        : "bg-white text-slate-400 border-slate-100 hover:border-slate-200"
+                                    )}
+                                  >
+                                    {btn}
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* 校验与定义反馈逻辑 */}
+                              {elderRel && elderRel !== "不知道" && (
+                                <motion.div
+                                  initial={{ opacity: 0, scale: 0.95 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  className={cn(
+                                    "p-4 rounded-2xl flex items-start gap-3 border-2 transition-all shadow-sm",
+                                    !isRelConflict
+                                      ? "bg-emerald-50 border-emerald-100 text-emerald-600"
+                                      : "bg-rose-50 border-rose-100 text-rose-600 ring-4 ring-rose-200/20"
+                                  )}
+                                >
+                                  <div className="mt-0.5">
+                                    {!isRelConflict
+                                      ? <CheckCircle size={14} />
+                                      : <AlertTriangle size={14} className="animate-bounce" />
+                                    }
+                                  </div>
+                                  <div className="text-xs font-bold text-left leading-snug">
+                                    {isRelConflict ? (
+                                      <>
+                                        <div>人物归位冲突！</div>
+                                        <div className="text-[10px] opacity-80 mt-1">
+                                          您称呼对方父亲为“{elderRel}”，但对方已登记为“{inviteData.inviterAncestralHall}”。系统已拦截此次加入，请核实身份。
+                                        </div>
+                                      </>
+                                    ) : !inviteData.inviterAncestralHall ? (
+                                      <>
+                                        <div>身份协助定向</div>
+                                        <div className="text-[10px] opacity-80 mt-1">
+                                          基于您的称呼，系统已推断邀请人属于“{elderRel.replace("伯", "房").replace("叔叔", "三房以后的房分").replace("爸爸", "同房")}”，其代数将同步为第 {inviteData.targetGenerationNum} 代。
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div>验证吻合</div>
+                                        <div className="text-[10px] opacity-80 mt-1">
+                                          称谓与对方登记的“{inviteData.inviterAncestralHall} / 第{inviteData.inviterGenerationNum || inviteData.targetGenerationNum}代”信息完全匹配。
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 第一部分：我是谁（确认或修正自己的排行） */}
+                        <div className="space-y-3 p-5 bg-white rounded-3xl border border-slate-100 shadow-sm w-full">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest leading-none">您的家族定位</label>
+                            <span className="text-[10px] bg-[#eab308]/10 text-[#eab308] px-2 py-0.5 rounded-full font-bold">需核对</span>
+                          </div>
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                              <div className="flex-1">
+                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{inviteData.inviterName} 对您的称谓</p>
+                                <p className="text-xl font-black text-[#eab308] mt-1">{inviteData.targetRole || "家人"}</p>
+                              </div>
+                              <div className="h-10 w-px bg-slate-200" />
+                              <div className="flex-[1.2] pl-2">
+                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">令尊 (父亲) 所属房分</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-base font-black text-slate-700">{inviteData.inviterAncestralHall || "未录入"}</span>
+                                  <div className="size-5 bg-white rounded flex items-center justify-center shadow-sm text-[10px] font-black text-[#eab308] border border-slate-100">
+                                    {inviteData.inviterAncestralHall?.charAt(0) || "房"}
+                                  </div>
                                 </div>
                               </div>
                             </div>
                           </div>
                         </div>
+
+                        {/* 第二部分：TA是谁 */}
+                        {(isManualRelMode || !getIdentityRecommendation(inviteData)) && (
+                          <div className="space-y-3 p-5 bg-indigo-50/50 rounded-3xl border border-indigo-100 shadow-sm w-full animate-in fade-in slide-in-from-top-4 duration-300">
+                            <label className="text-[11px] font-black text-indigo-400 uppercase tracking-widest ml-1 text-left block">
+                              手动校准：您如何称呼邀请人?
+                            </label>
+                            <div className="relative">
+                              <select
+                                value={selectedRel}
+                                onChange={(e) => setSelectedRel(e.target.value)}
+                                className="w-full h-12 rounded-xl bg-white border-2 border-indigo-200 px-4 font-black text-indigo-600 appearance-none shadow-sm"
+                              >
+                                <option value="">请选择称呼</option>
+                                {relationships.map(group => (
+                                  <optgroup key={group.group} label={group.group}>
+                                    {group.options.map(opt => (
+                                      <option key={opt.label} value={opt.label}>{opt.label}</option>
+                                    ))}
+                                  </optgroup>
+                                ))}
+                              </select>
+                              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-300">
+                                <ChevronDown size={16} />
+                              </div>
+                            </div>
+                            {selectedRel === "其他" && (
+                              <input
+                                type="text"
+                                value={customRelText}
+                                onChange={(e) => setCustomRelText(e.target.value)}
+                                placeholder="请输入具体称呼"
+                                className="mt-2 w-full h-12 rounded-xl bg-white border-2 border-indigo-200 px-4 font-black text-indigo-600 shadow-sm"
+                              />
+                            )}
+                            <p className="text-[10px] text-indigo-400 font-bold px-1 mt-1 text-left leading-relaxed">
+                              💡 通常在“定位有误”或“属于外戚/姻亲”时使用手动录入。
+                            </p>
+                          </div>
+                        )}
                       </div>
 
-                      {/* 第二部分：TA是谁 */}
-                      {(isManualRelMode || !getIdentityRecommendation(inviteData)) && (
-                        <div className="space-y-3 p-5 bg-indigo-50/50 rounded-3xl border border-indigo-100 shadow-sm w-full animate-in fade-in slide-in-from-top-4 duration-300">
-                          <label className="text-[11px] font-black text-indigo-400 uppercase tracking-widest ml-1 text-left block">
-                            手动校准：您如何称呼邀请人?
-                          </label>
-                          <div className="relative">
-                            <select
-                              value={selectedRel}
-                              onChange={(e) => setSelectedRel(e.target.value)}
-                              className="w-full h-12 rounded-xl bg-white border-2 border-indigo-200 px-4 font-black text-indigo-600 appearance-none shadow-sm"
-                            >
-                              <option value="">请选择称呼</option>
-                              {relationships.map(group => (
-                                <optgroup key={group.group} label={group.group}>
-                                  {group.options.map(opt => (
-                                    <option key={opt.label} value={opt.label}>{opt.label}</option>
-                                  ))}
-                                </optgroup>
-                              ))}
-                            </select>
-                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-300">
-                              <ChevronDown size={16} />
-                            </div>
-                          </div>
-                          {selectedRel === "其他" && (
-                            <input
-                              type="text"
-                              value={customRelText}
-                              onChange={(e) => setCustomRelText(e.target.value)}
-                              placeholder="请输入具体称呼"
-                              className="mt-2 w-full h-12 rounded-xl bg-white border-2 border-indigo-200 px-4 font-black text-indigo-600 shadow-sm"
-                            />
-                          )}
-                          <p className="text-[10px] text-indigo-400 font-bold px-1 mt-1 text-left leading-relaxed">
-                            💡 通常在“定位有误”或“属于外戚/姻亲”时使用手动录入。
+                      {/* === 🚀 核心新增：数据行李箱 (同步开关) === */}
+                      <div
+                        className="p-4 rounded-[2rem] bg-amber-50 border-2 border-amber-100 flex items-start gap-3 cursor-pointer select-none active:scale-95 transition-all w-full mb-2"
+                        onClick={() => setSyncArchives(!syncArchives)}
+                      >
+                        <div className={cn(
+                          "mt-0.5 size-5 rounded-md border-2 flex items-center justify-center transition-colors shadow-sm",
+                          syncArchives ? "bg-amber-500 border-amber-500 text-white" : "bg-white border-amber-200"
+                        )}>
+                          {syncArchives && <Check size={12} strokeWidth={4} />}
+                        </div>
+                        <div className="flex-1 text-left">
+                          <p className="text-xs font-black text-amber-900 leading-tight">同步我在以往存档或祖宅中记录的资料</p>
+                          <p className="text-[10px] text-amber-600 mt-1 font-bold opacity-80 leading-relaxed">
+                            勾选后，系统将自动基于“指纹识别”技术，将您带入的家系档案与留言同步至本家族，且不会产生重复条目。
                           </p>
                         </div>
-                      )}
-                    </div>
-
-                    {/* === 🚀 核心新增：数据行李箱 (同步开关) === */}
-                    <div 
-                      className="p-4 rounded-[2rem] bg-amber-50 border-2 border-amber-100 flex items-start gap-3 cursor-pointer select-none active:scale-95 transition-all w-full mb-2"
-                      onClick={() => setSyncArchives(!syncArchives)}
-                    >
-                      <div className={cn(
-                        "mt-0.5 size-5 rounded-md border-2 flex items-center justify-center transition-colors shadow-sm",
-                        syncArchives ? "bg-amber-500 border-amber-500 text-white" : "bg-white border-amber-200"
-                      )}>
-                        {syncArchives && <Check size={12} strokeWidth={4} />}
                       </div>
-                      <div className="flex-1 text-left">
-                        <p className="text-xs font-black text-amber-900 leading-tight">同步我在以往存档或祖宅中记录的资料</p>
-                        <p className="text-[10px] text-amber-600 mt-1 font-bold opacity-80 leading-relaxed">
-                          勾选后，系统将自动基于“指纹识别”技术，将您带入的家系档案与留言同步至本家族，且不会产生重复条目。
-                        </p>
-                      </div>
-                    </div>
 
-                    <div className="pt-2 px-1">
-                      <button
-                        onClick={() => {
-                          const effectiveRel = (selectedRel === "其他" && customRelText.trim())
-                            ? customRelText.trim()
-                            : (selectedRel || inviteData.targetRole);
-                          handleAcceptInvite(
-                            effectiveRel,
-                            inviteData.targetStandardRole,
-                            inviteData,
-                            tempName,
-                            tempAvatar
-                          );
-                        }}
-                        disabled={isRelConflict || !selectedRel}
-                        className={cn(
-                          "w-full h-16 rounded-[2rem] font-black text-lg shadow-xl active:scale-95 transition-transform disabled:opacity-50 disabled:grayscale",
-                          !isManualRelMode && getIdentityRecommendation(inviteData)
-                            ? "bg-indigo-600 text-white shadow-indigo-200"
-                            : "bg-slate-900 text-white shadow-slate-200"
-                        )}
-                      >
-                        {(!isManualRelMode && getIdentityRecommendation(inviteData, user.gender))
-                          ? `确认身份：${selectedRel}`
-                          : "确认此身份进入档案"
-                        }
-                      </button>
-                      <button
-                        onClick={() => { setInviteData(null); setInviteCodeInput(""); setElderRel(null); setSelectedRel(""); setIsManualRelMode(false); }}
-                        className="w-full py-4 text-slate-400 font-bold"
-                      >
-                        不是我，填错了
-                      </button>
+                      <div className="pt-2 px-1">
+                        <button
+                          onClick={() => {
+                            const effectiveRel = (selectedRel === "其他" && customRelText.trim())
+                              ? customRelText.trim()
+                              : (selectedRel || inviteData.targetRole);
+                            handleAcceptInvite(
+                              effectiveRel,
+                              inviteData.targetStandardRole,
+                              inviteData,
+                              tempName,
+                              tempAvatar
+                            );
+                          }}
+                          disabled={isRelConflict || !selectedRel}
+                          className={cn(
+                            "w-full h-16 rounded-[2rem] font-black text-lg shadow-xl active:scale-95 transition-transform disabled:opacity-50 disabled:grayscale",
+                            !isManualRelMode && getIdentityRecommendation(inviteData)
+                              ? "bg-indigo-600 text-white shadow-indigo-200"
+                              : "bg-slate-900 text-white shadow-slate-200"
+                          )}
+                        >
+                          {(!isManualRelMode && getIdentityRecommendation(inviteData, user.gender))
+                            ? `确认身份：${selectedRel}`
+                            : "确认此身份进入档案"
+                          }
+                        </button>
+                        <button
+                          onClick={() => { setInviteData(null); setInviteCodeInput(""); setElderRel(null); setSelectedRel(""); setIsManualRelMode(false); }}
+                          className="w-full py-4 text-slate-400 font-bold"
+                        >
+                          不是我，填错了
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+                )}
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
-      <AnimatePresence>
-        {showInviteAvatarPicker && (
-          <div key="invite-avatar-picker-modal-overlay" className="fixed inset-0 bg-black/60 z-[220] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px]"
-            >
-              <h3 className="text-2xl font-bold mb-6 text-center">选择受邀人头像</h3>
+        <AnimatePresence>
+          {showInviteAvatarPicker && (
+            <div key="invite-avatar-picker-modal-overlay" className="fixed inset-0 bg-black/60 z-[220] flex items-end justify-center backdrop-blur-sm p-0 sm:p-4">
+              <motion.div
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                className="bg-white w-full rounded-t-[3rem] sm:rounded-[3rem] p-8 pb-12 shadow-2xl overflow-hidden max-w-[414px]"
+              >
+                <h3 className="text-2xl font-bold mb-6 text-center">选择受邀人头像</h3>
 
-              <div className="grid grid-cols-3 gap-4 mb-8">
-                {SYSTEM_AVATARS.map((url, i) => (
+                <div className="grid grid-cols-3 gap-4 mb-8">
+                  {SYSTEM_AVATARS.map((url, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setTempAvatar(url);
+                        setShowInviteAvatarPicker(false);
+                      }}
+                      className={cn(
+                        "size-20 rounded-full border-4 overflow-hidden transition-all",
+                        tempAvatar === url ? "border-[#eab308] scale-110 shadow-lg shadow-[#eab308]/20" : "border-transparent opacity-60 hover:opacity-100"
+                      )}
+                    >
+                      <img src={url} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+
                   <button
-                    key={i}
                     onClick={() => {
-                      setTempAvatar(url);
-                      setShowInviteAvatarPicker(false);
+                      const input = document.createElement("input");
+                      input.type = "file";
+                      input.accept = "image/*";
+                      input.onchange = (e: any) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const url = URL.createObjectURL(file);
+                          setTempImage(url);
+                          setIsCroppingForInvite(true);
+                          setShowCropper(true);
+                          setShowInviteAvatarPicker(false);
+                        }
+                      };
+                      input.click();
                     }}
-                    className={cn(
-                      "size-20 rounded-full border-4 overflow-hidden transition-all",
-                      tempAvatar === url ? "border-[#eab308] scale-110 shadow-lg shadow-[#eab308]/20" : "border-transparent opacity-60 hover:opacity-100"
-                    )}
+                    className="size-20 rounded-full bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-1 text-slate-400 hover:bg-slate-100 transition-colors"
                   >
-                    <img src={url} className="w-full h-full object-cover" />
+                    <Plus size={24} />
+                    <span className="text-[10px] font-bold">上传</span>
                   </button>
-                ))}
+                </div>
 
                 <button
-                  onClick={() => {
-                    const input = document.createElement("input");
-                    input.type = "file";
-                    input.accept = "image/*";
-                    input.onchange = (e: any) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const url = URL.createObjectURL(file);
-                        setTempImage(url);
-                        setIsCroppingForInvite(true);
-                        setShowCropper(true);
-                        setShowInviteAvatarPicker(false);
-                      }
-                    };
-                    input.click();
-                  }}
-                  className="size-20 rounded-full bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-1 text-slate-400 hover:bg-slate-100 transition-colors"
+                  onClick={() => setShowInviteAvatarPicker(false)}
+                  className="w-full py-4 text-slate-400 font-bold"
                 >
-                  <Plus size={24} />
-                  <span className="text-[10px] font-bold">上传</span>
+                  取消
                 </button>
-              </div>
-
-              <button
-                onClick={() => setShowInviteAvatarPicker(false)}
-                className="w-full py-4 text-slate-400 font-bold"
-              >
-                取消
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         <AnimatePresence key="image-cropping-presence">
           {showCropper && tempImage && (

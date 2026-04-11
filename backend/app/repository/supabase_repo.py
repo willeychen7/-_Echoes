@@ -8,8 +8,11 @@ class SupabaseRepository:
         self.supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
     # Family Members
-    def get_family_members(self) -> List[dict]:
-        response = self.supabase.table("family_members").select("*").execute()
+    def get_family_members(self, family_id: int = None) -> List[dict]:
+        query = self.supabase.table("family_members").select("*")
+        if family_id:
+            query = query.eq("family_id", family_id)
+        response = query.execute()
         return response.data
 
     def get_family_member_by_id(self, member_id: int) -> dict:
@@ -25,8 +28,11 @@ class SupabaseRepository:
         self.supabase.table("family_members").delete().eq("id", member_id).execute()
 
     # Events
-    def get_events(self) -> List[dict]:
-        response = self.supabase.table("events").select("*").execute()
+    def get_events(self, family_id: int = None) -> List[dict]:
+        query = self.supabase.table("events").select("*")
+        if family_id:
+            query = query.eq("family_id", family_id)
+        response = query.execute()
         return response.data
 
     def create_event(self, event: dict) -> dict:
